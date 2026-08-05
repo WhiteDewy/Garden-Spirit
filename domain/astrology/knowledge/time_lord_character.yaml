@@ -1,0 +1,63 @@
+# 时间领主经验特征（占星师经验库）
+#
+# 每颗星作为法达大限/子限主时，"这一章怎么发生"取决于它的本命条件：
+#   吉凶基调（nature）→ 宽松/费力
+#   本命落宫（house_domains）→ 落在哪个领域（财帛/学习/工作/玄学…）
+#   受克程度 → 过程质感（费力/较顺）
+#
+# 经验例：木星（吉/扩张/落3宫学习）→ "免费自学、搜集网课"；
+#         火星（凶/行动/末度入2财帛）→ "花钱报班、硬干投入"。
+# 占星师可在此沉淀经验，不改代码。
+
+planets:
+  sun:
+    nature: benefic
+    character_zh: "自我/名望/尊贵/主贵"
+    behavior: ["自我展现", "求名求认可", "被看见"]
+  moon:
+    nature: benefic
+    character_zh: "情绪/家庭/安全感/滋养"
+    behavior: ["情绪主导", "家庭/安全感", "滋养关怀"]
+  mercury:
+    nature: neutral
+    character_zh: "沟通/学习/交易/灵活"
+    behavior: ["信息流动", "学习交流", "灵活多变"]
+  venus:
+    nature: benefic
+    character_zh: "人际/美/价值/享受"
+    behavior: ["人缘顺畅", "审美享受", "价值权衡"]
+  mars:
+    nature: malefic
+    character_zh: "行动/冲突/勇气/投入"
+    behavior: ["行动力硬干", "易冲突冲动", "投入付出"]
+  jupiter:
+    nature: benefic
+    character_zh: "扩张/丰盛/贵人/学习"
+    behavior: ["扩张搜集", "学习成长", "贵人相助"]
+  saturn:
+    nature: malefic
+    character_zh: "责任/限制/结构/拖延"
+    behavior: ["负重", "受限需打磨", "责任压力"]
+  north_node:
+    nature: neutral
+    character_zh: "进化/新领域/方向"
+    behavior: ["方向转向", "新领域探索"]
+  south_node:
+    nature: neutral
+    character_zh: "业力/旧习/回归"
+    behavior: ["惯性回顾", "旧模式浮现"]
+
+# 落宫领域标签（时间领主本命所在宫 → 该章发生在什么领域）
+house_domains:
+  1: "自我/行动/身体"
+  2: "财帛/花钱/收入"
+  3: "学习/沟通/课程"
+  4: "家庭/根基/房产"
+  5: "恋爱/创造/子女"
+  6: "工作/劳损/技艺"
+  7: "伴侣/合作/对手"
+  8: "他人资源/深度/共享"
+  9: "深造/知识/远方"
+  10: "事业/名声/地位"
+  11: "社群/人脉/理想"
+  12: "玄学/幕后/小人"

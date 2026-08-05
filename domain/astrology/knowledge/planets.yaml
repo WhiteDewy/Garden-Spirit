@@ -1,0 +1,231 @@
+# 行星知识库
+#
+# 说明：
+# - 尊贵关系同时给出"现代"与"传统"两套（domicile 数组第一项为现代守卫，
+#   traditional_domicile 为传统守卫；由 dignity.yaml 的 scheme 决定启用哪套）。
+# - 权值 / 权重全部来自这些数据，LLM 永不参与。
+# - significations 用于证据描述模板的生成（zh）。
+
+SUN:
+  name: { zh: "太阳", en: "Sun" }
+  gender: masculine
+  sect: diurnal
+  nature: hot_dry
+  domicile: [LEO]
+  traditional_domicile: [LEO]
+  exaltation: { sign: ARIES, degree: 19.0 }
+  detriment: [AQUARIUS]
+  fall: { sign: LIBRA, degree: 19.0 }
+  orb: 15.0
+  speed_max: 1.02
+  speed_avg: 0.9856
+  significations_zh: ["生命力", "权威", "自我表达", "父亲", "名誉", "意志"]
+  keywords: [vitality, authority, self_expression, father, reputation]
+
+MOON:
+  name: { zh: "月亮", en: "Moon" }
+  gender: feminine
+  sect: nocturnal
+  nature: cold_moist
+  domicile: [CANCER]
+  traditional_domicile: [CANCER]
+  exaltation: { sign: TAURUS, degree: 3.0 }
+  detriment: [CAPRICORN]
+  fall: { sign: SCORPIO, degree: 3.0 }
+  orb: 12.0
+  speed_max: 14.5
+  speed_avg: 13.176
+  significations_zh: ["情绪", "直觉", "滋养", "母亲", "习惯", "潜意识"]
+  keywords: [emotion, intuition, nurture, mother, habit]
+
+MERCURY:
+  name: { zh: "水星", en: "Mercury" }
+  gender: masculine
+  sect: diurnal
+  nature: cold_dry
+  domicile: [GEMINI, VIRGO]
+  traditional_domicile: [GEMINI, VIRGO]
+  exaltation: { sign: VIRGO, degree: 15.0 }
+  detriment: [SAGITTARIUS, PISCES]
+  fall: { sign: PISCES, degree: 15.0 }
+  orb: 10.0
+  speed_max: 2.19
+  speed_avg: 1.12
+  significations_zh: ["思维", "沟通", "学习", "交易", "信息", "技术"]
+  keywords: [mind, communication, learning, commerce, information]
+
+VENUS:
+  name: { zh: "金星", en: "Venus" }
+  gender: feminine
+  sect: nocturnal
+  nature: cold_moist
+  domicile: [TAURUS, LIBRA]
+  traditional_domicile: [TAURUS, LIBRA]
+  exaltation: { sign: PISCES, degree: 27.0 }
+  detriment: [SCORPIO, ARIES]
+  fall: { sign: VIRGO, degree: 27.0 }
+  orb: 8.0
+  speed_max: 1.27
+  speed_avg: 1.2
+  significations_zh: ["爱情", "审美", "和谐", "金钱", "人际关系", "愉悦"]
+  keywords: [love, beauty, harmony, money, relationships]
+
+MARS:
+  name: { zh: "火星", en: "Mars" }
+  gender: masculine
+  sect: nocturnal
+  nature: hot_dry
+  domicile: [ARIES, SCORPIO]
+  traditional_domicile: [ARIES, SCORPIO]
+  exaltation: { sign: CAPRICORN, degree: 28.0 }
+  detriment: [LIBRA, TAURUS]
+  fall: { sign: CANCER, degree: 28.0 }
+  orb: 8.0
+  speed_max: 0.71
+  speed_avg: 0.52
+  significations_zh: ["行动", "驱动力", "竞争", "愤怒", "勇气", "性"]
+  keywords: [action, drive, competition, anger, courage]
+
+JUPITER:
+  name: { zh: "木星", en: "Jupiter" }
+  gender: masculine
+  sect: diurnal
+  nature: hot_moist
+  domicile: [SAGITTARIUS, PISCES]
+  traditional_domicile: [SAGITTARIUS, PISCES]
+  exaltation: { sign: CANCER, degree: 15.0 }
+  detriment: [GEMINI, VIRGO]
+  fall: { sign: CAPRICORN, degree: 15.0 }
+  orb: 8.0
+  speed_max: 0.24
+  speed_avg: 0.083
+  significations_zh: ["幸运", "扩张", "智慧", "贵人", "信仰", "财富"]
+  keywords: [fortune, expansion, wisdom, benefactor, faith]
+
+SATURN:
+  name: { zh: "土星", en: "Saturn" }
+  gender: masculine
+  sect: diurnal
+  nature: cold_dry
+  domicile: [CAPRICORN, AQUARIUS]
+  traditional_domicile: [CAPRICORN, AQUARIUS]
+  exaltation: { sign: LIBRA, degree: 21.0 }
+  detriment: [CANCER, LEO]
+  fall: { sign: ARIES, degree: 21.0 }
+  orb: 8.0
+  speed_max: 0.14
+  speed_avg: 0.034
+  significations_zh: ["责任", "限制", "纪律", "成就", "父亲", "时间"]
+  keywords: [responsibility, limitation, discipline, achievement, time]
+
+URANUS:
+  name: { zh: "天王星", en: "Uranus" }
+  gender: masculine
+  sect: diurnal
+  nature: cold_dry
+  domicile: [AQUARIUS]
+  traditional_domicile: null
+  exaltation: { sign: SCORPIO, degree: 1.0 }
+  detriment: [LEO]
+  fall: { sign: TAURUS, degree: 1.0 }
+  orb: 5.0
+  speed_max: 0.08
+  speed_avg: 0.012
+  significations_zh: ["变革", "叛逆", "科技", "独立", "突然变化"]
+  keywords: [rebellion, change, technology, independence]
+
+NEPTUNE:
+  name: { zh: "海王星", en: "Neptune" }
+  gender: feminine
+  sect: nocturnal
+  nature: cold_moist
+  domicile: [PISCES]
+  traditional_domicile: null
+  exaltation: { sign: LEO, degree: 1.0 }
+  detriment: [VIRGO]
+  fall: { sign: AQUARIUS, degree: 1.0 }
+  orb: 5.0
+  speed_max: 0.06
+  speed_avg: 0.008
+  significations_zh: ["幻想", "灵感", "直觉", "迷惑", "信仰", "艺术"]
+  keywords: [illusion, inspiration, intuition, confusion]
+
+PLUTO:
+  name: { zh: "冥王星", en: "Pluto" }
+  gender: feminine
+  sect: nocturnal
+  nature: cold_dry
+  domicile: [SCORPIO]
+  traditional_domicile: null
+  exaltation: { sign: ARIES, degree: 1.0 }
+  detriment: [TAURUS]
+  fall: { sign: LIBRA, degree: 1.0 }
+  orb: 5.0
+  speed_max: 0.06
+  speed_avg: 0.006
+  significations_zh: ["转化", "权力", "重生", "深层心理", "毁灭"]
+  keywords: [transformation, power, rebirth, depth]
+
+NORTH_NODE:
+  name: { zh: "北交点", en: "North Node" }
+  gender: null
+  sect: null
+  nature: null
+  domicile: null
+  traditional_domicile: null
+  exaltation: null
+  detriment: null
+  fall: null
+  orb: 5.0
+  speed_max: 0.06
+  speed_avg: 0.002
+  significations_zh: ["命运方向", "成长目标", "灵魂功课"]
+  keywords: [fate, growth, soul_lesson]
+
+SOUTH_NODE:
+  name: { zh: "南交点", en: "South Node" }
+  gender: null
+  sect: null
+  nature: null
+  domicile: null
+  traditional_domicile: null
+  exaltation: null
+  detriment: null
+  fall: null
+  orb: 5.0
+  speed_max: 0.06
+  speed_avg: 0.002
+  significations_zh: ["惯性", "舒适区", "过往业力"]
+  keywords: [habit, comfort_zone, past_karma]
+
+CHIRON:
+  name: { zh: "凯龙", en: "Chiron" }
+  gender: null
+  sect: null
+  nature: null
+  domicile: null
+  traditional_domicile: null
+  exaltation: null
+  detriment: null
+  fall: null
+  orb: 4.0
+  speed_max: 0.05
+  speed_avg: 0.004
+  significations_zh: ["伤口", "疗愈", "导师", "创伤中的天赋"]
+  keywords: [wound, healing, mentor]
+
+LILITH:
+  name: { zh: "莉莉丝", en: "Lilith" }
+  gender: null
+  sect: null
+  nature: null
+  domicile: null
+  traditional_domicile: null
+  exaltation: null
+  detriment: null
+  fall: null
+  orb: 4.0
+  speed_max: 0.06
+  speed_avg: 0.005
+  significations_zh: ["阴影面", "原始欲望", "被压抑的力量"]
+  keywords: [shadow, raw_desire, suppressed_power]

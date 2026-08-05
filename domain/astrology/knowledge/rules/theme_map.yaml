@@ -1,0 +1,226 @@
+# 主题映射（theme_map）—— "全面分析"的配方
+#
+# 一个主题定义：这个问题要查哪些宫位/行星/相位对，启用什么规则，
+# 产出哪些证据标签。新增主题 = 新增一段 YAML，不改引擎。
+
+partner_traits:
+  domain: relationship
+  label_zh: "对象特征"
+  strategy_ref: relationship.partner_traits
+  descriptive: true          # 对象特征是"你的倾向"，非吉凶判断
+
+  # ② 指征清单（查什么）
+  core_houses: [5, 7, 8]
+  core_planets: [venus, mars, moon, sun]
+  house_lords: [5, 7]
+  aspect_pairs:
+    - [mars, moon]
+    - [venus, mars]
+    - [moon, venus]
+    - [sun, saturn]
+    - [venus, saturn]
+    - [moon, saturn]
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+    - timing
+  timing: { enabled: true, window_months: 6 }
+
+  # ③ 输出规格（产出什么证据标签，供结论分组）
+  evidence_themes:
+    romantic_spark:    { houses: [5],      planets: [mars, sun], weight: 0.8 }
+    committed_partner: { houses: [7, 8],   planets: [venus, saturn, moon], weight: 1.0 }
+
+  # ④ 结论呈现
+  conclusion:
+    top_findings: 4
+    data_gaps: [related_birth]   # 问具体对象需对方出生数据（合盘）
+
+wealth:
+  domain: wealth
+  label_zh: "财运"
+  strategy_ref: wealth.default
+
+  core_houses: [2, 8, 11]
+  core_planets: [jupiter, saturn, venus, mercury]
+  house_lords: [2, 8]
+  aspect_pairs:
+    - [jupiter, saturn]
+    - [jupiter, venus]
+    - [saturn, venus]
+    - [mercury, jupiter]
+    - [mercury, saturn]
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+  evidence_themes:
+    earning_power:    { houses: [2],      planets: [mercury, venus], weight: 1.0 }
+    wealth_expansion: { houses: [8, 11],  planets: [jupiter, pluto], weight: 0.9 }
+
+relationship_status:
+  domain: relationship
+  label_zh: "感情状态"
+  strategy_ref: relationship.status
+
+  core_houses: [5, 7]
+  core_planets: [venus, moon, mars]
+  house_lords: [7]
+  aspect_pairs:
+    - [venus, saturn, 1.5]   # 爱与责任：承诺质量
+    - [moon, saturn, 1.5]    # 情绪压抑：关系里的隔阂
+    - [venus, mars, 1.2]     # 激情与吸引力
+    - [moon, venus, 1.2]     # 情感表达
+    - [mars, moon, 1.0]      # 欲望与情感
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+  evidence_themes:
+    relationship_health: { houses: [7, 5], planets: [venus, moon], weight: 1.0 }
+    passion_vitality:    { houses: [5],    planets: [mars, sun],  weight: 0.8 }
+
+marriage_potential:
+  domain: relationship
+  label_zh: "婚姻潜力"
+  strategy_ref: relationship.commitment
+
+  core_houses: [7]
+  core_planets: [venus, saturn, jupiter]
+  house_lords: [7]
+  aspect_pairs:
+    - [venus, saturn, 1.5]   # 承诺能力
+    - [jupiter, venus, 1.2]  # 婚姻祝福
+    - [moon, saturn, 1.0]    # 情感务实
+    - [jupiter, saturn, 0.8] # 责任与扩张
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+    - timing
+  timing: { enabled: true, window_months: 12 }
+  evidence_themes:
+    commitment_readiness: { houses: [7], planets: [saturn, venus], weight: 1.0 }
+    marriage_blessing:    { houses: [7], planets: [jupiter],       weight: 0.8 }
+
+health:
+  domain: health
+  label_zh: "健康"
+  strategy_ref: health.default
+
+  core_houses: [1, 6, 12]
+  core_planets: [sun, moon, mars, saturn]
+  house_lords: [6]
+  house_filter: true          # 落宫解读只看核心宫位，避免无关宫噪音
+  aspect_pairs:
+    - [sun, saturn, 1.5]   # 活力受限
+    - [moon, saturn, 1.5]  # 身心紧绷
+    - [sun, mars, 1.0]     # 生命力
+    - [sun, moon, 0.8]     # 身心协调
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+  evidence_themes:
+    vitality:      { houses: [1, 10], planets: [sun, mars], weight: 1.0 }
+    health_strain: { houses: [6, 12], planets: [moon, saturn], weight: 1.0 }
+
+emotion:
+  domain: emotion
+  label_zh: "情绪"
+  strategy_ref: emotion.default
+  descriptive: true          # 气质/模式主题：不判吉凶，只描述
+
+  core_houses: [4, 8, 12]
+  core_planets: [moon, venus, mercury, sun]
+  house_lords: [12]
+  house_filter: true
+  aspect_pairs:
+    - [moon, saturn, 1.5]   # 情绪压抑
+    - [moon, mars, 1.2]     # 情绪化/冲动
+    - [moon, venus, 1.2]    # 情感表达
+    - [moon, neptune, 1.2]  # 情绪敏感/边界
+    - [sun, moon, 1.0]      # 身心
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+  evidence_themes:
+    emotional_flow:    { houses: [4, 12], planets: [moon, venus], weight: 1.0 }
+    emotional_tension: { houses: [4, 12], planets: [mars, saturn, mercury], weight: 1.0 }
+
+family:
+  domain: family
+  label_zh: "家庭"
+  strategy_ref: family.default
+  descriptive: true
+
+  core_houses: [4, 8, 10]
+  core_planets: [moon, sun, saturn]
+  house_lords: [4]
+  house_filter: true
+  aspect_pairs:
+    - [sun, saturn, 1.5]   # 父亲/权威
+    - [moon, saturn, 1.2]  # 母亲/情感与责任
+    - [sun, moon, 1.0]     # 父母/自我与情感
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+  evidence_themes:
+    family_root:         { houses: [4], planets: [moon], weight: 1.0 }
+    authority_dynamic:   { houses: [10, 4], planets: [sun, saturn], weight: 0.9 }
+
+learning:
+  domain: learning
+  label_zh: "学习"
+  strategy_ref: learning.default
+  descriptive: true
+
+  core_houses: [3, 9, 10]
+  core_planets: [mercury, jupiter, sun, moon]
+  house_lords: [3, 9]
+  house_filter: true
+  aspect_pairs:
+    - [mercury, jupiter, 1.5]   # 好学/见识
+    - [mercury, mars, 1.2]      # 学习冲劲
+    - [mercury, venus, 1.0]     # 表达
+    - [sun, moon, 0.8]          # 身心
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+    - dignity
+    - timing
+  timing: { enabled: true, window_months: 3 }
+  evidence_themes:
+    learning_aptitude: { houses: [3, 9], planets: [mercury, jupiter], weight: 1.0 }
+    focus_strain:      { houses: [3, 9], planets: [mars, saturn], weight: 0.8 }
+
+career_psychology:
+  domain: career
+  label_zh: "职业心理状态"
+  strategy_ref: career.default
+
+  core_houses: [6, 12]
+  core_planets: [moon, sun, mercury, saturn]
+  house_lords: [6, 12]
+  # aspect_pairs 第三元素 = 主题专属权重（倦怠核心信号加倍）
+  aspect_pairs:
+    - [moon, saturn, 2.0]   # 情绪压抑 → 倦怠核心信号
+    - [sun, saturn, 1.5]    # 自我价值vs责任 → 压力
+    - [mars, saturn, 1.5]   # 行动受阻 → 挫败
+    - [moon, mars, 1.0]
+  rules:
+    - planet_in_house
+    - planet_pair
+    - house_lord
+  evidence_themes:
+    burnout_risk: { houses: [6, 12], planets: [moon, saturn], weight: 1.0 }
+    resilience:   { houses: [1, 10], planets: [sun, mars], weight: 0.8 }

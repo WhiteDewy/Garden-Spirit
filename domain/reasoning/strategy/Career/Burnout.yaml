@@ -1,0 +1,28 @@
+# 策略：职业倦怠/心理状态
+# 用户说"好累/撑不住/压力大"时，只回答心理负荷与倦怠风险，
+# 不跑 CareerStrength——不然"职业强"会盖过"我很累"。
+
+intent: Career.Burnout
+version: "1.0"
+description: "评估工作负荷下的心理状态与倦怠风险"
+
+required_analysis:
+  - module: Psychology
+    priority: high
+    params: {}
+  - module: Risk
+    priority: low
+    params: {}
+
+needed_indicators:
+  - AspectQuality
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+model_dependencies:
+  Psychology: []
+  Risk: [Psychology]

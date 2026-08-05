@@ -1,0 +1,135 @@
+# 各意图领域的默认策略（兜底）
+# 当某 Intent 没有专属策略时，用对应领域的默认策略。
+# 结构：intent 引用 → 策略定义
+
+career.default:
+  description: "职业领域默认分析：职业强度 + 机会时机 + 风险 + 心理"
+  required_analysis:
+    - module: CareerStrength
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+    - module: Risk
+      priority: low
+      params: {}
+    - module: Psychology
+      priority: low
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    CareerStrength: []
+    Timing: []
+    Risk: [CareerStrength]
+    Psychology: [CareerStrength]
+
+relationship.default:
+  description: "感情领域默认分析：对象特征 + 时机"
+  required_analysis:
+    - module: PartnerTraits
+      priority: high
+      params: {}
+    - module: Timing
+      priority: low
+      params: { window_months: 6 }
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    PartnerTraits: []
+    Timing: []
+
+wealth.default:
+  description: "财富领域默认分析：财运格局（正财/偏财/进账）"
+  required_analysis:
+    - module: Wealth
+      priority: high
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Wealth: []
+
+health.default:
+  description: "健康领域默认分析：活力 + 负荷"
+  required_analysis:
+    - module: Health
+      priority: high
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Health: []
+
+emotion.default:
+  description: "情绪领域默认分析：情绪流动与张力"
+  required_analysis:
+    - module: Emotion
+      priority: high
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Emotion: []
+
+family.default:
+  description: "家庭领域默认分析：家庭根基与权威关系"
+  required_analysis:
+    - module: Family
+      priority: high
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Family: []
+
+learning.default:
+  description: "学习领域默认分析：学习天赋 + 时机"
+  required_analysis:
+    - module: Learning
+      priority: high
+      params: {}
+    - module: Timing
+      priority: low
+      params: { window_months: 3 }
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Learning: []
+    Timing: []
+
+daily.default:
+  description: "每日运势分析：当日行运扫描"
+  required_analysis:
+    - module: Daily
+      priority: high
+      params: {}
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Daily: []

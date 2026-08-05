@@ -1,0 +1,57 @@
+# 先天尊贵（Essential Dignity）评分方案
+#
+# scheme: traditional | modern —— 决定 domicile 用哪套守卫星座
+# scores: 各尊贵状态的权值（原则三：权重全部来自这里，LLM 永不决定）
+# terms: 埃及界（Chaldean），仅传统七曜有界；face: 面（decan）按三角划分
+
+scheme: traditional
+
+scores:
+  DOMICILE: 5
+  EXALTATION: 4
+  TRIPLICITY: 3
+  TERM: 2
+  FACE: 1
+  PEREGRINE: 0
+  DETRIMENT: -5
+  FALL: -4
+
+# 三分主星（Ptolemaic 体系，昼/夜两组）
+# 火象：SUN(昼)/JUPITER(夜)；土象：VENUS(昼)/MOON(夜)
+# 风象：SATURN(昼)/MERCURY(夜)；水象：MARS(昼)/VENUS(夜)
+triplicity_lords:
+  FIRE: { day: SUN, night: JUPITER, participating: SATURN }
+  EARTH: { day: VENUS, night: MOON, participating: MARS }
+  AIR: { day: SATURN, night: MERCURY, participating: JUPITER }
+  WATER: { day: MARS, night: VENUS, participating: MOON }
+
+# 埃及界（terms）：每个星座的 5 段及对应主星
+# 简表：degree_ranges 为 30 度内的边界，lords 为每段主星
+terms:
+  ARIES:    { ranges: [6, 14, 21, 26, 30], lords: [JUPITER, VENUS, MERCURY, MARS, SATURN] }
+  TAURUS:   { ranges: [8, 15, 22, 27, 30], lords: [VENUS, MERCURY, JUPITER, SATURN, MARS] }
+  GEMINI:   { ranges: [7, 14, 21, 25, 30], lords: [MERCURY, JUPITER, VENUS, MARS, SATURN] }
+  CANCER:   { ranges: [7, 13, 20, 27, 30], lords: [MARS, VENUS, MERCURY, JUPITER, SATURN] }
+  LEO:      { ranges: [6, 13, 20, 27, 30], lords: [JUPITER, VENUS, SATURN, MERCURY, MARS] }
+  VIRGO:    { ranges: [7, 14, 21, 28, 30], lords: [MERCURY, VENUS, JUPITER, SATURN, MARS] }
+  LIBRA:    { ranges: [6, 12, 20, 26, 30], lords: [SATURN, MERCURY, JUPITER, VENUS, MARS] }
+  SCORPIO:  { ranges: [7, 14, 20, 26, 30], lords: [MARS, JUPITER, VENUS, MERCURY, SATURN] }
+  SAGITTARIUS: { ranges: [8, 14, 20, 26, 30], lords: [JUPITER, VENUS, MERCURY, SATURN, MARS] }
+  CAPRICORN:   { ranges: [7, 14, 22, 26, 30], lords: [MERCURY, JUPITER, VENUS, SATURN, MARS] }
+  AQUARIUS:    { ranges: [7, 14, 21, 28, 30], lords: [MERCURY, VENUS, JUPITER, MARS, SATURN] }
+  PISCES:      { ranges: [10, 16, 20, 27, 30], lords: [VENUS, JUPITER, MERCURY, MARS, SATURN] }
+
+# 面（decan）：每个星座按 0-10/10-20/20-30 三段，由同元素星座的守护行星轮流
+faces:
+  ARIES:    { ranges: [10, 20, 30], lords: [MARS, SUN, VENUS] }
+  TAURUS:   { ranges: [10, 20, 30], lords: [MERCURY, MOON, SATURN] }
+  GEMINI:   { ranges: [10, 20, 30], lords: [JUPITER, MARS, SUN] }
+  CANCER:   { ranges: [10, 20, 30], lords: [VENUS, MERCURY, MOON] }
+  LEO:      { ranges: [10, 20, 30], lords: [SATURN, JUPITER, MARS] }
+  VIRGO:    { ranges: [10, 20, 30], lords: [SUN, VENUS, MERCURY] }
+  LIBRA:    { ranges: [10, 20, 30], lords: [MOON, SATURN, JUPITER] }
+  SCORPIO:  { ranges: [10, 20, 30], lords: [MARS, SUN, VENUS] }
+  SAGITTARIUS: { ranges: [10, 20, 30], lords: [MERCURY, MOON, SATURN] }
+  CAPRICORN:   { ranges: [10, 20, 30], lords: [JUPITER, MARS, SUN] }
+  AQUARIUS:    { ranges: [10, 20, 30], lords: [VENUS, MERCURY, MOON] }
+  PISCES:      { ranges: [10, 20, 30], lords: [SATURN, JUPITER, MARS] }

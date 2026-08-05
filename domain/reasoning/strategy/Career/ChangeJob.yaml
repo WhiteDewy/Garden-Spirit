@@ -1,0 +1,53 @@
+# 策略：换工作评估
+# 评估"该不该换工作 / 何时换"的盘面支持度。
+# 方法论（v1 冻结）：本命 + 行运时间窗口，不做卜卦。
+
+intent: Career.ChangeJob
+version: "1.0"
+description: "评估当前及未来 6 个月换工作的时机、支持度与风险"
+
+required_analysis:
+  - module: CareerStrength
+    priority: high
+    params: {}
+  - module: Timing
+    priority: high
+    params:
+      window_months: 6
+  - module: Opportunity
+    priority: medium
+    params: {}
+  - module: Risk
+    priority: medium
+    params: {}
+  - module: Finance
+    priority: medium
+    params: {}
+  - module: Psychology
+    priority: low
+    params: {}
+
+needed_indicators:
+  - PlanetStrength
+  - HousePower
+  - Lordship
+  - AspectQuality
+  - Timing
+  - SupportResources
+  - LoadPressure
+  - ThemeCoherence
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+# 模块 DAG：Opportunity 依赖 CareerStrength+Timing 的输出
+model_dependencies:
+  CareerStrength: []
+  Timing: []
+  Opportunity: [CareerStrength, Timing]
+  Risk: [CareerStrength]
+  Finance: [CareerStrength]
+  Psychology: [CareerStrength]

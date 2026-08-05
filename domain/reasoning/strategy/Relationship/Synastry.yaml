@@ -1,0 +1,23 @@
+# 策略：双人合盘（基础版）
+# 回答"我和TA合不合适/我们关系怎么样"。需要对方出生数据（partner_chart）。
+
+intent: Relationship.Synastry
+version: "1.0"
+description: "分析两人之间的吸引力、共鸣与张力（基础合盘）"
+
+required_analysis:
+  - module: RelationshipSynastry
+    priority: high
+    params: {}
+
+needed_indicators:
+  - AspectQuality
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+model_dependencies:
+  RelationshipSynastry: []

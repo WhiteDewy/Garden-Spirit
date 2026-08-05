@@ -1,0 +1,44 @@
+# 刑克性质经验库（占星师经验）
+#
+# 刑克不能一概论凶。判据两轴：
+#   ① 克向谁（贵/吉/凶/世代）
+#   ② 有无接纳（磨合 / 硬碰）
+# 经验例：火星刑太阳，火星接纳太阳 → "克向贵星且有接纳" = 费力上升（凶性被收编服务贵），
+#          不是单纯凶；火星梅花北交/冲莉莉丝（无接纳，世代/虚点）→ 外部压力。
+# 占星师可在此沉淀/修改裁决文本。
+
+# 目标分类
+noble: [sun]                  # 主贵：太阳至尊
+benefic: [jupiter, venus]     # 吉星
+malefic: [mars, saturn]       # 凶星
+outer: [uranus, neptune, pluto, north_node, south_node, chiron, lilith]  # 世代/虚点
+
+# 裁决组合：received_<kind> / unreceived_<kind>
+verdicts:
+  received_noble:
+    label: "费力上升"
+    text: "克向贵星且有接纳——凶性被收编为服务贵/自我实现的力量，费力但向上"
+  received_benefic:
+    label: "磨合协调"
+    text: "克向吉星且有接纳——费力但有协商空间，磨合后转顺"
+  received_malefic:
+    label: "磨合硬克"
+    text: "克向凶星且有接纳——凶星间被绑定的争斗，激烈但彼此认账"
+  received_neutral:
+    label: "磨合拉扯"
+    text: "有接纳的刑克——磨合后可协商"
+  unreceived_noble:
+    label: "硬碰贵星"
+    text: "克向贵星但无接纳——方向正但过程强硬，易吃力不讨好"
+  unreceived_benefic:
+    label: "消耗吉星"
+    text: "克向吉星但无接纳——损耗好运，需止损"
+  unreceived_malefic:
+    label: "硬碰消耗"
+    text: "克向凶星且无接纳——消耗性凶克，最凶"
+  unreceived_outer:
+    label: "外部压力"
+    text: "克向世代星/虚点——时代性或外部环境的压力，非个人可控"
+  unreceived_neutral:
+    label: "无接纳刑克"
+    text: "无接纳的硬碰——过程生硬"

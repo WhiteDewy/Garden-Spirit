@@ -1,0 +1,326 @@
+# 意图分析配置（Intent Profiles）
+#
+# 每个 IntentDomain 的分析配方——base_tasks（必修，安全网）、
+# conditional_tasks（触发词 → 附加模块）、focus_dimensions（LLM 理解提示）。
+#
+# IntentDecomposer 使用此文件确保：
+#   1. 必修模块永不丢失（即使 LLM 失败）
+#   2. 触发词命中时自动追加模块
+#   3. LLM 知道该领域的核心占星结构
+#
+# 新增领域 = 新增一段 YAML，不改代码。
+
+career:
+  domain: career
+  label_zh: "职业"
+  description: "职业方向、工作状态、换工作、职业倦怠、升职、创业"
+  base_tasks:
+    - module: CareerStrength
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  conditional_tasks:
+    - triggers: ["累", "疲惫", "倦怠", "压力大", "撑不住", "没动力", "工作没意思", "上班跟上坟", "受不了"]
+      add_modules:
+        - module: Psychology
+          priority: high
+          params: {}
+        - module: Emotion
+          priority: medium
+          params: {}
+    - triggers: ["换工作", "跳槽", "辞职", "离职", "换职业", "换份工作", "转行"]
+      add_modules:
+        - module: Opportunity
+          priority: medium
+          params: {}
+        - module: Risk
+          priority: medium
+          params: {}
+        - module: Finance
+          priority: medium
+          params: {}
+    - triggers: ["创业", "开公司", "自己干", "单干", "做生意"]
+      add_modules:
+        - module: Risk
+          priority: high
+          params: {}
+        - module: Finance
+          priority: high
+          params: {}
+        - module: Opportunity
+          priority: medium
+          params: {}
+    - triggers: ["升职", "晋升", "升迁", "加薪", "涨薪"]
+      add_modules:
+        - module: Opportunity
+          priority: high
+          params: {}
+        - module: Finance
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "职业方向与天赋（10宫/6宫/2宫 + 10R状态）"
+    - "当前事业阶段是蓄力还是发力（10R落宫 + 法达大运）"
+    - "时机窗口（法达子限 + 行运火星/木星/土星触达）"
+    - "心理与情绪压力（月亮/12宫/6宫 + 月土相位）"
+    - "核心竞争力与变现能力（2宫/11宫 + 木星/水星触达）"
+  core_houses: [10, 6, 2, 1]
+  core_planets: [sun, saturn, jupiter, mars, mercury, moon]
+  house_lords: [10, 6, 2]
+  aspect_pairs:
+    - [sun, saturn]
+    - [mars, saturn]
+    - [jupiter, saturn]
+    - [moon, saturn]
+    - [mars, jupiter]
+  known_subdomains:
+    ChangeJob:
+      extra_houses: [1, 8]
+      extra_planets: [uranus]
+    Burnout:
+      extra_houses: [12]
+      extra_planets: [moon, neptune]
+
+relationship:
+  domain: relationship
+  label_zh: "感情"
+  description: "感情状态、恋爱、婚姻、复合、伴侣特征"
+  base_tasks:
+    - module: PartnerTraits
+      priority: high
+      params: {}
+    - module: RelationshipStatus
+      priority: medium
+      params: {}
+  conditional_tasks:
+    - triggers: ["结婚", "嫁", "娶", "求婚", "婚姻", "订婚", "承诺"]
+      add_modules:
+        - module: MarriagePotential
+          priority: high
+          params: {}
+        - module: Timing
+          priority: medium
+          params: { window_months: 12 }
+    - triggers: ["复合", "和好", "挽回", "分手后", "分手", "回头"]
+      add_modules:
+        - module: Psychology
+          priority: high
+          params: {}
+        - module: Emotion
+          priority: medium
+          params: {}
+    - triggers: ["合适", "合不合适", "适不适合", "能不能在一起"]
+      add_modules:
+        - module: Timing
+          priority: medium
+          params: { window_months: 6 }
+  focus_dimensions:
+    - "恋爱模式与吸引类型（金火月 + 5宫/5R）"
+    - "婚姻与长期承诺潜力（7宫/7R + 金星/土星相位）"
+    - "感情时机窗口（法达金/火/月子限 + 行运）"
+    - "感情中的心理模式（月亮 + 金土相位揭示的不安全感）"
+  core_houses: [5, 7, 8]
+  core_planets: [venus, mars, moon, sun, saturn, jupiter]
+  house_lords: [5, 7]
+  aspect_pairs:
+    - [venus, mars]
+    - [moon, venus]
+    - [mars, moon]
+    - [venus, saturn]
+    - [moon, saturn]
+    - [sun, saturn]
+  known_subdomains:
+    PartnerTraits:
+      extra_houses: [1]
+      extra_planets: [sun]
+    Status:
+      extra_houses: [1]
+      extra_planets: []
+    Commitment:
+      extra_houses: [4]
+      extra_planets: [jupiter, saturn]
+    Reconcile:
+      extra_houses: [12]
+      extra_planets: [neptune]
+
+wealth:
+  domain: wealth
+  label_zh: "财富"
+  description: "财运、投资、赚钱、收入、理财"
+  base_tasks:
+    - module: Wealth
+      priority: high
+      params: {}
+  conditional_tasks:
+    - triggers: ["投资", "股票", "理财", "基金", "加密货币"]
+      add_modules:
+        - module: Risk
+          priority: high
+          params: {}
+        - module: Timing
+          priority: medium
+          params: { window_months: 6 }
+    - triggers: ["涨薪", "加薪", "收入", "赚钱", "涨工资"]
+      add_modules:
+        - module: Opportunity
+          priority: medium
+          params: {}
+        - module: Finance
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "正财格局（2R状态 + 落宫 + 援军）"
+    - "偏财与投资运（8R/11R + 木星触达）"
+    - "财富时机（法达2/8/11子限 + 行运木星）"
+    - "自我价值感与赚钱能力（2宫 + 金星/水星状态）"
+  core_houses: [2, 8, 11]
+  core_planets: [jupiter, saturn, venus, mercury]
+  house_lords: [2, 8]
+  aspect_pairs:
+    - [jupiter, saturn]
+    - [jupiter, venus]
+    - [saturn, venus]
+    - [mercury, jupiter]
+
+health:
+  domain: health
+  label_zh: "健康"
+  description: "身体健康、精力、疲劳、失眠、身体状态"
+  base_tasks:
+    - module: Health
+      priority: high
+      params: {}
+  conditional_tasks:
+    - triggers: ["失眠", "睡不好", "睡不着", "熬夜"]
+      add_modules:
+        - module: Emotion
+          priority: medium
+          params: {}
+    - triggers: ["疲惫", "累", "疲劳", "没精神", "身体差"]
+      add_modules:
+        - module: Emotion
+          priority: medium
+          params: {}
+        - module: Risk
+          priority: low
+          params: {}
+  focus_dimensions:
+    - "生命力与活力（1宫 + 太阳/火星状态）"
+    - "健康风险与负荷（6宫/12宫 + 土星/火星相位）"
+    - "身心连接（月亮 + 情绪对健康的影响）"
+  core_houses: [1, 6, 12]
+  core_planets: [sun, moon, mars, saturn]
+  house_lords: [1, 6]
+  aspect_pairs:
+    - [sun, saturn]
+    - [moon, saturn]
+    - [sun, mars]
+    - [moon, mars]
+
+emotion:
+  domain: emotion
+  label_zh: "情绪"
+  description: "情绪状态、低落、焦虑、抑郁、心情"
+  base_tasks:
+    - module: Emotion
+      priority: high
+      params: {}
+  conditional_tasks:
+    - triggers: ["难过", "哭", "伤心", "抑郁", "焦虑", "低落", "烦躁", "开心不起来"]
+      add_modules:
+        - module: Psychology
+          priority: high
+          params: {}
+    - triggers: ["压力", "崩溃", "受不了", "撑不住"]
+      add_modules:
+        - module: Risk
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "情绪模式与根源（月亮 + 4/8/12宫）"
+    - "情绪压抑与释放（月土/月火相位）"
+    - "当前情绪周期（法达月亮子限 + 行运）"
+  core_houses: [4, 8, 12]
+  core_planets: [moon, venus, mercury, sun]
+  house_lords: [4, 12]
+  aspect_pairs:
+    - [moon, saturn]
+    - [moon, mars]
+    - [moon, venus]
+    - [moon, neptune]
+    - [sun, moon]
+
+family:
+  domain: family
+  label_zh: "家庭"
+  description: "家庭、父母、原生家庭、亲子"
+  base_tasks:
+    - module: Family
+      priority: high
+      params: {}
+  conditional_tasks:
+    - triggers: ["父母", "爸妈", "妈妈", "爸爸", "母亲", "父亲"]
+      add_modules:
+        - module: Psychology
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "家庭根基与归属感（4宫 + 月亮状态）"
+    - "权威关系与父亲影响（10宫 + 太阳/土星）"
+    - "原生家庭的模式延续（4R + 月土相位）"
+  core_houses: [4, 8, 10]
+  core_planets: [moon, sun, saturn]
+  house_lords: [4, 10]
+  aspect_pairs:
+    - [sun, saturn]
+    - [moon, saturn]
+    - [sun, moon]
+
+learning:
+  domain: learning
+  label_zh: "学习"
+  description: "学习、考试、考研、读书、学业"
+  base_tasks:
+    - module: Learning
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 3 }
+  conditional_tasks:
+    - triggers: ["考研", "考试", "高考", "考证", "考公", "考编"]
+      add_modules:
+        - module: Risk
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "学习天赋与思维模式（水星 + 3宫/9宫）"
+    - "学业时机（法达水/木子限 + 行运）"
+    - "专注力与压力（水土相位 + 6宫）"
+  core_houses: [3, 9, 10]
+  core_planets: [mercury, jupiter, sun, moon]
+  house_lords: [3, 9]
+  aspect_pairs:
+    - [mercury, jupiter]
+    - [mercury, mars]
+    - [mercury, venus]
+    - [mercury, saturn]
+
+daily:
+  domain: daily
+  label_zh: "每日运势"
+  description: "今天运势、今日运势、运势如何"
+  base_tasks:
+    - module: Daily
+      priority: high
+      params: {}
+  conditional_tasks: []
+  focus_dimensions:
+    - "当日行运扫描（行运行星与本命盘的相位）"
+    - "月亮当天落宫与情绪基调"
+  core_houses: [1]
+  core_planets: [moon, sun]
+  house_lords: []
+  aspect_pairs: []

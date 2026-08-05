@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Env
+.env
+.env.*
+
+# Data / runtime
+data/ephemeris/*
+!data/ephemeris/.gitkeep
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

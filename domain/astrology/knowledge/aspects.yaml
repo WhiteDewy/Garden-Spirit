@@ -1,0 +1,92 @@
+# 相位知识库
+# nature: HARMONIOUS (吉) / DYNAMIC (凶/紧张) / NEUTRAL (中性)
+# weight_multiplier: 相位强度修正系数（入相时乘此值）
+# applying_bonus: 入相比出相额外的强度加成
+
+CONJUNCTION:
+  angle: 0.0
+  orb: 8.0
+  nature: NEUTRAL
+  weight_multiplier: 1.0
+  keywords_zh: ["合一", "融合", "聚焦"]
+  description_zh: "融合与聚焦的能量"
+
+OPPOSITION:
+  angle: 180.0
+  orb: 8.0
+  nature: DYNAMIC
+  weight_multiplier: 0.8
+  keywords_zh: ["对立", "拉扯", "觉察他人"]
+  description_zh: "对立与互补的张力"
+
+TRINE:
+  angle: 120.0
+  orb: 8.0
+  nature: HARMONIOUS
+  weight_multiplier: 1.0
+  keywords_zh: ["流畅", "天赋", "顺其自然"]
+  description_zh: "顺畅的助力"
+
+SQUARE:
+  angle: 90.0
+  orb: 7.0
+  nature: DYNAMIC
+  weight_multiplier: 0.9
+  keywords_zh: ["挑战", "压力", "行动动力"]
+  description_zh: "内在冲突与挑战"
+
+SEXTILE:
+  angle: 60.0
+  orb: 7.0
+  nature: HARMONIOUS
+  weight_multiplier: 0.8
+  keywords_zh: ["机会", "助力", "需要主动"]
+  description_zh: "需要主动争取的机会"
+
+QUINCUNX:
+  angle: 150.0
+  orb: 3.0
+  nature: DYNAMIC
+  weight_multiplier: 0.5
+  keywords_zh: ["调整", "不协调", "渐进改变"]
+  description_zh: "需要调整的失衡"
+
+SEMISEXTILE:
+  angle: 30.0
+  orb: 2.0
+  nature: NEUTRAL
+  weight_multiplier: 0.4
+  keywords_zh: ["轻微", "渐进", "细流"]
+  description_zh: "细水长流的轻微影响"
+
+SEMISQUARE:
+  angle: 45.0
+  orb: 2.0
+  nature: DYNAMIC
+  weight_multiplier: 0.4
+  keywords_zh: ["摩擦", "烦躁", "小挫"]
+  description_zh: "日常摩擦与烦躁"
+
+SESQUIQUADRATE:
+  angle: 135.0
+  orb: 2.0
+  nature: DYNAMIC
+  weight_multiplier: 0.4
+  keywords_zh: ["张力", "积累", "爆发前奏"]
+  description_zh: "积累中的张力"
+
+QUINTILE:
+  angle: 72.0
+  orb: 1.5
+  nature: HARMONIOUS
+  weight_multiplier: 0.5
+  keywords_zh: ["才华", "独特", "创作天赋"]
+  description_zh: "独特创造力"
+
+BIQUINTILE:
+  angle: 144.0
+  orb: 1.5
+  nature: HARMONIOUS
+  weight_multiplier: 0.5
+  keywords_zh: ["灵感", "升华", "高阶创造"]
+  description_zh: "升华的灵性创造"

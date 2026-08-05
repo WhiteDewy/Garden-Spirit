@@ -1,0 +1,30 @@
+# 策略：婚姻潜力/承诺
+# 回答"我适合结婚吗/什么时候结婚/婚姻运"——单盘承诺能力 + 婚姻祝福 + 时机。
+
+intent: Relationship.Commitment
+version: "1.0"
+description: "评估婚姻潜力：承诺能力 + 婚姻祝福 + 有利时机"
+
+required_analysis:
+  - module: MarriagePotential
+    priority: high
+    params: {}
+  - module: Timing
+    priority: medium
+    params:
+      window_months: 12
+
+needed_indicators:
+  - Lordship
+  - AspectQuality
+  - Timing
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+model_dependencies:
+  MarriagePotential: []
+  Timing: []

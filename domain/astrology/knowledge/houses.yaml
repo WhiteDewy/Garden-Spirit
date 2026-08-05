@@ -1,0 +1,98 @@
+# 宫位知识库
+# angularity: ANGULAR (角宫) / SUCCEDENT (续宫) / CADENT (果宫)
+
+1:
+  name: { zh: "第一宫", en: "First House" }
+  angularity: ANGULAR
+  natural_sign: ARIES
+  natural_planet: MARS
+  keywords_zh: ["自我", "外表", "性格", "生命力", "第一印象"]
+  keywords: [self, appearance, personality, vitality]
+
+2:
+  name: { zh: "第二宫", en: "Second House" }
+  angularity: SUCCEDENT
+  natural_sign: TAURUS
+  natural_planet: VENUS
+  keywords_zh: ["金钱", "财富", "价值观", "资源", "收入"]
+  keywords: [money, wealth, values, resources, income]
+
+3:
+  name: { zh: "第三宫", en: "Third House" }
+  angularity: CADENT
+  natural_sign: GEMINI
+  natural_planet: MERCURY
+  keywords_zh: ["沟通", "学习", "兄弟姊妹", "短途", "写作"]
+  keywords: [communication, learning, siblings, short_trips]
+
+4:
+  name: { zh: "第四宫", en: "Fourth House" }
+  angularity: ANGULAR
+  natural_sign: CANCER
+  natural_planet: MOON
+  keywords_zh: ["家庭", "根基", "父母", "内心", "房产"]
+  keywords: [home, roots, parents, inner_self, property]
+
+5:
+  name: { zh: "第五宫", en: "Fifth House" }
+  angularity: SUCCEDENT
+  natural_sign: LEO
+  natural_planet: SUN
+  keywords_zh: ["恋爱", "创造", "子女", "娱乐", "投机"]
+  keywords: [romance, creativity, children, pleasure, speculation]
+
+6:
+  name: { zh: "第六宫", en: "Sixth House" }
+  angularity: CADENT
+  natural_sign: VIRGO
+  natural_planet: MERCURY
+  keywords_zh: ["工作", "健康", "日常", "服务", "疾病"]
+  keywords: [work, health, routine, service, illness]
+
+7:
+  name: { zh: "第七宫", en: "Seventh House" }
+  angularity: ANGULAR
+  natural_sign: LIBRA
+  natural_planet: VENUS
+  keywords_zh: ["伴侣", "合作", "婚姻", "对手", "契约"]
+  keywords: [partner, cooperation, marriage, opponents, contracts]
+
+8:
+  name: { zh: "第八宫", en: "Eighth House" }
+  angularity: SUCCEDENT
+  natural_sign: SCORPIO
+  natural_planet: PLUTO
+  keywords_zh: ["共同资源", "转化", "性", "债务", "他人财产"]
+  keywords: [shared_resources, transformation, sex, debt]
+
+9:
+  name: { zh: "第九宫", en: "Ninth House" }
+  angularity: CADENT
+  natural_sign: SAGITTARIUS
+  natural_planet: JUPITER
+  keywords_zh: ["高等教育", "信仰", "远方", "哲学", "法律"]
+  keywords: [higher_education, beliefs, travel, philosophy, law]
+
+10:
+  name: { zh: "第十宫", en: "Tenth House" }
+  angularity: ANGULAR
+  natural_sign: CAPRICORN
+  natural_planet: SATURN
+  keywords_zh: ["事业", "成就", "声望", "天职", "公众形象"]
+  keywords: [career, achievement, reputation, calling, public_image]
+
+11:
+  name: { zh: "第十一宫", en: "Eleventh House" }
+  angularity: SUCCEDENT
+  natural_sign: AQUARIUS
+  natural_planet: URANUS
+  keywords_zh: ["朋友", "社群", "理想", "团体", "希望"]
+  keywords: [friends, community, ideals, groups, hopes]
+
+12:
+  name: { zh: "第十二宫", en: "Twelfth House" }
+  angularity: CADENT
+  natural_sign: PISCES
+  natural_planet: NEPTUNE
+  keywords_zh: ["潜意识", "隐藏", "孤独", "灵性", "困境"]
+  keywords: [subconscious, hidden, solitude, spirituality, limitation]

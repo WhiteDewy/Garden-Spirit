@@ -1,0 +1,253 @@
+# 推运规则（Timing Rules）
+#
+# 推运层不改变本命结论，只回答"现在走到哪一步"。
+# 所有时间判断必须基于本命结构——推运是本命结论在时间轴上的投影。
+#
+# 原则：
+#   1. 推运不改变本命判断（极性/吉凶永远来自 Domain 确定性计算）
+#   2. 推运不单独存在——必须引用本命结构说话
+#   3. 同一时间信号（如走7R运），不同本命结构（7R入庙 vs 7R落陷）→ 完全不同含义
+
+# ============================================================================
+# 一、法达大运（Firdaria Major Period）—— "这一章在讲什么"
+# ============================================================================
+
+firdaria_major:
+
+  # 大运星到目标宫主的关系权重（用来排序"推力大小"）
+  relationship_weight:
+    same_planet:            1.0    # 就是目标宫主本身——最直接
+    domicile_reception:     0.9    # 入庙级接纳——强援
+    mutual_reception:       0.85   # 互溶——天然交织
+    exaltation_reception:   0.8    # 入旺级接纳
+    triplicity_reception:   0.6    # 三分主接纳
+    harmonious_aspect:      0.7    # 三合/六合
+    natural_benefic_touch:  0.5    # 木星自然加分
+    no_connection:          0.0    # 无关
+    dynamic_aspect:        -0.5    # 刑冲——压力
+    malefic_reception:     -0.3    # 凶星接纳——帮但有代价
+
+  # 大运判断矩阵：不同大运星对目标领域的含义
+  period_matrix:
+
+    # 大运星 = 目标宫主本体
+    same_lord:
+      condition: "period_lord == lord_of(target_house)"
+      weight_group: strongest
+      say: "这一大运就是{target_house.label}的章节——{target_house.label}是你这近十年的主线课题。这十年里，{target_house.label}会被反复推到台前，你想躲都躲不掉。"
+
+    # 大运星接纳/互溶目标宫主
+    reception:
+      condition: "period_lord receives_or_mutual lord_of(target_house)"
+      weight_group: strong
+      say: "这一大运虽然不是{target_house.label}的主场，但大运星在帮你的{target_house.label}——它的推力在托着你{target_house.label}的进程。{target_house.label}的事会通过{period_lord_domain}的路径自然发生。"
+
+    # 大运星刑冲目标宫主
+    affliction:
+      condition: "period_lord in_dynamic_aspect lord_of(target_house)"
+      weight_group: pressure
+      say: "这一大运对{target_house.label}是压力期——{target_house.label}的事会被推到面前，但过程不轻松。不过压力≠不成——{target_house.label}在你扛住压力之后反而会更结实。这一章不是'收成'，是'练功'。"
+
+    # 大运是目标宫的自然守护星
+    natural_guardian:
+      condition: "period_lord == natural_planet_of(target_house)"
+      weight_group: moderate
+      say: "这一大运天然带着{target_house.label}的颜色——虽然不是{target_house.label}的主线，但{target_house.label}的议题会自然地浮出水面。是'顺手推舟'型的运势。"
+
+    # 无关
+    no_connection:
+      condition: "no_connection"
+      weight_group: neutral
+      say: "这一大运的主题不在{target_house.label}——{target_house.label}是'顺便'而非'主线'。{target_house.label}的事不会自动来找你，需要你主动推动。"
+
+  # 常见大运星在婚姻语境下的具体人话
+  marriage_major_period_say:
+    "7R": "这一章就是写婚姻的——整个大运期间，婚姻是最容易被推到台前的课题。"
+    venus: "你的魅力值在这一章被拉满——吸引人容易，但能不能结，看金星和7R的关系。如果金星跟7R打通了，这一章婚姻路上有光。如果没有——吸引来的人很好，但不一定是老公。"
+    moon: "这一章你的情绪安全感被放大——你会更想安定、更需要陪伴。结婚的冲动来自'想靠岸'，而不是'想要名分'。"
+    jupiter: "木星管扩张——这一章容易遇到条件好的对象、或关系规模升级（结婚/生子/共同置业）。但木星也容易让你觉得'下一个更好'——要收心。"
+    "5R": "恋爱桃花开满——但5R大运≠婚姻大运。这一章你不缺心动，缺的是从心动走到承诺的'后半段'。看看5R和7R通不通。"
+    saturn: "土星压在哪，哪就变慢但变稳——土星大运里结婚的话，这个婚不容易散。如果没结——土星也在帮你'熟成'关系观。"
+    sun: "这一章的关键词是'成为自己'——婚姻在'你把自己先活明白'之后才出现。不是没有，是不着急。"
+    mercury: "这一章你在沟通、学习、信息里流转——婚姻不是主线。但你遇到的'聊得来'的人，可能是未来的伏笔。"
+    mars: "火星大运里，竞争/行动/冲动被放大——你容易在'争'中认识人，也容易因冲动做决定。结婚的话要确保不是一时上头。"
+
+  # 常见大运星在事业语境下的具体人话
+  career_major_period_say:
+    "10R": "这一章就是你的事业章节——社会地位/名望/成就是你近十年的主线。"
+    saturn: "土星大运对事业是'压实期'——看似慢，但每一步都不白走。土星压出来的成就，一拿就是一辈子。"
+    jupiter: "木星大运对事业是'扩张期'——机会多、贵人出、可能同时做几件事。注意：别贪多嚼不烂。"
+    "6R": "这一章你在打磨技能——是'练功期'，不是'成长期'。把每天做的事做到极致，地位会自己长出来。"
+    sun: "这一章你要被看见——事业上你在求认可、求名望、求'我是谁'的确认。越是做自己，事业越顺。"
+    mercury: "水星大运里，沟通/信息/技能是你的事业引擎——靠说话/写字/技术吃饭的黄金期。"
+    mars: "火星大运里你冲劲十足——适合创业/启动新项目/竞争上位。但注意别跟老板/权威硬刚。"
+    venus: "人脉/人际/审美是你这一章的事业加速器——把人缘经营好，事业自然顺。"
+
+# ============================================================================
+# 二、法达子限（Firdaria Sub Period）—— "这一年半在推什么"
+# ============================================================================
+
+firdaria_sub:
+
+  # 子限判断三层逻辑
+  layers:
+    - name: "子限是目标宫主本体"
+      weight: strongest
+      condition: "sub_period_lord == lord_of(target_house)"
+      say_template: |
+        当前子限走在{target_house.label}宫主{sub_lord}——这是{target_house.label}最直接的触发。
+        {lord_condition_context}
+        判断：{probability_assessment}
+
+    - name: "子限跟目标宫主有助益关系"
+      weight: strong
+      condition: "sub_period_lord receives_or_harmonious lord_of(target_house)"
+      say_template: |
+        当前子限走在{sub_lord}——它对{target_house.label}宫主是加分项。
+        {sub_lord}代表的{sub_lord_domain}在帮{target_house.label}。这段时期{target_house.label}不是主题，但推力在。
+        实际效果：{target_house.label}的事会通过{sub_lord_domain}推进。
+
+    - name: "子限是目标宫主的援军（宫主受克时替代路径）"
+      weight: strong
+      condition: "lord_of(target_house) is afflicted AND sub_period_lord is ally_of lord_of(target_house)"
+      say_template: |
+        本命{target_house.label}宫主受克，但当前子限走在它的援军{sub_lord}。
+        这是曲线窗口——{target_house.label}不通过正常路径显化，而是通过{sub_lord_domain}绕过来。
+        效果可能比走受克的{lord}子限更好——因为援军没有包袱。
+
+    - name: "子限刑冲目标宫主"
+      weight: pressure
+      condition: "sub_period_lord in_dynamic_aspect lord_of(target_house)"
+      say_template: |
+        当前子限{sub_lord}对{target_house.label}宫主是压力。
+        这段时期{target_house.label}的事容易被推到面前但过程吃力。
+        不建议在压力子限做{target_house.label}的重大决定——这段时间更适合'看清问题'，不是'解决问题'。
+
+    - name: "子限无关"
+      weight: neutral
+      condition: "no_connection"
+      say_template: "当前子限的主题不在{target_house.label}——这1-2年{target_house.label}不会自动上门，需要你主动推动。"
+
+  # 几率判断（配合本命宫主状态）
+  probability:
+    strong: "{target_house.label}宫主入庙/入旺 + 走本体子限 → 这段时间{target_house.label}的几率显著提升。不是'一定发生'，是'条件最有利'。"
+    moderate: "{target_house.label}宫主状态一般 + 走本体或援军子限 → 有机会，但需要你主动推动。窗口是开的，但门要你自己推。"
+    weak: "{target_house.label}宫主落陷受克 + 走本体子限 → 主题会被推到面前，但完成有阻力。这段时间更适合了解和准备，而非做最终决定。"
+    alternative: "{target_house.label}宫主受克 + 走援军子限 → 绕路走反而比走正门快——这是你{target_house.label}不按常理出牌的窗口。"
+
+# ============================================================================
+# 三、援军时间线（Ally Timeline）
+# ============================================================================
+
+ally_timeline:
+  trigger: "lord_of(target_house).affliction_score > threshold"
+
+  compute:
+    - "收集所有援军：接纳它的星、互溶的星、吉相位的星、天然守护星"
+    - "援军排序：domicile接纳 > exaltation接纳 > 互溶 > 三合/六合 > 天然守护星"
+    - "去重：同一个援军可能以多种方式帮助，只取最高权重"
+    - "在法达时间线上标注每个援军的子限出现时间"
+
+  say:
+    header: "你的{lord_name}自己状态不好，但盘上有帮手。以下是它在时间线上会得到帮助的窗口："
+    item: "{period_start}-{period_end}，{ally_name}子限——{ally_name}管的{ally_domain}会间接推动你的{target_house.label}"
+    footer: "这些窗口虽然不是{target_house.label}直接的'正运'，但实际效果可能比走受克的{lord_name}运更好。"
+
+  chain_tracking:
+    condition: "ally is also weak"
+    rule: "追援军的援军——重复收集+排序逻辑，最多追踪2跳（避免无限循环）"
+
+# ============================================================================
+# 四、行运（Transits）—— 精确到月/季
+# ============================================================================
+
+transits:
+
+  jupiter:
+    label: "木星行运——天时助力"
+    window: "前后约2个月"
+    rules:
+      - condition: "transit_jupiter harmonious_to lord_of(target_house)"
+        say: "行运木星{aspect}你的{target}——{month}前后有天时助力。适合主动推动{target_house.label}的事——门是开的，你要走。"
+      - condition: "transit_jupiter harmonious_to planet_in(target_house)"
+        say: "行运木星{aspect}你{target}（落在{target_house.label}宫的星）——{month}前后{target_house.label}的事被放大、被推了一把。"
+      - condition: "transit_jupiter dynamic_to lord_of(target_house)"
+        say: "行运木星{aspect}你的{target}——扩张遇到了阻力点。{month}前后{target_house.label}的事会被放大——是机会也是泡沫，要保持清醒。"
+
+  saturn:
+    label: "土星行运——现实考验/承诺落地"
+    window: "前后约3个月"
+    rules:
+      - condition: "transit_saturn conjunct_or_trine lord_of(target_house)"
+        say: "行运土星{aspect}你的{target}——{month}前后是{target_house.label}的'压实'节点。关系/事业/结构在被固定下来——压力感是真的，但扛过去之后的稳定也是真的。"
+      - condition: "transit_saturn square_or_oppose lord_of(target_house)"
+        say: "行运土星{aspect}你的{target}——{month}前后{target_house.label}领域有现实压力。不适合做长远承诺，但适合看清问题出在哪。这段压力过去后关系/事业要么更稳、要么走不下去——土星帮你做筛选。"
+      - condition: "transit_saturn conjunct planet_in_7"
+        say: "行运土星进入你的7宫/合相你7宫内的星——这是婚姻/合作关系的'大考'。未来2-3年关系会经历现实检验。撑过去的婚姻会非常结实。"
+
+  mars:
+    label: "火星行运——短期冲动"
+    window: "前后约2周"
+    note: "火星行运只提示短期注意，不用于判断结婚/换工作等重大决定。"
+    rules:
+      - condition: "transit_mars dynamic_to lord_of(target_house)"
+        say: "行运火星{aspect}你的{target}——{month}前后有短期冲突/冲动。不要在火星激发的情绪下做重大决定。过两周再看，可能感觉完全不一样。"
+
+  eclipse:
+    label: "日月食——重大转折"
+    window: "前后约1个月"
+    rules:
+      - condition: "eclipse on [1, 7] axis"
+        say: "日月食落在你的1-7轴——这是关系/合作领域的重大转折。可能是开始一段重要关系，也可能是结束一段。日月食帮你做你不敢做的决定。"
+      - condition: "eclipse on [4, 10] axis"
+        say: "日月食落在你的4-10轴——家庭/事业领域的重大转折。搬家、换工作、家庭结构改变。"
+      - condition: "eclipse conjunct lord_of(target_house)"
+        say: "日月食合相你的{target_house.label}宫主——{target_house.label}领域的重大节点。食相是加速器——把短期内发生的改变浓缩到一个月里。"
+      - condition: "eclipse in target_house"
+        say: "日月食落在你的{target_house.label}宫——{target_house.label}领域的新篇章开始了。"
+
+# ============================================================================
+# 五、窗口综合判定（Window Synthesis）
+# ============================================================================
+
+window_synthesis:
+  inputs: [firdaria_major, firdaria_sub, transit_jupiter, transit_saturn, eclipse]
+  output_levels:
+    strong_window:
+      label: "最佳窗口"
+      condition: "大运有利(weight>0.5) + 子限是宫主/援军 + 木星吉相"
+      say: "这段时间各方面条件都比较有利——大运在托、子限在推、天时在帮。如果你在考虑{target_house.label}的事，这段时间是最适合推动的窗口。"
+    moderate_window:
+      label: "可用窗口"
+      condition: "大运中性/有利 + 子限是援军/相关星"
+      say: "这段时间{target_house.label}有推动力——虽然不是最强窗口，但条件够用。可以行动，但需要你主动推——运势在'托'不在'送'。"
+    mixed_window:
+      label: "混合窗口"
+      condition: "同时存在有利和不利信号"
+      say: "这段时间信号有好有坏——{good_period}有助力，{bad_period}有压力。不是不能动，是要挑对月份。建议避开压力月份，在有利月份集中推进。"
+    caution_window:
+      label: "观察窗口"
+      condition: "大运/子限压 + 土星刑冲 + 无木星助力"
+      say: "这段时间压力信号较多——不适合做{target_house.label}的重大决定。但'不适合做决定'不等于'浪费时间'——这段时间最适合收集信息、看清问题、做好准备。等压力窗口过去再出手。"
+    neutral_window:
+      label: "中性窗口"
+      condition: "无明显利好或压力信号"
+      say: "这段时间{target_house.label}不是运势的焦点——{target_house.label}的事不会自动发生，但如果你自己主动推，运势不会拖你后腿。"
+
+# ============================================================================
+# 六、时间线输出模板
+# ============================================================================
+
+timeline_output_template:
+  structure:
+    - section: "当前大运"
+      content: "{major_period_description}"
+    - section: "当前子限"
+      content: "{sub_period_description} + {probability}"
+    - section: "未来有利窗口"
+      content: "{ally_timeline or upcoming_favorable_subs}"
+    - section: "近期行运提醒"
+      content: "{transit_jupiter} + {transit_saturn} + {eclipse if applicable}"
+    - section: "窗口综合"
+      content: "{window_level} + {actionable_advice}"
+  note: "如果本命{target_house.label}宫主受克 → 重点展开援军时间线。如果本命宫主强 → 重点展开本体子限窗口。"

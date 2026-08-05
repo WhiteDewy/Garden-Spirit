@@ -1,0 +1,288 @@
+# 宫位语义场（House Significations）
+#
+# 每个宫位是一个"语义场"（多义词），不是单义。同一宫位在不同问题域下
+# 激活不同含义；结构质量决定取正面切片还是负面切片。
+#
+# 字段说明：
+#   word        : 该含义（精确描述）
+#   domains     : 该含义激活的问题域（career/relationship/wealth/health/emotion/family/learning/self）
+#   polarity    : positive / negative / neutral（本身极性，结构调制后会倾斜）
+#   intensity   : 语义场基础强度 1-5
+#   resonance   : 通俗共鸣词（LLM 转述时锚点，确定性数据，不发明）
+#   gated       : tendency（倾向，默认）/ event（事件预言，高门槛）
+#   requires_corroboration + corroborate_houses : event 条目需要的强连接收敛数
+#
+# 解读优先级：P1 倾向切片默认；P2 事件切片需收敛数达标 + 域激活 + 非预言护栏。
+
+house_significations:
+  1:
+    - word: "自我/个性/存在感"
+      domains: [self]
+      polarity: neutral
+      intensity: 3
+      resonance: ["做自己", "存在感"]
+    - word: "生命力/精力"
+      domains: [health, self]
+      polarity: neutral
+      intensity: 2
+      resonance: ["元气", "活力"]
+    - word: "外观/第一印象/气场"
+      domains: [career, relationship]
+      polarity: neutral
+      intensity: 2
+      resonance: ["气场", "第一印象"]
+  2:
+    - word: "正财/收入/积累"
+      domains: [wealth]
+      polarity: positive
+      intensity: 3
+      resonance: ["正财", "稳定收入"]
+    - word: "价值观/物质安全感"
+      domains: [self, wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["安全感", "务实"]
+    - word: "技能变现/副业收入"
+      domains: [career, wealth]
+      polarity: positive
+      intensity: 2
+      resonance: ["副业", "技能变现"]
+    - word: "收入波动/漏财/积蓄难"
+      domains: [wealth]
+      polarity: negative
+      intensity: 2
+      resonance: ["存不住", "收入波动"]
+  3:
+    - word: "沟通/表达/写作"
+      domains: [career, learning, self]
+      polarity: positive
+      intensity: 3
+      resonance: ["会表达", "能写"]
+    - word: "学习/短途/走动"
+      domains: [learning]
+      polarity: neutral
+      intensity: 2
+      resonance: ["爱学习", "闲不住"]
+    - word: "内容/传播/表达影响力"
+      domains: [career]
+      polarity: positive
+      intensity: 2
+      resonance: ["内容", "影响力"]
+    - word: "兄弟姐妹/邻里/熟人群"
+      domains: [family]
+      polarity: neutral
+      intensity: 2
+      resonance: ["家人朋友", "邻里"]
+  4:
+    - word: "家庭/根基/原生家庭"
+      domains: [family, self]
+      polarity: neutral
+      intensity: 3
+      resonance: ["原生家庭", "根"]
+    - word: "房产/置业/安家"
+      domains: [wealth, family]
+      polarity: positive
+      intensity: 2
+      resonance: ["买房", "安家"]
+    - word: "内心/安全感"
+      domains: [emotion, self]
+      polarity: neutral
+      intensity: 2
+      resonance: ["内心戏", "安全感"]
+    - word: "家业/不动产/祖荫"
+      domains: [wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["家业", "房产"]
+  5:
+    - word: "恋爱/浪漫/心动"
+      domains: [relationship]
+      polarity: positive
+      intensity: 3
+      resonance: ["心动", "恋爱脑"]
+    - word: "创造力/才华/兴趣"
+      domains: [career, self]
+      polarity: positive
+      intensity: 2
+      resonance: ["才华", "天赋"]
+    - word: "子女/亲子"
+      domains: [family]
+      polarity: positive
+      intensity: 2
+      resonance: ["孩子", "亲子"]
+    - word: "投机/博弈/风险投入"
+      domains: [wealth]
+      polarity: negative
+      intensity: 2
+      resonance: ["梭哈", "上头"]
+  6:
+    - word: "日常工作/服务/责任"
+      domains: [career]
+      polarity: neutral
+      intensity: 3
+      resonance: ["打工人", "责任"]
+    - word: "技艺/精细/专业打磨"
+      domains: [career, self]
+      polarity: positive
+      intensity: 2
+      resonance: ["匠人", "专业"]
+    - word: "健康/劳损/作息"
+      domains: [health]
+      polarity: neutral
+      intensity: 2
+      resonance: ["劳损", "养生"]
+    - word: "过度劳损/积劳成疾"
+      domains: [health]
+      polarity: negative
+      intensity: 2
+      resonance: ["积劳", "透支"]
+  7:
+    - word: "伴侣/婚姻/一对一"
+      domains: [relationship]
+      polarity: positive
+      intensity: 3
+      resonance: ["正缘", "伴侣"]
+    - word: "合作/合伙/签约/客户"
+      domains: [career, wealth]
+      polarity: positive
+      intensity: 2
+      resonance: ["合伙人", "甲方"]
+    - word: "公开对手/竞争/诉讼"
+      domains: [relationship, career]
+      polarity: negative
+      intensity: 2
+      resonance: ["对手", "对家"]
+  8:
+    - word: "亲密/深层占有/性"
+      domains: [relationship]
+      polarity: neutral
+      intensity: 2
+      resonance: ["亲密关系", "占有"]
+    - word: "他人资源/遗产/保险/共同财产"
+      domains: [wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["偏财", "共同财产"]
+    - word: "投资/杠杆/风险资本"
+      domains: [wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["杠杆", "投资"]
+    - word: "危机/转化/重生"
+      domains: [emotion, health, self]
+      polarity: neutral
+      intensity: 2
+      resonance: ["蜕变", "重生"]
+    - word: "遗产/继承/赡养"
+      domains: [family, wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["继承", "赡养"]
+  9:
+    - word: "高等学问/深造/专业体系"
+      domains: [learning, career]
+      polarity: positive
+      intensity: 3
+      resonance: ["肯钻研", "专业积累"]
+    - word: "哲学/信仰/玄学/灵性"
+      domains: [self, learning]
+      polarity: positive
+      intensity: 3
+      resonance: ["玄学", "灵性"]
+    - word: "远行/国际/跨文化"
+      domains: [career, learning]
+      polarity: neutral
+      intensity: 2
+      resonance: ["远方", "国际"]
+    - word: "导师/贵人/权威"
+      domains: [career, learning]
+      polarity: positive
+      intensity: 2
+      resonance: ["贵人", "导师"]
+    - word: "考试运/升学运一般"
+      domains: [learning, career]
+      polarity: negative
+      intensity: 2
+      resonance: ["考运一般", "升学波折"]
+    - word: "深造过程费力/硬啃"
+      domains: [learning]
+      polarity: negative
+      intensity: 2
+      resonance: ["硬啃", "费劲"]
+  10:
+    - word: "事业/名声/公众形象"
+      domains: [career]
+      polarity: positive
+      intensity: 3
+      resonance: ["事业", "口碑"]
+    - word: "地位/权威/成就"
+      domains: [career, self]
+      polarity: positive
+      intensity: 2
+      resonance: ["地位", "成就"]
+    - word: "上司/雇主/权力关系"
+      domains: [career]
+      polarity: neutral
+      intensity: 2
+      resonance: ["上司", "老板"]
+    - word: "事业受阻/晋升波折/名誉争议"
+      domains: [career]
+      polarity: negative
+      intensity: 2
+      resonance: ["受阻", "波折"]
+  11:
+    - word: "社群/朋友/人脉"
+      domains: [relationship, career]
+      polarity: positive
+      intensity: 3
+      resonance: ["人脉", "圈子"]
+    - word: "理想/愿景/未来"
+      domains: [self, career]
+      polarity: positive
+      intensity: 2
+      resonance: ["愿景", "梦想"]
+    - word: "科技/创新/新事物"
+      domains: [career]
+      polarity: positive
+      intensity: 2
+      resonance: ["科技", "新潮"]
+  12:
+    - word: "玄学/灵性/幕后专业"
+      domains: [career, self, wealth]
+      polarity: positive
+      intensity: 3
+      resonance: ["灵性工作者", "幕后专业"]
+    - word: "暗财/偏财/隐性收入"
+      domains: [wealth]
+      polarity: neutral
+      intensity: 2
+      resonance: ["暗财", "偏财"]
+    - word: "小人/暗中敌人/背叛"
+      domains: [relationship]
+      polarity: negative
+      intensity: 3
+      resonance: ["小人", "暗中使绊"]
+    - word: "恋爱脑/地下恋/隐秘情缘"
+      domains: [relationship]
+      polarity: neutral
+      intensity: 2
+      resonance: ["恋爱脑", "地下恋"]
+      gated: tendency
+    - word: "三方关系/暗情介入"
+      domains: [relationship]
+      polarity: negative
+      intensity: 2
+      resonance: ["三角", "暗情"]
+      gated: event
+      requires_corroboration: 2
+      corroborate_houses: [5, 7, 8]
+    - word: "医院/失眠/潜抑/自我消耗"
+      domains: [health, emotion]
+      polarity: negative
+      intensity: 2
+      resonance: ["失眠", "身心透支"]
+    - word: "潜意识/梦境/灵感"
+      domains: [emotion, self]
+      polarity: neutral
+      intensity: 2
+      resonance: ["灵感", "直觉"]

@@ -1,0 +1,50 @@
+# 互容/接纳（Reception）知识库
+#
+# 互溶（Mutual） = 两行星各落在对方有尊贵关系的星座内（双向），凭尊严成立，不需相位。
+# 接纳（Acceptance）= 单向尊严 + 主相位激活；无相位不构成接纳。
+# scores: 各尊贵类型的强度（DOMICILE 最强）。
+
+# 参与互溶/接纳的星体（其余只做相位/落宫叠加处理）
+# 三王星（天王/海王/冥王）：星座落座世代性，互溶接纳无个体意义。
+# 虚点（节点/莉莉丝/凯龙）：非行星，一并排除。
+# 注：不影响三王星入庙的"自身尊贵强度"（那是单星尊贵，非互溶接纳）。
+excluded_planets:
+  - uranus
+  - neptune
+  - pluto
+  - north_node
+  - south_node
+  - chiron
+  - lilith
+
+scores:
+  DOMICILE: 4
+  EXALTATION: 3
+  TRIPLICITY: 2
+  TERM: 1
+  FACE: 0
+
+# 单向尊严权重系数（v1 预留；接纳激活后按此折算）
+one_way_multiplier: 0.5
+
+# 互溶是否允许跨现代/传统体系混合判定
+allow_cross_scheme: true
+
+# 互溶严格度（详见 docs/astrology_reception.md §2.2）
+# lenient : 任一尊贵单一即可
+# standard: 庙/旺单一即可；三分/界/面需同方向"有其二"（≥2 项弱尊贵确认）
+# strict  : 仅 庙/旺 构成互溶
+mutual_reception:
+  strictness: "standard"
+
+# 三分主取法（三分接纳/互溶专用）
+# all  : 三分三主都算（日/夜/参予主）—— 项目中默认，如"木星接纳月亮"（风象参予主）
+# sect : 仅按昼夜取一主（与 DignityEngine 一致）—— 严格派
+triplicity:
+  mode: "all"
+
+# 接纳激活（详见 docs/astrology_reception.md §3）
+# require_aspect: 单向尊严必须有主相位才构成接纳（废弃"潜在接纳"类别）
+acceptance:
+  require_aspect: true
+  active_aspects: [conjunction, opposition, trine, square, sextile, quincunx]

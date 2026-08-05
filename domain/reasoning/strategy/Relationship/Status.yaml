@@ -1,0 +1,30 @@
+# 策略：感情状态
+# 回答"我们感情怎么样/关系好不好"——单盘关系模式，无需对方数据。
+# （问具体对象时由 related_person 流程转合盘）
+
+intent: Relationship.Status
+version: "1.0"
+description: "评估感情关系的状态与健康度（单盘关系模式）"
+
+required_analysis:
+  - module: RelationshipStatus
+    priority: high
+    params: {}
+  - module: Timing
+    priority: low
+    params:
+      window_months: 6
+
+needed_indicators:
+  - Lordship
+  - AspectQuality
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+model_dependencies:
+  RelationshipStatus: []
+  Timing: []

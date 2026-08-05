@@ -1,0 +1,133 @@
+# 星座知识库
+
+ARIES:
+  name: { zh: "白羊座", en: "Aries" }
+  element: FIRE
+  modality: CARDINAL
+  ruler: MARS
+  traditional_ruler: MARS
+  natural_house: 1
+  polarity: yang
+  keywords_zh: ["勇气", "开创", "直接", "冲动", "竞争"]
+  keywords: [courage, initiation, direct, impulsive]
+
+TAURUS:
+  name: { zh: "金牛座", en: "Taurus" }
+  element: EARTH
+  modality: FIXED
+  ruler: VENUS
+  traditional_ruler: VENUS
+  natural_house: 2
+  polarity: yin
+  keywords_zh: ["稳定", "物质", "享受", "固执", "感官"]
+  keywords: [stability, material, pleasure, stubborn]
+
+GEMINI:
+  name: { zh: "双子座", en: "Gemini" }
+  element: AIR
+  modality: MUTABLE
+  ruler: MERCURY
+  traditional_ruler: MERCURY
+  natural_house: 3
+  polarity: yang
+  keywords_zh: ["沟通", "好奇", "灵活", "多变", "信息"]
+  keywords: [communication, curiosity, flexible, duality]
+
+CANCER:
+  name: { zh: "巨蟹座", en: "Cancer" }
+  element: WATER
+  modality: CARDINAL
+  ruler: MOON
+  traditional_ruler: MOON
+  natural_house: 4
+  polarity: yin
+  keywords_zh: ["情感", "家庭", "滋养", "敏感", "安全感"]
+  keywords: [emotion, family, nurture, sensitive]
+
+LEO:
+  name: { zh: "狮子座", en: "Leo" }
+  element: FIRE
+  modality: FIXED
+  ruler: SUN
+  traditional_ruler: SUN
+  natural_house: 5
+  polarity: yang
+  keywords_zh: ["自信", "创造", "领导", "闪耀", "骄傲"]
+  keywords: [confidence, creativity, leadership, pride]
+
+VIRGO:
+  name: { zh: "处女座", en: "Virgo" }
+  element: EARTH
+  modality: MUTABLE
+  ruler: MERCURY
+  traditional_ruler: MERCURY
+  natural_house: 6
+  polarity: yin
+  keywords_zh: ["细致", "分析", "服务", "完美主义", "健康"]
+  keywords: [detail, analysis, service, perfectionism]
+
+LIBRA:
+  name: { zh: "天秤座", en: "Libra" }
+  element: AIR
+  modality: CARDINAL
+  ruler: VENUS
+  traditional_ruler: VENUS
+  natural_house: 7
+  polarity: yang
+  keywords_zh: ["平衡", "关系", "公正", "犹豫", "审美"]
+  keywords: [balance, relationships, justice, aesthetics]
+
+SCORPIO:
+  name: { zh: "天蝎座", en: "Scorpio" }
+  element: WATER
+  modality: FIXED
+  ruler: PLUTO
+  traditional_ruler: MARS
+  natural_house: 8
+  polarity: yin
+  keywords_zh: ["深度", "掌控", "洞察", "重生", "强烈"]
+  keywords: [depth, control, insight, intensity]
+
+SAGITTARIUS:
+  name: { zh: "射手座", en: "Sagittarius" }
+  element: FIRE
+  modality: MUTABLE
+  ruler: JUPITER
+  traditional_ruler: JUPITER
+  natural_house: 9
+  polarity: yang
+  keywords_zh: ["探索", "理想", "自由", "乐观", "哲学"]
+  keywords: [exploration, ideals, freedom, optimism]
+
+CAPRICORN:
+  name: { zh: "摩羯座", en: "Capricorn" }
+  element: EARTH
+  modality: CARDINAL
+  ruler: SATURN
+  traditional_ruler: SATURN
+  natural_house: 10
+  polarity: yin
+  keywords_zh: ["野心", "责任", "纪律", "成就", "务实"]
+  keywords: [ambition, responsibility, discipline, achievement]
+
+AQUARIUS:
+  name: { zh: "水瓶座", en: "Aquarius" }
+  element: AIR
+  modality: FIXED
+  ruler: URANUS
+  traditional_ruler: SATURN
+  natural_house: 11
+  polarity: yang
+  keywords_zh: ["创新", "独立", "人道", "疏离", "未来"]
+  keywords: [innovation, independence, humanism, detachment]
+
+PISCES:
+  name: { zh: "双鱼座", en: "Pisces" }
+  element: WATER
+  modality: MUTABLE
+  ruler: NEPTUNE
+  traditional_ruler: JUPITER
+  natural_house: 12
+  polarity: yin
+  keywords_zh: ["共情", "想象", "灵性", "边界模糊", "艺术"]
+  keywords: [empathy, imagination, spirituality, artistry]

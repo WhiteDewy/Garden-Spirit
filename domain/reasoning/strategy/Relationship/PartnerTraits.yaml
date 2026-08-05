@@ -1,0 +1,25 @@
+# 策略：对象特征
+# 回答"我未来对象/另一半是什么样的人"——单盘 5/7/8 宫 + 金火月解读。
+# 不需要合盘（问具体对象时才需要对方出生数据）。
+
+intent: Relationship.PartnerTraits
+version: "1.0"
+description: "分析会吸引你/适合你的对象类型（心动与婚姻两层）"
+
+required_analysis:
+  - module: PartnerTraits
+    priority: high
+    params: {}
+
+needed_indicators:
+  - Lordship
+  - AspectQuality
+
+evidence_rules:
+  positive_weight: 1.0
+  negative_weight: 0.8
+  min_confidence: 0.3
+  conflict_threshold: 0.15
+
+model_dependencies:
+  PartnerTraits: []

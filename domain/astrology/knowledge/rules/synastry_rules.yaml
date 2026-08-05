@@ -1,0 +1,15 @@
+# 合盘规则（v1 基础合盘）
+
+# 优先级行星对（对方, 我方）——只解读这些核心连接
+# 词义复用 planet_pair.yaml（对方的金星对你的火星 = venus_mars 的"魅力与行动"）
+priority_pairs:
+  - [venus, mars]      # 吸引力/性张力
+  - [sun, moon]        # 阴阳相吸
+  - [moon, moon]       # 情绪共鸣
+  - [venus, moon]      # 情感滋养
+  - [mars, mars]       # 行动节奏
+  - [sun, venus]       # 自我与魅力
+  - [moon, saturn]     # 情感被对方"压实"
+
+# 对方行星落在我的哪些宫位需要解读
+partner_house_focus: [1, 5, 7, 8, 10]

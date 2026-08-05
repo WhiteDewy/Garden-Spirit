@@ -1,0 +1,32 @@
+[project]
+name = "garden-spirit"
+version = "0.1.0"
+description = "AI 占星 Agent —— 四层架构：Application → Reasoning → Astrology → Foundation"
+requires-python = ">=3.11"
+dependencies = [
+    "pyswisseph>=2.10.3",
+    "pydantic>=2.0",
+    "PyYAML>=6.0",
+    "python-dateutil>=2.8",
+    "tzdata>=2024.1",
+    "openai>=1.0",
+    "anthropic>=0.25",
+    "cryptography>=41.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["application*", "domain*", "foundation*", "shared*", "app*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

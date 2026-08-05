@@ -1,0 +1,523 @@
+# 本命组合规则（Natal Composition Rules）
+#
+# 可复用的交叉判断模板 + 场景映射 + 输出结构。
+# 不手写14个模板——写可复用的组合原语，由 resolver 根据话题自动匹配。
+#
+# 原则：所有极性/吉凶来自 Domain 确定性计算；本文件只定义"怎么组合"和"怎么讲给人听"。
+
+# ============================================================================
+# 一、宫主星落宫——转宫推导表
+# ============================================================================
+# 宫主X落宫Y = "X之derived"的含义
+# derived = (Y - X + 1)，结果≤0则+12
+# 下面提供 7R（婚姻）、5R（恋爱）、10R（事业）、2R（财运）四个最高频宫主星的落宫推导。
+# 其他宫主星由 resolver 用转宫公式 + 目标宫as_derived 自动合成。
+
+lord_placement_derived:
+
+  # —— 7R（婚姻宫主）落各宫 ——
+  "7R":
+    house: 7
+    label: "婚姻宫主"
+    placements:
+      1:
+        derived: "7之7"
+        meaning: "婚姻是自我的镜像——你嫁/娶的是另一个自己"
+        tell_user:
+          - "你的婚姻是你自我的延伸——你会被和自己很像的人吸引，或者伴侣的性格跟你有镜像关系"
+          - "婚姻对你来说不是'找一个伴'而是'找到另一个自己'——所以你对伴侣的要求其实是对自己的要求"
+      2:
+        derived: "7之8"
+        meaning: "婚姻与共同价值/资源深度绑定"
+        tell_user:
+          - "你的婚姻天然带着共同财产、信任、深度绑定的议题——结了婚之后，钱和信任是核心课题"
+          - "不是'有钱才结婚'，而是'结了婚之后两人的共同价值才会显现'"
+      3:
+        derived: "7之9"
+        meaning: "婚姻的能量在'信仰/远见/信念'中运转——可能异地/理念驱动"
+        tell_user:
+          - "你的婚姻可能不是身边的人——异地、不同背景、或者因为共同的理念/信仰走到一起"
+          - "你对婚姻有一套自己的理念——'结婚前我要先理解婚姻是什么'"
+      4:
+        derived: "7之10"
+        meaning: "婚姻是建立家庭/社会地位的路径"
+        tell_user:
+          - "婚姻对你来说=建立一个家——结婚的意义在于落地生根、建立根基"
+          - "你的伴侣可能在公众形象/社会地位上跟你高度绑定——你们是'一起往上走'的类型"
+      5:
+        derived: "7之11"
+        meaning: "婚姻的快乐/社群面——伴侣是玩伴，通过社交圈认识"
+        tell_user:
+          - "你的婚姻不走沉重路线——伴侣像玩伴，婚姻里恋爱的甜度能保持很久"
+          - "你很可能在朋友/社群/圈子里认识你的结婚对象"
+      6:
+        derived: "7之12"
+        meaning: "婚姻在'暗处/服务/日常隐忍'中酝酿——可能需要较长时间才显化"
+        tell_user:
+          - "你的婚姻不是急着来的——它在幕后酝酿，需要你经历一定程度的'为他人付出'后才浮现"
+          - "可能晚婚，或者在婚姻里有较重的服务/牺牲面向——要先学会划边界"
+      7:
+        derived: "7之1"
+        meaning: "婚姻直达——伴侣/关系就是你最自然的自我延伸"
+        tell_user:
+          - "婚姻对你来说是理所当然的事——你对'一对一关系'的感知是最直接的"
+          - "你能很快进入伴侣角色，婚姻不费力就能显化——但要注意别太快，挑对人比挑对时机重要"
+      8:
+        derived: "7之2"
+        meaning: "婚姻的价值感/资源——结了婚之后财富/资源格局会变"
+        tell_user:
+          - "你的婚姻跟你和对方的资源格局高度相关——结了婚之后，你的财务状况会发生明显转变"
+          - "婚姻会逼着你去面对'共同资源怎么分配'的问题——不是坏事，是成熟"
+      9:
+        derived: "7之3"
+        meaning: "婚姻需要先'学'——先理解、先沟通、先通过某种媒介建立连接"
+        tell_user:
+          - "你的婚姻不会凭空掉下来——它需要你先经历学习、理解、沟通的过程"
+          - "在这个过程里你会认识跟婚姻相关的人（通过学业/远行/介绍）——那是你婚姻的'引桥'"
+          - "这不是'晚婚'，这是'准备好的婚'"
+      10:
+        derived: "7之4"
+        meaning: "婚姻跟事业/社会地位绑定——通过事业平台遇到对象，或结婚改变社会身份"
+        tell_user:
+          - "你的婚姻和你的事业/社会地位高度交织——你可能在事业场景里遇到伴侣"
+          - "结婚对你来说不只是私事——它会影响你的社会身份、公众形象"
+      11:
+        derived: "7之5"
+        meaning: "婚姻的快乐来源——伴侣是玩伴，婚姻不沉闷"
+        tell_user:
+          - "你的婚姻自带恋爱的甜——你的结婚对象，很可能也是让你心动、让你想'追'的人"
+          - "在朋友/社群/圈子里认识的概率很高"
+      12:
+        derived: "7之6"
+        meaning: "婚姻在'暗处/服务/日常隐忍'中运作——可能晚婚、需要很强的牺牲精神"
+        tell_user:
+          - "你的婚姻能量在幕后运作——容易被隐秘的关系吸引，或者需要经历一段'为他人付出'的时期后婚姻才浮现"
+          - "关键不是'什么时候结'，而是'你学会了在关系里划边界了吗'"
+
+  # —— 5R（恋爱宫主）落各宫 ——
+  "5R":
+    house: 5
+    label: "恋爱宫主"
+    placements:
+      5:
+        derived: "5之1"
+        meaning: "恋爱是你最自然的自我表达——你在'喜欢人'这件事上最大方"
+        tell_user:
+          - "恋爱对你来说像呼吸一样自然——你喜欢一个人不会藏着掖着"
+          - "你享受恋爱本身——不是非要结婚，而是恋爱的过程让你觉得活着"
+      7:
+        derived: "5之3"
+        meaning: "恋爱和婚姻是一条线上相邻的点——心动→沟通磨合→走向承诺"
+        tell_user:
+          - "你的恋爱路径和婚姻路径天然接壤——你谈的恋爱不容易'白谈'"
+          - "恋爱到结婚的转化率比一般人高——但需要经过'说清楚、聊明白'的阶段"
+      1:
+        derived: "5之9"
+        meaning: "恋爱是自我信念的延伸——你通过恋爱探索'我是谁'"
+        tell_user:
+          - "你的每一段恋爱都在帮你认识自己——恋爱是自我探索的途径"
+          - "你容易被'和我不一样'的人吸引——因为你在对方身上看到了自己没见过的一面"
+      10:
+        derived: "5之6"
+        meaning: "恋爱的日常面——容易被工作/日常场景里的人吸引"
+        tell_user:
+          - "你的恋爱是'日积月累'型——不一定是轰轰烈烈一见钟情，更多是在日常相处中慢慢动心"
+          - "你容易被工作/日常场景里的人吸引——同事、合作方、或者每天见到的人"
+      12:
+        derived: "5之8"
+        meaning: "恋爱的暗面/深度——容易暗恋、或陷入深到失控的关系"
+        tell_user:
+          - "你的恋爱常带着'不能说'的颜色——暗恋、隐秘关系、或者爱得太深不敢让人知道"
+          - "每段恋爱都在转化你——不是'玩玩'，是'脱一层皮'"
+
+  # —— 10R（事业宫主）落各宫 ——
+  "10R":
+    house: 10
+    label: "事业宫主"
+    placements:
+      10:
+        derived: "10之1"
+        meaning: "事业直达——社会身份就是你最自然的自我延伸"
+        tell_user:
+          - "你天生就知道自己要做什么——事业方向对你来说不迷茫"
+          - "你的社会身份和你的自我认知高度一致——你不是'为了生计工作'，你是'为了成为谁而工作'"
+      6:
+        derived: "10之9"
+        meaning: "从技能到地位需要'学习/深耕'的跃升——不是一步登天，是逐步建立"
+        tell_user:
+          - "你的事业不是一夜冒出来的——它需要从每天的技能积累开始，一步步堆出高度"
+          - "你现在靠技能吃饭的阶段，是在为未来的事业地位打地基——别急，地基越深楼越高"
+      9:
+        derived: "10之12"
+        meaning: "事业在'暗处/积累/深造'中酝酿——蓄力期"
+        tell_user:
+          - "你的事业正在'蓄力'——你在学习、钻研、积累的阶段，还没到放在台面上的时候"
+          - "这不是'事业不好'，这是'事业还没到你让别人看到的阶段'"
+      1:
+        derived: "10之4"
+        meaning: "事业是你的根基/家——你把事业当成家来经营"
+        tell_user:
+          - "你的事业跟你这个人高度绑定——你做的不是你'在做什么'，而是'你是什么人'"
+          - "你的事业形象就是你的个人品牌"
+      2:
+        derived: "10之5"
+        meaning: "事业的产出/创造——通过事业赚钱/创造价值"
+        tell_user:
+          - "你的事业有很强的变现能力——你把事业做好了，钱自然跟着来"
+          - "但注意：如果只盯着钱，可能忽略了事业本身的方向"
+
+  # —— 2R（财运宫主）落各宫 ——
+  "2R":
+    house: 2
+    label: "财运宫主"
+    placements:
+      2:
+        derived: "2之1"
+        meaning: "钱跟自我绑在一起——收入直接决定自信"
+        tell_user:
+          - "你的自我价值感和银行余额高度相关——赚到钱就觉得有底气，钱少了就自我怀疑"
+          - "注意：不是'先有钱再有自信'，而是'有了自信才能真正留住钱'"
+      8:
+        derived: "2之7"
+        meaning: "正财和偏财是'镜像'——正财带出偏财，或偏财反哺正财"
+        tell_user:
+          - "你的赚钱路径不是单一的——正财和偏财互相映照，投资/他人资源是你财富结构里自然的一部分"
+      11:
+        derived: "2之10"
+        meaning: "收入的放大——通过社群/平台/人脉把收入放大"
+        tell_user:
+          - "你的收入有放大潜力——不是靠一个人赚，是靠一群人/平台/渠道放大"
+          - "社群、粉丝、人脉是你收入的杠杆"
+      6:
+        derived: "2之5"
+        meaning: "靠技能/日常劳作创造价值——手艺型/技能型收入"
+        tell_user:
+          - "你的钱是靠手艺挣的——每天磨练的技能就是你的印钞机"
+          - "把技能打磨到高于市场平均水平，你的收入就会高于市场平均水平"
+
+# ============================================================================
+# 二、交叉判断模板（Cross-Reading Templates）
+# ============================================================================
+# 每个模板定义了：检查什么、如果通/不通各怎么说。
+# 模板是参数化的——{house_a}、{house_b}、{planet} 在运行时由话题上下文填入。
+
+cross_readings:
+
+  # ——— 模板1：两个宫主星是否打通 ———
+  two_lords_connected:
+    check: "lord_of({house_a}) has_aspect_or_reception_with lord_of({house_b})"
+    verdict_connected: "{house_a.label}和{house_b.label}是一条线——{house_a_verb}之后，顺理成章走向{house_b_verb}"
+    verdict_disconnected: "{house_a.label}是{house_a.label}，{house_b.label}是{house_b.label}——两段不同的逻辑。不是不能通，是需要额外的桥梁。"
+    applies_to:
+      - { house_a: 5, house_b: 7, topics: [marriage, dating, relationship_status] }
+      - { house_a: 6, house_b: 10, topics: [career, career_change, job_skill] }
+      - { house_a: 2, house_b: 11, topics: [wealth] }
+      - { house_a: 3, house_b: 9, topics: [study, advanced_study] }
+      - { house_a: 1, house_b: 10, topics: [career] }
+
+  # ——— 模板2："感情操作系统"是否打通婚姻 ———
+  love_system_to_marriage:
+    check: "any_of([venus, mars, moon]) has_aspect_or_reception_with lord_of(7)"
+    verdict_connected: "你的感情模式（金火月）和你的婚姻结构（7R）是通的——你吸引的人、让你心动的人、让你依赖的人，就是能跟你走到承诺的人"
+    verdict_disconnected: "你的感情模式（金火月）和你的婚姻结构（7R）是两套系统——你能爱得深、能被吸引、能依赖一个人，但这跟'跟他结婚'走的是两条路。这是你关系里最核心的课题。"
+    applies_to: [marriage, dating]
+
+  # ——— 模板3：核心行星与目标宫主的关系 ———
+  planet_to_lord:
+    check: "{planet} has_aspect_or_reception_with lord_of({house})"
+    variants:
+      reception_by_benefic: "{planet}接纳{house}主 → {planet}在帮{house}领域加分——实际的{house.label}显化经过{planet}代表的人或事"
+      reception_by_malefic: "{planet}接纳{house}主 → {planet}也在帮{house}领域，但帮的方式带着{planet_nature}的底色——不是常规路径"
+      mutual: "{planet}和{house}主互溶 → {planet}的{planet_nature}和{house.label}天然交织，不费力就能联动"
+      harmonious_aspect: "{planet}吉相{house}主 → {planet}的{planet_nature}在给{house.label}加分"
+      dynamic_aspect: "{planet}刑冲{house}主 → {planet}的{planet_nature}在给{house.label}施压。压力≠坏事——{planet}在逼着{house.label}成长"
+      none: "{planet}跟{house}主没什么关系——{planet}的世界和{house}的世界是分开的，各走各的"
+    applies_to: [all]
+
+  # ——— 模板4：宫主星自身状态判断 ———
+  lord_condition:
+    check: "dignity + affliction of lord_of({house})"
+    variants:
+      dignified: "{lord}入庙/入旺——{house.label}结构能扛，有压力也是压力，不是垮台"
+      debilitated: "{lord}落陷/失势——{house.label}结构本身弱，不能全靠自己。要找援军——谁接纳/互溶它，谁才是实际显化的路径"
+      afflicted: "{lord}受克严重——{house.label}有阻力。但'受克'只是过程描述，不是结局判决。"
+      dignified_and_afflicted: "{lord}入庙但同时被刑冲——它扛得住压力。凶相位是挑战，不是输。"
+      debilitated_with_ally: "{lord}落陷，但有援军XXX在帮——{house.label}不通过正常路径显化，而是通过援军的领域绕过来"
+    applies_to: [all]
+
+  # ——— 模板5：金火月一致性与否 ———
+  love_style_consistency:
+    check: "compare venus_attraction vs mars_attracted_to vs moon_dependency"
+    consistent: "你吸引人的方式（金星）、你被打动的类型（火星）、你真正离不开的（月亮）是一致的——你的感情操作系统没有自我冲突"
+    inconsistent_venus_mars: "你吸引人的方式（金星{style}）和你被打动的类型（火星{type}）不一致——你吸引来的人，不一定是让你服气的人"
+    inconsistent_mars_moon: "你被打动的类型（火星）和真正让你离不开的（月亮）不一致——激情让你靠近，但安全感让你留下。你在不同阶段可能被不同类型的人吸引"
+    applies_to: [marriage, dating]
+
+# ============================================================================
+# 三、场景映射（Scenario Maps）
+# ============================================================================
+# 每种本命结构 + 宫主状态的组合 → 能讲给用户的人话场景
+# 由 resolver 根据实际星盘数据匹配最适用的模板
+
+scenario_maps:
+
+  # ——— 通用：宫主在角宫 vs 果宫 ———
+  lord_angularity:
+    lord_in_angular:
+      condition: "lord_of({house}) in [1, 4, 7, 10]"
+      say: "{house.label}的能量在'前台'运作——{house.label}的事会被直接推到你的生活里，你不需要去找它，它会来找你。"
+    lord_in_succedent:
+      condition: "lord_of({house}) in [2, 5, 8, 11]"
+      say: "{house.label}的能量在'资源区'运作——{house.label}通过价值/快乐/深度/社群的路径显化，是'积累型'的。"
+    lord_in_cadent:
+      condition: "lord_of({house}) in [3, 6, 9, 12]"
+      say: "{house.label}的能量在'学习/适应/酝酿'区运作——{house.label}不是即时的，它需要你先经历学习、日常磨合、深思或放下的阶段。这不是慢，是前置准备。"
+
+  # ——— 婚姻专属 ———
+  marriage_scenarios:
+    - condition: "7R dignified + 7R in 7"
+      say: "你的婚姻结构扎实——7R入庙落7宫，婚姻能量直达。你不缺结婚的机会，缺的是'选谁'的判断力。不要因为时机好就赶进度。"
+    - condition: "7R dignified + 7R in 9"
+      say: "7R入庙但落在9宫——你的婚姻结构能扛，但它在'深造/学习/远方'的领域里运转。你的婚姻要先经历学习、探索、理解的阶段。这不是'结不了'，是'准备好了才结'。"
+    - condition: "7R dignified + 7R in 10"
+      say: "7R入庙落10宫——你的婚姻跟你的事业/社会地位高度交织。你很可能在事业场景里遇到对方，结婚会改变你的公众形象。"
+    - condition: "7R debilitated + has_ally"
+      say: "7R落陷但有援军{al ally_name}——你的婚姻结构自己弱，但{ally_name}在帮它。婚姻不通过正常路径（相亲/介绍）显化，而是通过{ally_domain}绕过来。你的婚姻不走寻常路，但能到。"
+    - condition: "7R debilitated + no_ally"
+      say: "7R落陷且缺援军——婚姻结构有挑战。不是说结不了，是说结了之后需要额外经营。你需要更有意识地去建设关系——'自然发生'在你的盘上不太适用，需要你主动推。"
+    - condition: "7R afflicted + ally_timeline_exists"
+      say: "7R受克，但盘上有援军在帮它——婚姻的阻力是存在的，但你也有帮手。关键是在援军的窗口期推动关系——不要把压力期当成唯一的时间线。"
+    - condition: "saturn in 7"
+      say: "土星落在7宫——婚姻来得晚但来得稳。这不是惩罚，是'熟成'——土星要确定你准备好了才会把人推进来。土7的婚姻反而不容易散。"
+    - condition: "uranus in 7"
+      say: "天王星落在7宫——你的婚姻形态不走主流路线。异地、开放式、年龄差、突然闪婚——不要拿别人的婚姻模板套在自己身上，你的路不一样。"
+    - condition: "venus_saturn_harmonious"
+      say: "金土吉相——你的爱不是轻飘飘的，是能扛时间的。承诺对你来说是加分项，不是束缚。"
+    - condition: "venus_saturn_dynamic"
+      say: "金土刑冲——你在爱里容易把对方的务实读成'我做得还不够好'。这不是对方在打分，是你自己在给自己打分。学会区分'他的责任'和'你的自责'。"
+
+  # ——— 恋爱/桃花专属 ———
+  dating_scenarios:
+    - condition: "5R dignified + 5R in 5"
+      say: "5R入庙落5宫，恋爱能量全开——你是人群里桃花最旺的那种人。但桃花多不等于质量高——你的功课是'选人'，不是'吸引人'。"
+    - condition: "5R dignified + 5R connected_to 7R"
+      say: "5R强 + 跟7R打通——你的恋爱和婚姻是一条顺滑的通道。你谈的恋爱不白谈，每一段都在往承诺靠近。"
+    - condition: "5R dignified + 5R not_connected_to 7R"
+      say: "5R强但跟7R不通——你桃花很旺，吸引人没问题，但每一段都容易在'走到承诺'这道门槛前卡住。不是人的问题，是你的恋爱和婚姻是两条不同的轨道。"
+    - condition: "5R in 12"
+      say: "5R落12宫——你的恋爱常带隐秘色彩。暗恋、暧昧、不能说出口的喜欢。但这也让你的恋爱深度异于常人——你不是'随便谈谈'的人。"
+    - condition: "venus strong + mars weak"
+      say: "金星强火星弱——你能吸引人，但不太容易遇到让你真正服气的人。来追你的人多，让你心动的人少。"
+
+  # ——— 事业专属 ———
+  career_scenarios:
+    - condition: "10R dignified + 10R in 10"
+      say: "10R入庙落10宫——你的事业能量全开。你天生知道自己要在社会上站什么位置。"
+    - condition: "10R dignified + 10R in 6"
+      say: "10R入庙但落6宫——你的事业根基在技能。你不是一步登天的类型，但你的每一步都踩得扎实。把每天做的事打磨到极致，你的地位自然长出来。"
+    - condition: "10R in 9"
+      say: "10R落9宫——你的事业正在'蓄力'。你在学、在积累、在建立底层能力。这不是'事业没起来'，这是'事业还没到你让别人看到的阶段'。"
+    - condition: "10R in cadent + jupiter_mutual"
+      say: "10R落果宫但有木星互溶/接纳——你的职业不是单线的。你可能同时在做2-3件事。多线程不是分心，是你的事业结构本就如此。"
+    - condition: "10R debilitated + has_ally"
+      say: "10R落陷但有援军——你的事业不走'按部就班升职'的路线。它通过{ally_domain}绕过来。你的职业象征星其实是援军。"
+    - condition: "6R connected_to 10R"
+      say: "6R跟10R打通——你每天做的事和你的事业方向是一致的。你不需要做'跟事业无关的工作'来糊口。"
+    - condition: "6R not_connected_to 10R"
+      say: "6R跟10R不通——你每天做的工作（6R）和你真正的事业方向（10R）可能是两回事。这段时间你靠技能吃饭，但长期目标要往10R的方向靠。"
+
+  # ——— 财运专属 ———
+  wealth_scenarios:
+    - condition: "2R dignified + 2R connected_to 11R"
+      say: "2R强 + 跟11R打通——你的收入有放大潜力。不是靠一个人赚，是通过平台/社群/渠道放大。"
+    - condition: "2R dignified + 2R connected_to 8R"
+      say: "2R和8R打通——你的正财和偏财不互斥。投资/副业/他人资源是你财富结构里自然的一部分。"
+    - condition: "2R in 6"
+      say: "2R落6宫——你的钱是靠手艺/技能赚的。把一门手艺做到高于市场平均水平，收入自然高于平均。"
+    - condition: "jupiter connected to 2R"
+      say: "木星触碰2R——你的财运有'天时'加持。不缺赚钱机会，缺的是你精力够不够分配。"
+
+  # ——— 小人/12宫 ———
+  villain_scenarios:
+    - condition: "12R dynamic to 7R or mars"
+      say: "12R刑冲7R或火星——你的对手在暗处。不是正面冲突型的，是背后使绊子的。注意身边过度友好又打探你底牌的人。"
+    - condition: "12R dignified"
+      say: "12R入庙——'小人'这个说法对你不太适用。你对暗处的能量有天然雷达，不是被害体质。但你可能容易吸收别人的情绪垃圾，要学'关门'。"
+
+# ============================================================================
+# 四、话题输出结构（Output Structure）
+# ============================================================================
+# 每个话题的首选叙事顺序。resolver 按此结构组织输出段落。
+
+output_structures:
+
+  marriage:
+    label: "婚姻"
+    sections:
+      - id: natal_base
+        title: "你的婚姻底牌"
+        focus: "7R 状态 + 援军/压力源"
+        order: 1
+      - id: love_system
+        title: "你的感情操作系统"
+        focus: "金火月模式 + 一致性检验"
+        order: 2
+      - id: dating_channel
+        title: "恋爱→婚姻 这条路通不通"
+        focus: "5R 状态 + 5R×7R 交叉判断"
+        order: 3
+      - id: timing
+        title: "当前这一章——什么时候是窗口"
+        focus: "法达大运/子限 + 行运 + 窗口综合"
+        order: 4
+      - id: way_forward
+        title: "给出路"
+        focus: "具体可操作的建议 + 场景映射"
+        order: 5
+
+  dating:
+    label: "桃花/脱单"
+    sections:
+      - id: natal_base
+        title: "你的恋爱模式"
+        focus: "5R 状态 + 金星/火星模式"
+        order: 1
+      - id: attraction_system
+        title: "你吸引什么人 vs 你被什么人打动"
+        focus: "金星 vs 火星 + 一致性检验"
+        order: 2
+      - id: to_marriage
+        title: "恋爱→婚姻 能不能走下去"
+        focus: "5R×7R 交叉判断"
+        order: 3
+      - id: timing
+        title: "什么时候桃花最旺"
+        focus: "法达 + 行运"
+        order: 4
+
+  career:
+    label: "事业"
+    sections:
+      - id: natal_base
+        title: "你的事业底牌"
+        focus: "10R 状态 + 援军 + 蓄力/发力判断"
+        order: 1
+      - id: daily_to_career
+        title: "现在做的事 → 未来想成为的人"
+        focus: "6R 状态 + 6R×10R 打通否"
+        order: 2
+      - id: multi_thread
+        title: "你的事业是单线还是多线"
+        focus: "互溶接纳 → 多线判断"
+        order: 3
+      - id: timing
+        title: "当前在哪个阶段"
+        focus: "法达 + 行运"
+        order: 4
+
+  wealth:
+    label: "财运"
+    sections:
+      - id: natal_base
+        title: "你的财运底牌"
+        focus: "2R 状态 + 8R/11R"
+        order: 1
+      - id: earning_logic
+        title: "你的钱怎么来"
+        focus: "2R 落宫 → 赚钱路径"
+        order: 2
+      - id: expansion
+        title: "收入有没有放大空间"
+        focus: "木星触2R/11R → 放大渠道"
+        order: 3
+      - id: timing
+        title: "什么时候财运最旺"
+        focus: "法达 + 行运"
+        order: 4
+
+  career_change:
+    label: "换工作"
+    sections:
+      - id: current_state
+        title: "你现在在这个工作里的状态"
+        focus: "6R 状态 + 火星/天王行运"
+        order: 1
+      - id: should_change
+        title: "该不该换"
+        focus: "6R×10R 打通否 + 时机"
+        order: 2
+      - id: timing
+        title: "什么时候是换工作的窗口"
+        focus: "法达子限 + 行运火星/木星"
+        order: 3
+
+  villain:
+    label: "犯小人"
+    sections:
+      - id: natal_structure
+        title: "你容易遇到什么类型的小人"
+        focus: "12R 状态 + 7R 刑冲 + 火星/冥王"
+        order: 1
+      - id: where
+        title: "小人在哪个领域出现"
+        focus: "12R 落宫 + 触动12宫的行星"
+        order: 2
+      - id: protect
+        title: "怎么防"
+        focus: "12R 援军 → 靠什么化解"
+        order: 3
+
+  study:
+    label: "学业"
+    sections:
+      - id: natal_base
+        title: "你的学习模式"
+        focus: "3R 状态 + 水星 + 9R"
+        order: 1
+      - id: learning_to_wisdom
+        title: "从学到用——学的东西能不能变成你的资本"
+        focus: "3R×9R 打通否 + 9R 落宫"
+        order: 2
+      - id: timing
+        title: "什么时候学习运最旺"
+        focus: "法达 + 行运"
+        order: 3
+
+  health:
+    label: "健康"
+    sections:
+      - id: natal_base
+        title: "你的体质基调"
+        focus: "1R 状态 + 6R + 土星/火星"
+        order: 1
+      - id: vulnerability
+        title: "容易出问题的领域"
+        focus: "6R + 12R + 受克行星"
+        order: 2
+      - id: timing
+        title: "什么时候要特别注意"
+        focus: "法达 + 行运土星/火星"
+        order: 3
+
+# ============================================================================
+# 五、咨询伦理护栏（Guardrails）
+# ============================================================================
+# 不能说出口的话 + 应该替换成的说法。由 resolver 注入 LLM prompt。
+
+guardrails:
+  - never_say: "你结不了婚"
+    say_instead: "你的婚姻有结构性挑战——它在XX方面需要额外经营。不是不能到，是到的方式跟别人不一样。"
+  - never_say: "你注定晚婚"
+    say_instead: "你的婚姻在XX岁之后会更稳——这不是拖，是准备好。"
+  - never_say: "你事业不行"
+    say_instead: "你的事业路径不是'直接上位'型——它需要先经过XX阶段的积累。你现在的积累，未来会兑现。"
+  - never_say: "你有灾"
+    say_instead: "XX期间注意XX方面的具体事项（如身体炎症/合同细节/沟通误会）——不是说一定有坏事，是你可以提前有意识地留意。"
+  - never_say: "你这方面注定不行"
+    say_instead: "这个领域对你是挑战区——但盘上有XX在帮它。挑战不是结局，是你比别人更需要意识的区域。"
+  - never_say: "你和TA注定分手/离婚"
+    say_instead: "你们在XX方面存在结构性张力——如果能在这个点上达成共识，关系反而会更深。"
+  - principle: "人没有吃不了的苦，只有享不了的福。永远给人找出路，不是添堵。"
+  - principle: "飞星/相位只代表过程，不代表最终结果。"
+  - principle: "抽象的凶 → 具体可操作的注意点。"
+  - principle: "全盘很苦的人 → 挑出好的星 + 对应的年份 → 给人期待。"

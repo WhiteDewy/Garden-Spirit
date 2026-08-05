@@ -1,0 +1,232 @@
+# 星性规则（Planet Nature）
+#
+# 每颗星的完整属性 + 在不同话题语境下的角色 + 特殊规则。
+# 用于：
+#   1. 从话题 → 自动确定核心星（primary planets）和辅助星（supporting planets）
+#   2. 从星性 → 生成话题相关的角色描述
+#   3. 特殊规则（如"被木星互溶 = 多线发展"）沉淀为可复用逻辑
+#
+# 与 planets.yaml 的关系：
+#   planets.yaml = 行星天文/尊贵基础数据
+#   planet_nature.yaml = 行星在解读中的"人格"与话题角色
+#   二者互补，不重复。
+
+planets:
+  sun:
+    label: "太阳"
+    label_en: "Sun"
+    nature: [self_will, vitality, authority, honor, creativity, being_seen]
+    nature_zh: ["自我意志", "生命力", "权威", "荣耀", "创造力", "被看见"]
+    core_verb: "表达自我、要在这个领域被看见"
+    core_formula: "自我意志 × {house_domain} × {dignity_adverb}"
+    # 在不同话题领域的角色权重
+    domain_signals:
+      career: core        # 事业：核心信号 —— 你的社会身份、要被看见的领域
+      marriage: supporting # 婚姻：辅助 —— 在婚姻中你的自我如何表达
+      dating: supporting   # 恋爱：辅助 —— 恋爱中你的自我呈现方式
+      wealth: supporting   # 财运：辅助 —— 自我价值感影响赚钱方式
+      health: core         # 健康：核心 —— 生命力直接关联身体
+      study: neutral       # 学业：中性
+      family: supporting   # 家庭：辅助 —— 父亲/权威
+      villain: neutral     # 小人：不相关
+    # 关系语境中的角色
+    relation_role: "自我核心——你的'我要'在关系里怎么放"
+    # 男女盘差异
+    gender_diff: null  # 太阳不分男女盘差异
+
+  moon:
+    label: "月亮"
+    label_en: "Moon"
+    nature: [emotion, dependency, security, nurture, instinct, memory, belonging]
+    nature_zh: ["情绪", "依赖", "安全感", "滋养", "习惯", "本能", "归属"]
+    core_verb: "寻求情绪满足与归属感"
+    core_formula: "依赖感 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: supporting   # 事业：辅助 —— 情绪状态影响工作表现
+      marriage: core       # 婚姻：核心 —— 长久靠月亮，不是金星
+      dating: core         # 恋爱：核心 —— 你真正离不开的是什么
+      wealth: supporting   # 财运：辅助 —— 情绪安全感驱动消费/储蓄
+      health: core         # 健康：核心 —— 身心连接
+      study: supporting    # 学业：辅助 —— 学习环境需要情绪安全感
+      family: core         # 家庭：核心 —— 母亲/家庭根基
+      villain: neutral     # 小人：不相关
+    relation_role: "依赖感核心——你想黏着谁，谁让你觉得安心。长久靠月亮，不靠金星。"
+    gender_diff: null  # 月亮不分男女盘
+
+  mercury:
+    label: "水星"
+    label_en: "Mercury"
+    nature: [mind, communication, learning, commerce, information, flexibility]
+    nature_zh: ["思维", "沟通", "学习", "交易", "信息", "灵活"]
+    core_verb: "思维运转与信息交换"
+    core_formula: "思维 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: supporting   # 事业：辅助 —— 沟通/技能/信息处理
+      marriage: supporting # 婚姻：辅助 —— 怎么跟伴侣沟通
+      dating: supporting   # 恋爱：辅助 —— 怎么说甜言蜜语/怎么撩
+      wealth: supporting   # 财运：辅助 —— 信息差/口才变现
+      health: neutral
+      study: core          # 学业：核心 —— 学习的核心工具
+      family: neutral
+      villain: neutral
+    relation_role: "沟通频道——你怎么跟对方说、怎么说自己、怎么理解对方说的。"
+    gender_diff: null
+
+  venus:
+    label: "金星"
+    label_en: "Venus"
+    nature: [attraction, charm, aesthetics, value, pleasure, harmony, relating]
+    nature_zh: ["吸引力", "魅力", "审美", "价值感", "愉悦", "和谐", "关系"]
+    core_verb: "释放魅力与吸引力"
+    core_formula: "魅力 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: supporting   # 事业：辅助 —— 人际/审美/和谐（不是事业主线但加分）
+      marriage: core       # 婚姻：核心 —— 魅力发射器；婚姻里有没有爱
+      dating: core         # 恋爱：核心 —— 你怎么吸引人
+      wealth: core         # 财运：核心 —— 价值观与金钱/奢侈品/审美消费
+      health: neutral
+      study: supporting    # 学业：辅助 —— 学习的愉悦感
+      family: neutral
+      villain: neutral
+    relation_role: "魅力发射器——你怎么展现魅力、在哪个领域最吸人。"
+    gender_diff:
+      female: "你要用金星去吸引人——这是你主动释放的魅力。"
+      male: "你被这种类型的女性气质吸引——金星描绘了你理想中的'她'。"
+
+  mars:
+    label: "火星"
+    label_en: "Mars"
+    nature: [action, drive, competition, conquest, sex, courage, anger]
+    nature_zh: ["行动力", "驱动力", "竞争", "征服", "性", "勇气", "愤怒"]
+    core_verb: "激发行动与胜负欲"
+    core_formula: "胜负欲 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: core         # 事业：核心 —— 竞争力/行动力（不是事业主线但决定怎么干）
+      marriage: core       # 婚姻：核心 —— 被什么类型打动（女盘）/ 怎么征服（男盘）
+      dating: core         # 恋爱：核心 —— 激情/性吸引力/怎么追
+      wealth: supporting   # 财运：辅助 —— 赚钱的冲劲/竞争性收入
+      health: core         # 健康：核心 —— 炎症/外伤/活力
+      study: supporting    # 学业：辅助 —— 学习冲劲
+      family: neutral
+      villain: core        # 小人：核心 —— 冲突/明面上的攻击
+    relation_role: "行动引擎——怎么追、怎么争、被什么特质折服。"
+    gender_diff:
+      female: "火星描绘你被什么男性气质折服——这不是你要去展现的，这是会让你心动、让你服气的。"
+      male: "你要用火星去征服——这是你主动展示的行动力与雄性魅力。"
+
+  jupiter:
+    label: "木星"
+    label_en: "Jupiter"
+    nature: [expansion, fortune, benefactor, growth, faith, wisdom, abundance]
+    nature_zh: ["扩张", "幸运", "贵人", "成长", "信念", "智慧", "丰盛"]
+    core_verb: "扩张机遇、带来贵人"
+    core_formula: "扩张 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: core         # 事业：核心 —— 事业扩张/贵人/多线发展
+      marriage: core       # 婚姻：核心 —— 婚姻祝福/天时加持
+      dating: supporting   # 恋爱：辅助 —— 容易遇到条件好的对象
+      wealth: core         # 财运：核心 —— 财富扩张/偏财/慷慨进账
+      health: supporting   # 健康：辅助 —— 恢复力
+      study: core          # 学业：核心 —— 高等学识/深造扩张
+      family: neutral
+      villain: neutral
+    special_rules:
+      - name: "multi_thread"
+        description: "被木星互溶/接纳的星 → 那个领域不止一条路、不止一份工作、多线程发展"
+        condition: "jupiter mutual_reception_or_accepts {planet}"
+        tell_user: "你{planet_domain}的能量被木星放大了——这个领域你可能不止做一件事。多线发展是你的常态，不是分心。"
+    relation_role: "天时加持——婚姻有没有'自然祝福'，遇到的人有没有质量保障。"
+    gender_diff: null
+
+  saturn:
+    label: "土星"
+    label_en: "Saturn"
+    nature: [responsibility, fear, limitation, delay, perseverance, maturity, commitment]
+    nature_zh: ["责任", "恐惧", "限制", "延迟", "毅力", "成熟", "承诺"]
+    core_verb: "收紧、考验、但咬牙撑住后能长出来"
+    core_formula: "责任 × {house_domain} × {dignity_adverb}"
+    domain_signals:
+      career: core         # 事业：核心 —— 事业格局/长期成就/权威地位
+      marriage: core       # 婚姻：核心 —— 承诺能否落地
+      dating: supporting   # 恋爱：辅助 —— 恋爱中的现实考量
+      wealth: supporting   # 财运：辅助 —— 长期积累/不动产
+      health: core         # 健康：核心 —— 慢性病/骨骼/压力
+      study: supporting    # 学业：辅助 —— 需要毅力/延迟回报
+      family: core         # 家庭：核心 —— 父亲/家庭责任
+      villain: neutral
+    special_rules:
+      - name: "dignified_saturn_not_malefic"
+        description: "入庙/入旺的土星不是凶星——是熟成器，不是阻碍器"
+        condition: "saturn in domicile_or_exaltation"
+        tell_user: "你的土星入庙/入旺——它不是来给你添堵的，是来帮你'压实'的。土星压过的领域，反而是你一生最稳的底盘。"
+    relation_role: "承诺能不能落地——有土星绑定的关系才有时间厚度，但土星刑冲会让关系变成'功课'。"
+    gender_diff: null
+
+  uranus:
+    label: "天王星"
+    label_en: "Uranus"
+    nature: [rebellion, change, technology, independence, sudden_change, innovation]
+    nature_zh: ["变革", "叛逆", "科技", "独立", "突然变化", "创新"]
+    core_verb: "突然打破、带来颠覆"
+    core_formula: "变革 × {house_domain}"
+    domain_signals:
+      career: supporting   # 事业：辅助 —— 突然变化/创新/科技行业
+      marriage: supporting # 婚姻：辅助 —— 婚姻形态不常规（异地/开放式/年龄差大）
+      dating: supporting   # 恋爱：辅助 —— 闪电式心动/网恋/意外邂逅
+      wealth: neutral
+      health: neutral
+      study: supporting    # 学业：辅助 —— 科技/创新领域
+      family: neutral
+      villain: neutral
+    relation_role: "关系里的'不常规'——天王落7或触7R，婚姻形态不走主流路线。不一定是离婚，可能是异地婚、开放式、年龄差、网络认识。"
+    gender_diff: null
+
+  neptune:
+    label: "海王星"
+    label_en: "Neptune"
+    nature: [illusion, inspiration, intuition, confusion, faith, art, sacrifice]
+    nature_zh: ["幻想", "灵感", "直觉", "迷惑", "信仰", "艺术", "牺牲"]
+    core_verb: "消融边界、带来灵感或迷惑"
+    core_formula: "消融 × {house_domain}"
+    domain_signals:
+      career: supporting
+      marriage: supporting # 婚姻：辅助 —— 理想化伴侣/浪漫幻想/也可能幻灭
+      dating: supporting   # 恋爱：辅助 —— 一见钟情但可能是投射
+      wealth: neutral
+      health: supporting   # 健康：辅助 —— 不明原因的症状
+      study: neutral
+      family: neutral
+      villain: core        # 小人：核心 —— 暗中迷惑/被骗
+    relation_role: "关系里的滤镜——海王触到感情宫位时，你看对方的眼光自带柔焦。要问自己：我爱的是真实的他，还是我想象中的他？"
+    gender_diff: null
+
+  pluto:
+    label: "冥王星"
+    label_en: "Pluto"
+    nature: [transformation, power, rebirth, depth, destruction, obsession]
+    nature_zh: ["转化", "权力", "重生", "深度", "毁灭", "执念"]
+    core_verb: "摧毁然后重生、带来深度执念"
+    core_formula: "转化 × {house_domain}"
+    domain_signals:
+      career: supporting   # 事业：辅助 —— 权力/金融/掌控型职业
+      marriage: core       # 婚姻：核心 —— 深度绑定/执念/关系中权力博弈
+      dating: supporting   # 恋爱：辅助 —— 一见就陷进去/执念型吸引
+      wealth: core         # 财运：核心 —— 大额投资/他人钱财/偏财
+      health: neutral
+      study: neutral
+      family: neutral
+      villain: core        # 小人：核心 —— 暗中权力斗争
+    relation_role: "关系里的深度与执念——冥王触到感情宫位时，爱不够深你觉得没意思，太深了又怕失控。"
+    gender_diff: null
+
+# ——— 默认信号等级说明 ———
+# core: 该话题的核心判断星——没有它会漏掉关键判断
+# supporting: 该话题的辅助星——补充维度，提升解读丰满度
+# neutral: 不相关——在默认分析中不抓取，除非用户追问到这个维度
+
+# ——— 运行时推导 ———
+# 每个话题：
+#   1. 主宫 → 主宫行星 = lord_of(primary_house)
+#   2. 核心星 = domain_signals == core 的行星（从主宫对应的领域中筛选）
+#   3. 辅助星 = domain_signals == supporting 的行星（补充维度）
+#   4. 特殊规则 = 检查 special_rules 是否触发 → 注入额外判断
