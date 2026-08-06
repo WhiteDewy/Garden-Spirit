@@ -44,7 +44,8 @@ def test_intent_router_family():
 
 
 def test_intent_router_requires_clarification():
-    intent = IntentRouter().route("你好")
+    """真正模糊的输入才需澄清（问候已路由到 Chat，不再澄清）。"""
+    intent = IntentRouter().route("我想问点事")
     assert intent.requires_clarification
 
 

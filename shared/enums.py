@@ -234,6 +234,31 @@ class Role(str, Enum):
     SYSTEM = "system"
 
 
+class ConsultMode(str, Enum):
+    """咨询模式——影响分析深度与叙事长度（产品层"今天想怎么聊"）。
+
+    MVP 实现 quick/deep；annual/chart/free 框架预留（当前映射到默认深度）。
+    """
+
+    QUICK = "quick"    # 快速咨询：简洁回答（共情+核心判断+一句出路）
+    DEEP = "deep"      # 深度咨询：完整叙事（现状默认）
+    ANNUAL = "annual"  # 年度主题（框架预留）
+    CHART = "chart"    # 星盘解析（框架预留）
+    FREE = "free"      # 自由聊天（框架预留）
+
+
+class TrustLevel(str, Enum):
+    """信任等级（A2 关系层）——由 trust_score 推导，等级只读不存。
+
+    陌生 → 认识 → 信任 → 深交。深度优先：一次深聊 > 十次闲聊。
+    """
+
+    STRANGER = "stranger"           # 陌生
+    ACQUAINTANCE = "acquaintance"   # 认识
+    TRUSTED = "trusted"             # 信任
+    INTIMATE = "intimate"           # 深交
+
+
 class PersonaType(str, Enum):
     """十大星灵人格（占位名，产品阶段可改）。"""
 

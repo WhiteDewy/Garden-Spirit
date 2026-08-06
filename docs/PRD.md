@@ -1,16 +1,17 @@
 # Garden-Spirit PRD（产品需求文档）
 
-> **状态**：MVP 阶段，231 测试全绿。Phase 1（ConsultResolver 接通）完成，Phase 2（LLM 意图拆解）进行中。
-> **最后更新**：2026-08-05
-> **配套文档**：`docs/architecture.md`（技术架构，已冻结）· `docs/interpretation_voice.md`（解读语气规范）· `docs/consult_method.md`（咨询方法论）
+> **状态**：MVP 完整闭环，437 测试全绿。六层架构 L1-L6 全部落地（路线A"像人"+ 路线B"像agent"）。
+> **最后更新**：2026-08-06
+> **配套文档**：`docs/architecture.md`（技术架构，已冻结）· `docs/interpretation_voice.md`（解读语气规范）· `docs/consult_method.md`（咨询方法论）· `docs/product_report_uiux.md`（能力基线）
 
 ---
 
 ## 1. 产品概述
 
-**一句话**：一个真正会算占星、会说人话的数字星灵——用真实的星历计算 + 可解释的推理，而不是 LLM 编造。
+**一句话（定位 v2）**：面向自我探索与情绪成长场景的 AI Agent 陪伴产品——用领域知识引擎（占星）提供有依据的自我认知，用长期记忆与关系层建立持续陪伴，让人与星盘的相处方式从"无意识"走向"有意识"。
 
-**产品形态**：对话式 AI 占星伴侣（App/小程序），核心是"问一个关于人生的问题，得到有真实星盘依据的回答"。
+**产品形态**：一座持续理解你、陪伴你成长的 AI 占星花园（Web PWA → 小程序 → App）。
+三关键词：**理解**（真实星盘 + 可解释证据链）、**陪伴**（星灵人格 / 每日来信 / 每天回来打开）、**成长**（日记 + 长期画像 + 验前事）。
 
 **差异化**：
 | 同类产品 | 痛点 | Garden-Spirit |
@@ -18,6 +19,17 @@
 | 纯 LLM 占星 bot | 星盘是编的，前后矛盾 | 星盘来自 Swiss Ephemeris 真实计算 |
 | 静态占星 App | 只能看报告，不能对话 | 多轮对话，追问可深入 |
 | 真人占星师 | 贵、慢、不可复制 | 随时可用，推理过程可审计 |
+| 占星工具 | 算完就走，不陪伴 | 长期记忆 + 关系层 + 每日来信，越聊越懂你 |
+
+## 1.1 核心哲学链与设计硬线
+
+**哲学链**：`信任 → 占星 → 疗愈 → 无意识 → 有意识 → 陪伴 → 成长`
+- **占星 = 信任基石**（确定性 Domain + Evidence，不可动摇）
+- **疗愈必须锚定在占星事实上**——LLM 的自由度只在"怎么疗愈/怎么说话"，绝不在"占星对不对"
+- **星盘不是判决书，是一张地图**；输出 风险/模式/资源/建议，绝不输出"命好坏/一定离婚"
+- **成长 = 从无意识走向有意识**；诚实承认有些课题更难
+
+**设计硬线（不可变更）**：占星结论（权重/极性/吉凶/哪个宫位重要）全部由 Domain 确定性计算产生；LLM 两次介入——第一次"人话→占星概念"映射与拆解，第二次"结论→人话"转述——都不得改变结论。
 
 ## 2. 目标用户
 
@@ -34,6 +46,8 @@
 1. **算得真**——星盘由天文引擎计算，非 LLM 编造
 2. **讲得清**——每个结论都有可追溯的证据链（哪个行星/宫位/相位支撑）
 3. **陪伴暖**——十大星灵人格，多轮对话有温度
+
+**成长闭环**：一次咨询不是终点——咨询后写回画像 → 沉淀判断 → 记录人生事件 → 验前事校准置信度 → 待验证清单 → 每日来信，形成"越聊越懂你"的循环（第四层记忆 + 第五层学习 + 第六层行动）。
 
 ## 4. 核心功能（按八大意图领域）
 
@@ -70,20 +84,23 @@
 ## 6. 核心用户旅程
 
 ```
-① 引导 Onboarding
-   采集出生数据（时间/地点/时区 + 精度声明）→ 隐私授权
+① 建档 Onboarding
+   采集出生数据（城市名 + 本地时间 + 未知时间降级）→ 后端 geocode 解析经纬度/时区 → 加密落库
    ↓
-② 初识 First Reading
-   生成本命盘 → "你是这样的星灵气质"（人格化解读）
+② 初识 First Meeting（A2 关系层）
+   星灵自我介绍"我是谁/能做什么/怎么用"（按信任等级的开场白）
    ↓
-③ 对话 Dialogue  ← 核心循环
-   问问题 → Intent → 领域推理 → Conclusion → 人格化回答
+③ 对话 Dialogue ← 核心循环
+   问问题 → LLM 意图理解(A1) → 领域推理(L2) → Conclusion → 疗愈叙事(A3) → 人格化回答
    ↓
-④ 人生 K 线 Life Timeline
-   可视化未来机会/压力曲线（今日/本月/今年/十年）
+④ 成长 Growing（W1 + W2）
+   咨询后写回 → 画像/成长事件 → 日记 → 我的宇宙
    ↓
-⑤ 每日陪伴 Daily
-   每日运势推送、订阅回访
+⑤ 验前事 Verify（B1/B2 学习层 + 行动层）
+   记录人生事件 → 法达倒推验证判断 → 待验证清单逐个确认 → 置信度校准
+   ↓
+⑥ 每日陪伴 Daily（W3/W4 + B2）
+   每日来信 + 待验证提醒 + 续聊
 ```
 
 ## 7. 关键产品决策（v1，已冻结）
@@ -110,8 +127,10 @@
 
 - 免责声明：占星不构成医疗/法律/财务建议
 - 情绪危机检测：识别自伤/抑郁信号 → 停止占星式回答，给出专业求助引导
-- 未成年人保护：涉及感情的深度内容需适龄门槛
-- Safety 模块位于 `application/conversation/safety.py`
+- **输出护栏（A3 疗愈协议）**：绝不给"命好坏/一定离婚/必有灾"式判决——命中致命判决词 → 追加"给出路"收尾（硬护栏，确定性检测）
+- **诚实原则（B1 验前事）**：没验上 ≠ 被证伪——缺席不降置信度，反驳只来自用户明确反馈
+- 未成年人保护：涉及感情的深度内容需适龄门槛（v2）
+- Safety 模块：`application/conversation/safety.py`；护栏：`application/conversation/healing.py`
 
 ## 10. 非功能需求
 
@@ -135,43 +154,44 @@
 
 ## 12. 开发路线图
 
-### 已完成 ✅
+### 已交付 ✅（2026-08-06，437 测试全绿）
 
 | 阶段 | 内容 | 关键交付 |
 |------|------|---------|
-| Phase 0-1 ✅ | 脚手架 + 共享模型冻结 | 数据契约、四层架构 |
-| Phase 2 ✅ | 天文引擎 + 知识库 + 本命盘 | Swiss Ephemeris + Moshier 回退、YAML 知识库 |
-| Phase 3 ✅ | Evidence 引擎 + Strategy + 推理链 | RuleEngine（120 planet_in_house + 17 planet_pair + house_lord）、证据卡 |
-| Phase 4 ✅ | 纵向切片 Career/ChangeJob | 首个端到端解读链路 |
-| Phase 5 ✅ | 八大意图领域 | 职业(6模块) 感情(4+合盘) 财富 每日 健康 情绪 家庭 学习 |
-| Phase 6-8 ✅ | 分析模块 + 合盘 + 财运 | 合盘(相位+落宫+互溶) + Wealth + 宫位制可选(含 Alcabitius) |
-| Phase 9 ✅ | Timeline 人生 K 线 | WindowScanner（机会/压力曲线） |
-| Phase 10 ✅ | Agent runtime + LLM 对话 | Master Agent 主循环、IntentParser、LLM 转述层 |
-| Phase 11 ✅ | Conversation 层 | Persona 十大星灵、Response（LLM 人格化转述）、Safety（免责声明 + 情绪危机检测）、出生时间降级、加密存储、ConsultResolver 咨询模板 |
+| Phase 0-8 | 脚手架→天文引擎→推理链→八大领域→合盘 | 四层架构、Swiss Ephemeris、YAML 知识库、RuleEngine、八大领域分析模块、合盘 |
+| Phase 9-11 | Timeline + Agent runtime + Conversation 层 | WindowScanner、Master Agent、十大星灵、Safety、ConsultResolver |
+| Phase 12 ✅ | 第一层深度理解 | LLM 意图分类（A1）+ IntentDecomposer + intent_profiles.yaml |
+| **W1 数据地基** ✅ | 第四层记忆 | ChartProfile/Journal/LifeEvent + GardenStore（5 表 + 加密）+ 记忆写回管线 + FastAPI 骨架 |
+| **W2 前端 + 生产化** ✅ | 前端脚手架 + geocoding + 咨询模式 + 日记 | uni-app 建档/对话页 + 高德 geocode（失败 422 不静默）+ ConsultMode + JournalService |
+| **W3/W4 陪伴** ✅ | 星灵信箱 + 花园聚合 | LetterService（每日来信，幂等按天）+ /garden 聚合 + 前端 4 页 |
+| **A1 意图理解** ✅ | 路线A·理解 | LLM 分类优先（领域受控枚举）+ 规则兜底，修掉"这个月运势/随便聊聊"翻车 |
+| **A2 关系层** ✅ | 路线A·陪伴 | TrustLevel（深度优先）+ RelationshipService + 开场白（温暖陪伴调性）+ 邀请式引导 |
+| **A3 疗愈协议** ✅ | 路线A·疗愈 | healing.py 叙事 5 步 + 输出硬护栏（致命判决词检测 + 给出路收尾） |
+| **B1 验前事** ✅ | 路线B·学习 | verifier.py 法达倒推验证 + 置信度校准 + 事件端点 + 诚实原则（缺席≠证伪） |
+| **B2 行动层** ✅ | 路线B·行动 | 待验证清单 + 偏好控制（push_frequency/敏感话题/persona）+ 主动提醒 |
 
-### 当前 —— Phase 12：第一层深度理解 ✅
+### 六层架构进度
 
-| 任务 | 说明 |
-|------|------|
-| ✅ LLMClient.extract_slots | LLM 槽位抽取 |
-| ✅ IntentParser 接通 LLM | GardenSpiritAgent 传入 llm_client |
-| ✅ IntentDecomposer | LLM 深度拆解：人话困境 → 占星结构映射 + 分析任务富化 |
-| ✅ intent_profiles.yaml | 8 领域安全网（base_tasks + conditional_tasks + focus_dimensions） |
-| ✅ 268 测试全绿 | 246 原有 + 22 新增 |
-| ⬜ Memory 策略 | 对话记忆截断/摘要压缩 → 第四层 |
+| 层 | 能力 | 状态 |
+|----|------|------|
+| L1 理解 | LLM+规则意图、追问消解、深度拆解 | ✅ A1 |
+| L2 推理 | Strategy→Plan→Evidence→Conclusion 确定性推理 | ✅ |
+| L3 叙事 | 10 人格 + 疗愈协议 5 步 + 输出护栏 | ✅ A3 |
+| L4 记忆 | 跨会话画像 + 写回管线 + 关系层 trust | ✅ W1 + A2 |
+| L5 学习 | 验前事 + 置信度校准 | ✅ B1 |
+| L6 行动 | 待验证清单 + 偏好 + 主动提醒 | ✅ B2（真实推送通道待接） |
 
-### 待开始
+### 待开始（按优先级）
 
 | 优先级 | 内容 | 说明 |
 |--------|------|------|
-| **P1** | **API + App 层** | `application/api/`：FastAPI routes（/chat、/chart、/timeline、/person）；`app/`：前端入口 |
-| **P1** | **Timeline 可视化** | WindowScanner 曲线 → 前端 K 线图；Timeline 接入结论流程 |
+| **P1** | **真实推送通道** | B2 偏好已备好（push_frequency），接通知系统/定时调度后偏好真正 gate 行为 |
+| **P1** | **验前事前端强化** | 待验证清单已可用，补"事件×判断"可视化 + 批量验证 |
 | **P1** | **related_person 输入** | 自然语言解析对方出生时间；追问后多轮收数据 |
-| **P1** | **每日运势调度** | Daily Intent 定时触发（cron/scheduler） |
-| **P2** | **词库补全** | ✅ planet_pair 45/45 全覆盖 + fallback；✅ house_lord 2/5/7/8/10 宫主各 12 宫 = 60 条；synastry 专属词义 → v2 |
 | **P2** | **黄金测试扩展** | 更多名人生成数据；Alcabitius/高纬出生黄金测试 |
-| **P2** | **foundation 基础** | database/ 持久化 + 加密存储；cache/ 图表缓存 |
+| **P2** | **生时矫正** | 出生时间不准的宫位纠偏（v1.5）|
 | **v2** | **合盘深化** | RelationshipSynastry 专属词义（synastry_rules.yaml）；Composite/Davison 合盘 |
+| **v2** | **未成年人适龄门槛** | PRD §9 预留 |
 | **v2** | **占星技法扩展** | 卜卦；FixedStars；相位图形（星群/T三角） |
 
 
@@ -179,7 +199,8 @@
 
 | 风险 | 应对 |
 |------|------|
-| 占星结论被当作现实决策依据 | 免责声明 + 建议语气措辞 |
+| 占星结论被当作现实决策依据 | 免责声明 + 疗愈护栏（A3）+ 建议语气措辞 |
 | 用户出生时间不准确导致宫位错 | 精度声明 + 生时矫正（v1.5）|
-| LLM 越权解释星盘 | 架构防火墙 + 代码评审越界规则 |
+| LLM 越权解释星盘 | 架构防火墙 + 输出硬护栏（致命判决词检测）|
+| 判断可能不准 | 验前事系统（B1）用人生事件/反馈校准置信度，诚实标注 |
 | 隐私泄漏 | 加密存储 + 授权 + 可删除 |

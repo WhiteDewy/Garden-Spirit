@@ -1,11 +1,18 @@
 """AppConfig：全局配置。
 
 配置从环境变量 + 可选 .env 加载。所有 v1 冻结决策的默认值集中在此。
+
+.env 从项目根目录加载（gitignored），真实环境变量优先于 .env。
+密钥类配置（GS_AMAP_KEY / GS_ENCRYPTION_KEY / LLM api_key）见 .env.example。
 """
 
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+
 from shared.enums import HouseSystem, PersonaType, ZodiacType
+
+load_dotenv()  # 项目根 .env；不覆盖已存在的环境变量
 
 
 @dataclass
@@ -20,15 +27,35 @@ class EphemerisConfig:
 
 @dataclass
 class LLMConfig:
-    """LLM 配置。LLM 永远只做两件事：意图槽抽取 + 结论转述。"""
+    """LLM 配置。LLM 永远只做两件事：意图槽抽取 + 结论转述。
+
+    从环境变量加载（.env 或系统环境），不硬编码：
+      LLM_PROVIDER / LLM_BASE_URL / LLM_MODEL / LLM_API_KEY
+    """
 
     provider: str = "openai"    # "openai" | "anthropic" | "google"
     base_url: str = ""          # 留空 → 用 provider 默认；可覆盖为兼容网关
     model: str = "gpt-4o"
-    api_key: str = ""           # 从环境变量加载，不硬编码
+    api_key: str = ""
     temperature: float = 0.7
     max_tokens: int = 4096
     request_timeout: int = 60
+
+    def __post_init__(self) -> None:
+        import os
+
+        # 原则：显式传入的字段（非默认值）优先于环境变量——测试注入 fake/key 不被覆盖。
+        # GS_LLM_DISABLE=1：跳过从环境读 key（CI/测试/无网环境），应用默认即不可用。
+        if os.getenv("GS_LLM_DISABLE", "").strip().lower() in ("1", "true", "yes"):
+            return
+        if self.provider == "openai":
+            self.provider = os.getenv("LLM_PROVIDER", self.provider)
+        if not self.base_url:
+            self.base_url = os.getenv("LLM_BASE_URL", self.base_url)
+        if self.model == "gpt-4o":
+            self.model = os.getenv("LLM_MODEL", self.model)
+        if not self.api_key:
+            self.api_key = os.getenv("LLM_API_KEY", self.api_key)
 
 
 @dataclass

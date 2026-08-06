@@ -33,6 +33,10 @@ class ContextBuilder:
             )
         return self._sessions[session_id]
 
+    def get(self, session_id: str) -> "SessionContext | None":
+        """取已存在的会话（写回/回访用）。不存在 → None。"""
+        return self._sessions.get(session_id)
+
 
 class SessionContext:
     """一个会话的上下文聚合。"""
@@ -48,6 +52,9 @@ class SessionContext:
         self.latest_conclusion = None
         self.related_person: Person | None = None      # 合盘对象（含出生数据）
         self.pending_related_person: bool = False      # 已问过对方数据，等待提供
+        #: A2 关系层：本条消息是否命中纯问候/闲聊快路径（_detect_chat）。
+        #: 该路径在意图解析之前返回，没有 Intent 可查，故用标志位识别 casual 信号。
+        self.last_was_chat: bool = False
 
     def to_intent_context(self) -> dict:
         """蒸馏上下文：供 IntentParser 消解追问（如"那明年呢？"）。
@@ -68,6 +75,7 @@ class SessionContext:
         item = MemoryItem(
             id=new_id("mem"),
             session_id=self.session_id,
+            person_id=self.memory.person_id,
             role=Role.USER,
             content=message,
             timestamp=datetime.now(timezone.utc),
@@ -80,6 +88,7 @@ class SessionContext:
         item = MemoryItem(
             id=new_id("mem"),
             session_id=self.session_id,
+            person_id=self.memory.person_id,
             role=Role.ASSISTANT,
             content=response,
             timestamp=datetime.now(timezone.utc),

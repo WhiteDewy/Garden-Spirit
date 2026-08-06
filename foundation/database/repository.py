@@ -75,7 +75,9 @@ class PersonRepository:
             Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._encryptor = encryptor or Encryptor()
         # 单条持久连接：对 :memory: 必须复用同一连接，否则每次 _connect 都是新空库
-        self._conn = sqlite3.connect(self._db_path)
+        # check_same_thread=False：FastAPI/TestClient 会在工作线程执行请求，
+        # 单连接跨线程访问依赖 SQLite 自身锁 + 即时 commit 保证一致性。
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_SCHEMA)
         self._conn.commit()

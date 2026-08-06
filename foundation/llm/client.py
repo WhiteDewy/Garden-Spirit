@@ -125,6 +125,20 @@ class LLMClient:
             logger.warning("LLM 槽位抽取失败，退化为空槽", exc_info=True)
             return {}
 
+    def classify_intent(self, system_prompt: str, message: str) -> dict:
+        """LLM 意图分类（A1 对话大脑）：结构化 JSON 输出。
+
+        system_prompt 定义受控领域枚举（IntentParser 提供），
+        LLM 只从枚举里选，返回 {domain, subdomain, confidence, ...}。
+        失败 → {}（调用方回退规则）。
+        """
+        try:
+            raw = self.complete(prompt=message, system=system_prompt, temperature=0.0)
+            return self._parse_slots_json(raw)
+        except Exception:
+            logger.warning("LLM 意图分类失败，回退规则路由", exc_info=True)
+            return {}
+
     @staticmethod
     def _parse_slots_json(raw: str) -> dict:
         """从 LLM 返回文本中提取 JSON 槽位。

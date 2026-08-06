@@ -16,6 +16,7 @@ class MemoryItem:
     role: Role
     content: str
     timestamp: datetime
+    person_id: str = ""        # 跨会话查询需要；会话上下文记录时可留空
     metadata: dict[str, object] = field(default_factory=dict)
     # metadata 可含 {"intent_id": ..., "conclusion_id": ..., "tokens": 150}
 

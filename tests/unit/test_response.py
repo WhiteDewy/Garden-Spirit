@@ -190,7 +190,8 @@ def test_system_prompt_contains_weaving_rules():
     c = _make_conclusion()
     system = build_prompt(c)[0]["content"]
     assert "怎么织成一篇解读" in system
-    assert "先讲基调、再讲细节" in system
+    assert "接住情绪" in system           # A3 疗愈弧线：先共情、再讲基调
+    assert "再讲基调、再讲细节" in system
     assert "证据卡要对上结论" in system
 
 

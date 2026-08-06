@@ -20,13 +20,21 @@ htmlcov/
 .vscode/
 .idea/
 
+# Node（uni-app 前端）
+node_modules/
+
 # Env
 .env
 .env.*
+# 配置模板提交，真实环境文件各环境自行提供
+!.env.example
 
 # Data / runtime
 data/ephemeris/*
 !data/ephemeris/.gitkeep
+# SQLite 运行时库（含加密用户数据，绝不上库）及其 WAL/journal
+data/*.db
+data/*.db-*
 
 # Logs
 *.log

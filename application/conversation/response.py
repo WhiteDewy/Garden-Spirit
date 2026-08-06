@@ -20,9 +20,10 @@ System prompt 编译进：
 
 from __future__ import annotations
 
-from shared.enums import EvidencePolarity, PersonaType
+from shared.enums import ConsultMode, EvidencePolarity, PersonaType
 from shared.models import Conclusion, Finding
 
+from application.conversation.healing import build_healing_instruction
 from application.conversation.persona import get_persona
 
 # ---------------------------------------------------------------------------
@@ -55,7 +56,7 @@ _SYSTEM_VOICE = """\
 
 ## 怎么织成一篇解读
 
-1. **先讲基调、再讲细节**：从 Conclusion 的 summary 出发定主调 → 用 Planet Profiles 补"为什么这颗星这样" → 用 Evidence Cards 举例"具体怎么发生的"。
+1. **先接住情绪、再讲基调、再讲细节**（疗愈弧线：共情→基调）：从 Conclusion 的 summary 出发定主调 → 用 Planet Profiles 补"为什么这颗星这样" → 用 Evidence Cards 举例"具体怎么发生的"。
 2. **证据卡要对上结论**：card 描述的结构，对应 conclusion 里某条 finding——把它们讲在一起，不要各说各的。
 3. **时间窗口放后半段**：如果 Conclusion 带 time_periods，作为"时机建议"放在后半段。
 4. **数据缺口不遮掩**：data_gaps 里说的（出生时间精度不足等）要诚实带出。
@@ -93,6 +94,38 @@ _SYSTEM_VOICE = """\
 - 自然分段，每段 2-3 句，像真人占星师说话，不是列条目。
 - 结尾可以给一句温暖的落点，但不要变成鸡汤。
 """
+
+
+# ---------------------------------------------------------------------------
+# 咨询模式指令（附加在 system voice 之后，可覆盖其长度/结构要求）
+# ---------------------------------------------------------------------------
+
+_MODE_INSTRUCTIONS: dict[ConsultMode, str] = {
+    ConsultMode.QUICK: (
+        "## 本次是快速咨询\n"
+        "覆盖上面「长度」的要求：回答控制在 120-180 字，三段以内——\n"
+        "1) 一句共情接住情绪；2) 一句核心判断（来自结论）；3) 一句可执行的建议。\n"
+        "不展开技术细节（落宫/相位/尊贵留给深度咨询），不列时间窗口，除非用户明确问时机。"
+    ),
+    ConsultMode.DEEP: "",
+    ConsultMode.ANNUAL: "",  # 框架预留：年度主题 → 暂同深度
+    ConsultMode.CHART: "",   # 框架预留：星盘解析 → 暂同深度
+    ConsultMode.FREE: "",    # 框架预留：自由聊天 → 暂同深度
+}
+
+
+def _build_mode_instruction(mode: ConsultMode | str | None) -> str:
+    """把 mode 规整为指令文本；非法值/空 → 空指令（安全回退到深度默认）。"""
+    if isinstance(mode, ConsultMode):
+        m = mode
+    elif isinstance(mode, str):
+        try:
+            m = ConsultMode(mode)
+        except ValueError:
+            return ""
+    else:
+        m = ConsultMode.DEEP
+    return _MODE_INSTRUCTIONS.get(m, "")
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +240,7 @@ def build_prompt(
     planet_profiles: list | None = None,
     question: str | None = None,
     topic_plan: object | None = None,
+    mode: ConsultMode | str = ConsultMode.DEEP,
 ) -> list[dict]:
     """构建 LLM messages（system + user）。
 
@@ -216,12 +250,22 @@ def build_prompt(
     planet_profiles: 可选——PlanetProfile 列表（行星单点档案，按主题抓取）。
     question: 可选——用户原始问题（让转述贴合语境）。
     topic_plan: 可选——TopicPlan（来自 ConsultResolver），注入话题专属叙事结构。
+    mode: 咨询模式——quick 覆盖为精简回答；其余默认深度。
     """
     profile = get_persona(persona)
     persona_block = profile.system_prompt()
 
     # 基础 system prompt
     system_parts = [persona_block, _SYSTEM_VOICE]
+
+    # 注入咨询模式指令（quick 会覆盖长度/结构）
+    mode_instruction = _build_mode_instruction(mode)
+    if mode_instruction:
+        system_parts.append(mode_instruction)
+
+    # 注入疗愈叙事协议（A3）：5 步情绪弧线 + 输出护栏。
+    # 放在 topic_plan 之前——通用情绪弧线在底，话题专属内容结构在顶（更近、更具体）。
+    system_parts.append(build_healing_instruction())
 
     # 注入话题专属咨询模板
     if topic_plan is not None and hasattr(topic_plan, 'to_dict'):
@@ -333,11 +377,13 @@ def paraphrase(
     question: str | None = None,
     llm_client=None,
     topic_plan: object | None = None,
+    mode: ConsultMode | str = ConsultMode.DEEP,
 ) -> str:
     """把 Conclusion + 卡片 + 行星档案转述成人格化回答。
 
     llm_client: 实现了 .chat(messages)->str 的对象；None 则报错（调用方处理降级）。
     topic_plan: 可选——TopicPlan（来自 ConsultResolver），注入话题专属叙事结构。
+    mode: 咨询模式——quick 覆盖为精简回答；其余默认深度。
     """
     messages = build_prompt(
         conclusion=conclusion,
@@ -347,6 +393,7 @@ def paraphrase(
         natal=natal,
         question=question,
         topic_plan=topic_plan,
+        mode=mode,
     )
     if llm_client is None:
         raise ValueError("paraphrase 需要 llm_client（实现了 .chat(messages)->str）")

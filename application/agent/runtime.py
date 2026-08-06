@@ -12,10 +12,12 @@ User → Intent Parser → Intent → Strategy → Execution Plan
 
 from __future__ import annotations
 
+import random
+
 from foundation.config import AppConfig
 from foundation.logger import get_logger
 from shared.constants import HOUSE_SYSTEM_ZH
-from shared.enums import IntentDomain, PersonaType, Planet, Priority, Verdict
+from shared.enums import ConsultMode, IntentDomain, PersonaType, Planet, Priority, Verdict
 from shared.models import Conclusion, ExecutionStatus, Intent, Person, Strategy, StrategyStep
 
 from application.agent.context_builder import ContextBuilder
@@ -43,6 +45,56 @@ from domain.astrology.calculation import NatalChartCalculator
 from domain.reasoning import Composer, Executor, Planner, Reasoner, StrategyLoader
 
 logger = get_logger("application.agent")
+
+#: 意图领域 → 中文名（降级模板/叙事共用）
+_DOMAIN_ZH = {
+    "career": "事业",
+    "relationship": "感情",
+    "wealth": "财富",
+    "health": "健康",
+    "emotion": "情绪",
+    "family": "家庭",
+    "learning": "学习",
+    "daily": "今日",
+}
+
+#: 降级模板开场白（按判定极性）
+_VERDICT_OPENERS = {
+    Verdict.FAVORABLE: "盘面上看，这件事总体是站在你这边的，可以更有底气地往前走。",
+    Verdict.UNFAVORABLE: "盘面上看，这件事眼下阻力不小，但绝非绝路——关键是选对时机、看清条件。",
+    Verdict.NEUTRAL: "盘面上看，这件事的方向还不完全明朗，需要结合现实条件来判断。",
+    Verdict.NEEDS_MORE_DATA: "你的星盘上，这个问题还缺一些信息才能看准，先别急着下结论。",
+}
+
+#: 判定为"技术性评分/时机"的文本特征——降级模板过滤（素材留给 LLM 叙事）
+_SCORING_MARKERS = ("综合评分", "净分", "尊贵分", "时间窗口", "行运对")
+
+
+def _is_scoring_text(text: str) -> bool:
+    return any(marker in text for marker in _SCORING_MARKERS)
+
+
+#: 纯问候/闲聊短句 → 直接温暖回应（不进 LLM、不进澄清循环）
+_CHAT_GREETINGS = (
+    "你好", "您好", "嗨", "哈喽", "哈罗", "hello", "hi",
+    "在吗", "在么", "随便聊聊", "聊聊天", "干嘛呢", "早上好", "晚上好",
+)
+_CHAT_REPLIES = (
+    "嗨，我在呢。今天想聊点什么？事业、感情，还是最近的心事？",
+    "来了来了。你想聊哪个方向？工作、感情，还是就想随便说说话？",
+    "在的。说说看——是有什么想不通的事，还是想听听星盘怎么讲你？",
+)
+
+#: 产品能力/身份类问题 → 能力介绍（"我是谁/我专业是什么/能帮你什么"）。
+#: 触发不走关键词：LLM 分类为 meta → 此处返回；离线由规则兜底。
+_CAPABILITY_REPLY = (
+    "我是住在你星盘里的星灵——我的专业是解盘：读你本命盘里的结构，"
+    "把它翻译成能听懂的人话。具体能帮你：\n"
+    "· 看懂自己——事业、感情、财运、健康、情绪、家庭、学习，想不通就能问\n"
+    "· 看懂时机——什么时候该发力、什么时候该蓄力\n"
+    "· 陪你成长——写日记、收每日来信，越聊越懂你\n"
+    "想先从哪块开始？"
+)
 
 
 class GardenSpiritAgent:
@@ -110,11 +162,16 @@ class GardenSpiritAgent:
         message: str,
         person: Person,
         persona: PersonaType | None = None,
+        mode: ConsultMode | str = ConsultMode.DEEP,
     ) -> str:
-        """处理一条用户消息，返回助手回答。"""
+        """处理一条用户消息，返回助手回答。
+
+        mode: 咨询模式——quick 精简分析+回答，deep 完整（默认）。
+        """
         persona = persona or self.config.default_persona
         ctx = self.context_builder.get_or_create(session_id, person, persona)
         ctx.record_user_message(message)
+        ctx.last_was_chat = False  # A2：每轮重置，仅本条命中闲聊才置真
 
         # 0. Safety gate（对齐 requires_clarification 短路模式）
         #    自伤/自杀信号 → 阻断占星，返回专业求助引导（PRD §9）
@@ -126,11 +183,34 @@ class GardenSpiritAgent:
             ctx.add_turn(message, safety.message)
             return safety.message
 
+        # 0.5 纯问候/闲聊短句 → 温暖回应（不浪费 LLM、不进入澄清循环）
+        chat_reply = self._detect_chat(message)
+        if chat_reply is not None:
+            ctx.last_was_chat = True  # A2：闲聊快路径没有 Intent，用标志位识别
+            ctx.record_assistant_response(chat_reply)
+            ctx.add_turn(message, chat_reply)
+            return chat_reply
+
         # 1. Intent 解析（LLM 深度拆解：领域路由 + 占星结构映射 + 任务富化）
         decomposed = self.intent_parser.parse_deep(message, context=ctx.to_intent_context())
         intent = decomposed.intent
         if intent.requires_clarification:
             return intent.clarification_question
+
+        # 闲聊兜底：规则路由到 Daily.Chat（若上面短句检测漏网）→ 直接回应
+        if intent.subdomain == "Chat":
+            chat_reply = self._detect_chat(message) or random.choice(_CHAT_REPLIES)
+            ctx.latest_intent = intent  # 一致性：闲聊也是意图（A2 关系层据此识别 casual 信号）
+            ctx.record_assistant_response(chat_reply)
+            ctx.add_turn(message, chat_reply)
+            return chat_reply
+
+        # 问星灵自己/产品能力（LLM 分类 meta / 离线规则兜底）→ 能力介绍，不进占星管线
+        if intent.subdomain == "Meta":
+            ctx.latest_intent = intent
+            ctx.record_assistant_response(_CAPABILITY_REPLY)
+            ctx.add_turn(message, _CAPABILITY_REPLY)
+            return _CAPABILITY_REPLY
 
         # 合盘入口：提到具体对象（男朋友/女友…）→ 需要对方出生数据
         related_slot = intent.get_slot("related_person")
@@ -144,7 +224,7 @@ class GardenSpiritAgent:
             intent.subdomain = "Synastry"  # 有对方数据 → 走合盘
 
         # 2. 策略 → 计划 → 执行 → 证据 → 结论（全 Domain，无 LLM）
-        strategy = self._select_strategy(decomposed)
+        strategy = self._select_strategy(decomposed, mode=mode)
         plan, chart = self.planner.create_plan(
             intent, strategy, person,
             enrichment=self._build_enrichment(decomposed),
@@ -188,7 +268,7 @@ class GardenSpiritAgent:
             )
 
         # 3. 组织回答（LLM 人格化转述；不可用时降级 v1 模板）
-        answer = self._format_response(conclusion, intent, persona, chart)
+        answer = self._format_response(conclusion, intent, persona, chart, mode=mode)
 
         # 4. 记录会话
         ctx.latest_intent = intent
@@ -198,6 +278,26 @@ class GardenSpiritAgent:
         return answer
 
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _detect_chat(message: str) -> str | None:
+        """纯问候/闲聊短句检测：命中返回温暖回应，否则 None。
+
+        只匹配短句（≤10 字），长句交给意图路由——避免"聊聊感情"这类
+        真提问被当成闲聊吞掉。
+        """
+        msg = message.strip()
+        if not msg or len(msg) > 10:
+            return None
+        low = msg.lower()
+        for kw in _CHAT_GREETINGS:
+            if kw in low:
+                return random.choice(_CHAT_REPLIES)
+        return None
+
+    def get_session_context(self, session_id: str):
+        """取会话上下文（含 conversation/intent/conclusion），供记忆写回。"""
+        return self.context_builder.get(session_id)
 
     def set_related_person(self, session_id: str, partner: Person) -> None:
         """登记合盘对象（含其出生数据）。"""
@@ -214,8 +314,10 @@ class GardenSpiritAgent:
             raise ValueError(f"会话不存在: {session_id}")
         ctx.person.house_system = house_system
 
-    def _select_strategy(self, decomposed: "DecomposedIntent") -> Strategy:
-        """选择策略：优先精确匹配，兜底领域默认；追加 decomposer 的额外任务。"""
+    def _select_strategy(
+        self, decomposed: "DecomposedIntent", mode: ConsultMode | str = ConsultMode.DEEP
+    ) -> Strategy:
+        """选择策略：优先精确匹配，兜底领域默认；深度模式追加 decomposer 任务。"""
         from domain.reasoning.intent.decomposer import DecomposedIntent  # noqa: PLC0415
 
         intent = decomposed.intent
@@ -226,7 +328,11 @@ class GardenSpiritAgent:
         if strategy is None:
             raise ValueError(f"没有可用的策略: {intent.domain.value}.{intent.subdomain}")
 
-        # 追加 decomposer 产出的额外模块（不重复已有模块）
+        # 快速咨询：只走策略自带模块，不追加（保证快而精）
+        if mode == ConsultMode.QUICK or mode == "quick":
+            return strategy
+
+        # 深度模式：追加 decomposer 产出的额外模块（不重复已有模块）
         existing_modules = {s.analysis_module for s in strategy.steps}
         for task in decomposed.merged_tasks:
             if task.module not in existing_modules:
@@ -262,6 +368,7 @@ class GardenSpiritAgent:
         intent: Intent,
         persona: PersonaType,
         chart=None,
+        mode: ConsultMode | str = ConsultMode.DEEP,
     ) -> str:
         """组织回答文本。
 
@@ -271,6 +378,7 @@ class GardenSpiritAgent:
 
         chart: 本命盘。用于生成飞星证据卡 + 本命概要（LLM 转述的素材）。
         """
+        answer = ""
         if self._llm.available:
             try:
                 from application.conversation.response import paraphrase
@@ -287,7 +395,7 @@ class GardenSpiritAgent:
                 resolver = get_resolver()
                 topic_plan = resolver.resolve_topic(intent.raw_query)
 
-                return paraphrase(
+                answer = paraphrase(
                     conclusion=conclusion,
                     persona=persona,
                     planet_profiles=profiles,
@@ -296,61 +404,88 @@ class GardenSpiritAgent:
                     question=intent.raw_query,
                     llm_client=self._llm,
                     topic_plan=topic_plan,
+                    mode=mode,
                 )
             except Exception as exc:  # pragma: no cover - LLM 降级
                 logger.warning("LLM 转述失败，降级 v1 模板: %s", exc)
 
-        return self._fallback_template(conclusion, intent, persona)
+        if not answer:
+            answer = self._fallback_template(conclusion, intent, persona)
 
-    def _fallback_template(
-        self, conclusion: Conclusion, intent: Intent, persona: PersonaType
-    ) -> str:
-        """v1 模板化回答（无 LLM）。persona 参数保留供扩展。"""
+        # A3 输出护栏：统一收口。LLM 路径在此兜底；fallback 内部已自检
+        # （coda 已带 marker，幂等，此处不会重复追加）。
+        from application.conversation.healing import healing_guardrail_check
+
+        coda = healing_guardrail_check(answer)
+        if coda:
+            answer += coda
+        return answer
+
+    @staticmethod
+    def _fallback_template(conclusion: Conclusion, intent: Intent, persona: PersonaType) -> str:
+        """无 LLM 降级回答：人话叙述，不堆评分/术语。按疗愈 5 步弧线组织。
+
+        弧线（A3 疗愈协议）：共情(开场) → 本命基调(summary) → 交叉(观察)
+        → 时机 → 给出路(建议)。技术性评分（综合评分/净分/尊贵分）被过滤——
+        那是给 LLM 叙事的素材，直接甩给用户就是生硬。persona 保留供扩展。
+        """
         verdict = Verdict(conclusion.metadata.get("verdict", "neutral"))
-        verdict_text = {
-            Verdict.FAVORABLE: "总体有利",
-            Verdict.UNFAVORABLE: "阻力较大",
-            Verdict.NEUTRAL: "方向不明确",
-            Verdict.NEEDS_MORE_DATA: "信息不足",
-        }.get(verdict, verdict.value)
+        domain_zh = _DOMAIN_ZH.get(intent.domain.value, intent.domain.value)
 
-        # 描述性解读：summary 已带说明，直接展示
+        # ① 共情 + ② 本命基调：温暖开场接住情绪 + 总体判断
         if conclusion.metadata.get("descriptive"):
-            lines = [
-                conclusion.summary or f"关于{intent.domain.value}的解读",
-            ]
+            lines = [conclusion.summary or f"关于{domain_zh}，我看了你的星盘。"]
         else:
             lines = [
-                conclusion.summary or f"关于{intent.domain.value}的解读",
-                f"总体判断：{verdict_text}（置信度 {conclusion.overall_confidence:.0%}）",
+                _VERDICT_OPENERS.get(verdict, f"关于{domain_zh}，我看了你的星盘。"),
+                conclusion.summary or f"关于{domain_zh}，我看了你的星盘。",
             ]
 
-        if conclusion.findings:
-            lines.append("\n关键依据：")
-            for f in conclusion.findings[:5]:
-                mark = {"positive": "✓", "negative": "✗", "neutral": "·"}.get(f.polarity.value, "·")
-                lines.append(f"  {mark} {f.text}")
+            # ③ 交叉观察：只展示人文表述。全被过滤就不展示观察节——
+            # 宁可没有，也不把评分/时机文本直出给用户。
+            human = [f for f in conclusion.findings if not _is_scoring_text(f.text)]
+            if human:
+                lines.append("\n想先和你分享几个观察：")
+                for f in human[:3]:
+                    lines.append(f"  · {f.text}")
 
-        if conclusion.time_periods:
-            lines.append("\n时间窗口：")
-            for tp in conclusion.time_periods:
-                lines.append(f"  {tp.label}（{tp.quality.value}）")
+            # ④ 时机
+            if conclusion.time_periods:
+                lines.append("\n关于时机：")
+                for tp in conclusion.time_periods[:3]:
+                    quality = {"positive": "有利", "negative": "有阻力", "neutral": "平稳"}.get(tp.quality.value, "平稳")
+                    lines.append(f"  · {tp.label} —— {quality}")
 
-        for rec in conclusion.recommendations:
-            lines.append(f"\n建议：{rec}")
+        # ⑤ 给出路：建议就是出路；没有建议也要兜底一句，绝不留下绝路（A3 护栏）。
+        if conclusion.recommendations:
+            for rec in conclusion.recommendations:
+                lines.append(f"\n建议：{rec}")
+        elif not conclusion.metadata.get("descriptive"):
+            from application.conversation.healing import GENERIC_WAY_OUT
+
+            lines.append(GENERIC_WAY_OUT)
 
         for gap in conclusion.data_gaps:
             lines.append(f"\n提示：{gap}")
 
+        body = "\n".join(lines)
+
+        # A3 输出护栏：命中致命判决词 → 在公告/免责声明前补"给出路"收尾。
+        from application.conversation.healing import healing_guardrail_check
+
+        coda = healing_guardrail_check(body)
+        if coda:
+            body += coda
+
         house_system = conclusion.metadata.get("house_system", "placidus")
         hs_label = HOUSE_SYSTEM_ZH.get(house_system, house_system)
-        lines.append(f"\n* 本解读采用 {hs_label}")
+        body += f"\n（本解读采用 {hs_label}）"
 
         # 免责声明（PRD §9）：统一走 safety 模块，单一来源
         from application.conversation.safety import disclaimer_text
 
-        lines.append(disclaimer_text())
-        return "\n".join(lines)
+        body += disclaimer_text()
+        return body
 
     def _planet_profiles_for(self, intent: Intent, chart) -> list | None:
         """按主题从全星档案里抓取相关行星。

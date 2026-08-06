@@ -1,0 +1,38 @@
+{
+	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "星灵花园",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/chat/chat",
+			"style": {
+				"navigationBarTitleText": "星灵花园",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/mailbox/mailbox",
+			"style": {
+				"navigationBarTitleText": "星灵信箱",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/universe/universe",
+			"style": {
+				"navigationBarTitleText": "我的宇宙",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "星灵花园",
+		"navigationBarBackgroundColor": "#0d1f1a",
+		"backgroundColor": "#0d1f1a"
+	}
+}
