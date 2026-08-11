@@ -22,6 +22,13 @@ from shared.models import Conclusion, ExecutionStatus, Intent, Person, Strategy,
 
 from application.agent.context_builder import ContextBuilder
 from application.agent.intent_parser import IntentParser
+from application.conversation.companion import should_use_companion
+from application.conversation.emotion import EmotionPerception
+from application.conversation.fragments import FragmentClassifier
+from application.conversation.planet_activation import (
+    PlanetActivation,
+    PlanetActivationClassifier,
+)
 
 from domain.analysis import (
     CareerStrength,
@@ -80,9 +87,9 @@ _CHAT_GREETINGS = (
     "在吗", "在么", "随便聊聊", "聊聊天", "干嘛呢", "早上好", "晚上好",
 )
 _CHAT_REPLIES = (
-    "嗨，我在呢。今天想聊点什么？事业、感情，还是最近的心事？",
-    "来了来了。你想聊哪个方向？工作、感情，还是就想随便说说话？",
-    "在的。说说看——是有什么想不通的事，还是想听听星盘怎么讲你？",
+    "在呢在呢——想聊什么随便说，我都在。怎么啦，想找人说说话？",
+    "我在的。今天是有什么想聊的，还是单纯想找人说说话？",
+    "在的！说说看，最近有什么新鲜事？",
 )
 
 #: 产品能力/身份类问题 → 能力介绍（"我是谁/我专业是什么/能帮你什么"）。
@@ -107,6 +114,15 @@ class GardenSpiritAgent:
         from foundation.llm.client import LLMClient
 
         self._llm = LLMClient(self.config.llm)
+
+        # 情绪感知层（陪伴协议第 1 步）：感知情绪×诉求，供随聊轨道消费
+        self._emotion = EmotionPerception(self._llm)
+
+        # 34 子类点亮（随聊记录层，§2）：随聊轨道记"聊过什么"
+        self._fragments = FragmentClassifier(self._llm)
+
+        # 星灵激活（语境定刻，§1.1.1）：此刻哪颗星被触动，只报激活不判方向
+        self._planets = PlanetActivationClassifier(self._llm)
 
         self.strategy_loader = StrategyLoader()
         self.planner = Planner()
@@ -191,19 +207,34 @@ class GardenSpiritAgent:
             ctx.add_turn(message, chat_reply)
             return chat_reply
 
+        # 0.7 情绪感知（陪伴协议第 1 步）：感知情绪×诉求，挂上下文供随聊轨道消费
+        ctx.emotion_result = self._emotion.perceive(message)
+
         # 1. Intent 解析（LLM 深度拆解：领域路由 + 占星结构映射 + 任务富化）
         decomposed = self.intent_parser.parse_deep(message, context=ctx.to_intent_context())
         intent = decomposed.intent
+
+        # 1.5 随聊轨道（陪伴协议 §7.2）：分享/倾诉/迷茫 → 接住+镜映，绝不处方化。
+        #     判定在澄清之前：含糊消息宁可先走陪伴，也不反问"你想问哪方面"（§8 兜底）。
+        if should_use_companion(intent, ctx.emotion_result):
+            reply = self._companion_reply(message, ctx.emotion_result, persona)
+            ctx.last_was_chat = True       # A2：casual 信号（信任层小幅加分）
+            ctx.last_was_companion = True  # 陪伴轨道标志（递出口门控在 API 层）
+            ctx.latest_intent = intent     # 一致性：陪伴也是意图
+            ctx.fragments = self._fragments.classify(message)  # §2 34 子类点亮（记"聊过什么"）
+            # §1.1.1 语境定刻：此刻哪颗星被触动（只报激活，不判方向）+ 抓手 + 情绪/诉求
+            ctx.planet_activation = PlanetActivation(
+                planets=self._planets.classify(message),
+                trigger=message,
+                emotion=ctx.emotion_result.emotion if ctx.emotion_result else None,
+                request=ctx.emotion_result.request if ctx.emotion_result else None,
+            )
+            ctx.record_assistant_response(reply)
+            ctx.add_turn(message, reply)
+            return reply
+
         if intent.requires_clarification:
             return intent.clarification_question
-
-        # 闲聊兜底：规则路由到 Daily.Chat（若上面短句检测漏网）→ 直接回应
-        if intent.subdomain == "Chat":
-            chat_reply = self._detect_chat(message) or random.choice(_CHAT_REPLIES)
-            ctx.latest_intent = intent  # 一致性：闲聊也是意图（A2 关系层据此识别 casual 信号）
-            ctx.record_assistant_response(chat_reply)
-            ctx.add_turn(message, chat_reply)
-            return chat_reply
 
         # 问星灵自己/产品能力（LLM 分类 meta / 离线规则兜底）→ 能力介绍，不进占星管线
         if intent.subdomain == "Meta":
@@ -278,6 +309,15 @@ class GardenSpiritAgent:
         return answer
 
     # ------------------------------------------------------------------
+
+    def _companion_reply(self, message: str, emotion_result, persona) -> str:
+        """陪伴协议生成回复（接住 + 镜映）。LLM 生成，规则兜底。"""
+        from application.conversation.companion import companion_reply
+
+        return companion_reply(
+            message, emotion_result,
+            llm_client=self._llm, persona=persona,
+        )
 
     @staticmethod
     def _detect_chat(message: str) -> str | None:

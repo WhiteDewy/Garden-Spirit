@@ -5,10 +5,12 @@ from application.relationship.service import (
     SIGNAL_WEIGHTS,
     TRUST_LABELS,
     RelationshipService,
+    naturalize_recall,
 )
 
 __all__ = [
     "RelationshipService",
+    "naturalize_recall",
     "SIGNAL_WEIGHTS",
     "LEVEL_THRESHOLDS",
     "TRUST_LABELS",

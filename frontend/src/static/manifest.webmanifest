@@ -1,0 +1,17 @@
+{
+  "name": "星灵花园 Garden-Spirit",
+  "short_name": "星灵花园",
+  "description": "AI 占星 Agent —— 一座持续理解你、陪伴你成长的花园",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1f1a",
+  "theme_color": "#14332a",
+  "icons": [
+    {
+      "src": "/static/logo.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

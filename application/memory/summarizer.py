@@ -3,8 +3,9 @@
 LLM 路径：读对话转写，输出结构化 JSON（summary + 领域理解 + 关键日期
 + 星象观察 + 沉淀判断）。这些 JSON 结构直接对应 ChartProfile 的字段。
 
-降级路径（无 LLM / 调用失败）：取最近几轮转写为摘要，不产出结构化
-更新——画像是纯增量，宁可少记不可瞎记（原则三：LLM 不可用时服务不断）。
+降级路径（无 LLM / 调用失败）：取最后一条用户消息作"上次聊到的话题"
+摘要，不 dump 转写流水账（否则会以「用户:/星灵:」的丑样子进回访开场）。
+不产出结构化更新——画像是纯增量，宁可少记不可瞎记（原则三：LLM 不可用时服务不断）。
 
 LLM 永远只做"摘要 + 归类"，不产星象权重——画像里的置信度来自
 Conclusion（Domain），不来自 LLM。
@@ -20,15 +21,13 @@ logger = get_logger("application.memory.summarizer")
 
 #: 转写窗口：最多喂给 LLM 的轮数（截头保尾，保留最近上下文）
 _MAX_TURNS = 12
-#: 降级摘要的最大长度
-_FALLBACK_MAX_CHARS = 1200
 
 #: LLM 返回结构模板（对应 ChartProfile 字段）
 _SYSTEM_PROMPT = """你是星灵花园的记忆管家。读一段用户与占星师的对话，输出结构化 JSON。
 
 只输出 JSON，不要任何解释。结构如下：
 {
-  "summary": "这段对话在说什么（2-3 句，供'继续昨天的话题'展示）",
+  "summary": "一句朋友式的回访回忆（站在星灵立场转述用户上次在聊什么、什么感受，如'《九门》那部剧，你说看的时候很平静'；不要以'上次/你上次'开头，不要出现'用户：''星灵：'标签，不要写成流水账，2 句以内）",
   "domain_summary": "关于该领域的一句话长期理解（人话，不堆术语）",
   "key_dates": [{"label": "用户提到的重要日期/事件", "date": "YYYY-MM-DD"}],
   "lord_states": {"moon_in_7": "对该星象的一句观察"},
@@ -79,14 +78,17 @@ class MemorySummarizer:
         return summary, data
 
     def _fallback_summarize(self, turns) -> tuple[str, dict]:
-        lines: list[str] = []
-        for t in turns[-_MAX_TURNS:]:
+        """降级摘要：一句"上次聊到的话题"，不 dump 转写流水账。
+
+        旧实现把最近几轮拼成「用户:/星灵:」转写——会原样进"继续昨天"
+        开场（用户看到的是一整段对话）。这里只取最后一条用户消息作话题，
+        宁短而自然，不虚构。
+        """
+        for t in reversed(turns[-_MAX_TURNS:]):
             user_msg = (t.user_message or "").strip().replace("\n", " ")
-            reply = (t.assistant_response or "").strip().replace("\n", " ")
-            lines.append(f"用户: {user_msg[:120]}")
-            lines.append(f"星灵: {reply[:120]}")
-        text = "\n".join(lines)[:_FALLBACK_MAX_CHARS]
-        return text, {}
+            if user_msg:
+                return user_msg[:120], {}
+        return "", {}
 
     @staticmethod
     def _build_transcript(turns) -> str:

@@ -12,9 +12,20 @@
     <title></title>
     <!--preload-links-->
     <!--app-context-->
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <meta name="theme-color" content="#0d1f1a" />
   </head>
   <body>
     <div id="app"><!--app-html--></div>
+    <!-- Web Push 订阅由 pages/index/index.vue 在用户进入花园后触发；
+         这里只提前注册 Service Worker（幂等，早注册早生效）。 -->
+    <script>
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        navigator.serviceWorker.register("/static/sw.js").catch(function (e) {
+          console.warn("SW registration failed:", e);
+        });
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

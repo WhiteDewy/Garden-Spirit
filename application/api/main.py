@@ -35,7 +35,17 @@ from application.learning import LearningService
 from application.mailbox.letter_service import LetterService, SENDER_ZH
 from application.memory.journal import JournalService, JournalSummarizer
 from application.memory.service import MemoryService
-from application.relationship import RelationshipService
+from application.relationship import RelationshipService, naturalize_recall
+from application.conversation.action import ActionDetector
+from application.conversation.confirmation import ConfirmationDetector
+from application.push import PushService
+from application.conversation.fragments import (
+    DEPTH_ACTION,
+    DEPTH_CONSULT,
+    DEPTH_OUTPOURING,
+    DEPTH_SEEN,
+    FragmentService,
+)
 
 APP_NAME = "星灵花园 Garden-Spirit"
 APP_VERSION = "0.1.0"
@@ -101,6 +111,17 @@ class ChatOut(BaseModel):
     mode: str = "deep"
     #: 关系层（A2）：当前信任等级（stranger/acquaintance/trusted/intimate）
     trust_level: str = "stranger"
+    #: 情绪感知（陪伴协议第 1 步）：当前情绪 × 诉求类型
+    emotion: str | None = None
+    request_type: str | None = None
+    #: 34 子类点亮（§2）：本条随聊点亮了哪些子类（"今日灵魂碎片"的原料）
+    lit_fragments: list[str] = []
+    #: 被照见（§4.2 +5）：本条用户确认上一轮镜映 → 补亮的子类
+    seen_fragments: list[str] = []
+    #: 来信式日记（§6.1）：本条倾诉是否生成了一封 keepsake 来信（"值得记住的时刻"）
+    keepsake_created: bool = False
+    #: 触发行动（§4.2 +20）：本条是"我真的去做了"行动回报 → 上一段会话点亮的子类补 +20
+    actioned_fragments: list[str] = []
 
 
 class ProfileOut(BaseModel):
@@ -117,6 +138,43 @@ class OpeningOut(BaseModel):
 
     opening: str
     trust_level: str
+
+
+class FragmentOut(BaseModel):
+    """一个 34 子类条目（"自我星盘轮"）。"""
+
+    id: str
+    zone: str          # planet / house / sign
+    name: str          # "太阳·核心意志"
+    triggers: str      # 触发说明
+    depth: int         # 深度分（未点亮 = 0）
+    level: int = 0     # 五层成长级（§4.2 1-5 级，未点亮 = 0；后端统一出级）
+    #: 触发行动次数（§4.2 升顶门槛：4 级需 ≥1 次、5 级需 ≥2 次"真做过"）
+    action_count: int = 0
+
+
+class FragmentsOut(BaseModel):
+    """全部 34 子类 + 当前深度分（含未点亮=0，供"盲区即课题"叙事）。"""
+
+    person_id: str
+    fragments: list[FragmentOut]
+
+
+class SoulFragmentOut(BaseModel):
+    """今日灵魂碎片的一个子类（§2.5 每日结算）。"""
+
+    id: str
+    name: str          # "太阳·核心意志"
+    zone: str          # planet / house / sign
+    delta: int         # 今天累计点亮深度分
+
+
+class SoulFragmentsTodayOut(BaseModel):
+    """今日灵魂碎片（§2.5）：今天（盘主本地日）点亮的 top N 子类。"""
+
+    person_id: str
+    date: str          # 本地日期 YYYY-MM-DD
+    fragments: list[SoulFragmentOut]
 
 
 class FeedbackIn(BaseModel):
@@ -163,6 +221,29 @@ class PreferenceIn(BaseModel):
     preferred_persona: str | None = None
 
 
+class PushSubscribeIn(BaseModel):
+    """浏览器 PushSubscription.toJSON() 上报（Web Push 订阅）。"""
+
+    person_id: str
+    subscription: dict
+
+
+class PushUnsubscribeIn(BaseModel):
+    """退订（endpoint 失效 / 用户关通知）。"""
+
+    person_id: str
+    endpoint: str
+
+
+class PushTriggerResult(BaseModel):
+    """每日推送触发结果统计（external cron 用）。"""
+
+    total_persons: int
+    skipped_quiet: int
+    skipped_no_sub: int
+    pushed: int
+
+
 class TimelineEventOut(BaseModel):
     id: str
     occurred_at: str
@@ -170,6 +251,9 @@ class TimelineEventOut(BaseModel):
     kind: str
     detail: str = ""
     related_conclusion_id: str | None = None
+    # 咨询记录补意图/需求（喂记忆写回）：domain = 八大领域，need = 诉求类型
+    domain: str = ""
+    need: str = ""
 
 
 class JournalIn(BaseModel):
@@ -203,6 +287,14 @@ class LetterOut(BaseModel):
     body: str
     kind: str
     created_at: str | None = None
+    read_at: str | None = None          # 用户打开信箱设已读（首页红点：今日来信未读）
+    # 来信式日记（kind=keepsake）的落款推导链（§6.2）：显式可解释"为什么是这颗星"
+    primary_need: str | None = None
+    healing_name: str | None = None
+    soul_fragments: list[str] = []   # 次需求点亮的 34 子类
+    lit_fragments: list[str] = []    # 当日随聊点亮的 34 子类
+    explain: str | None = None
+    entry: bool = False              # 词条式来信（§6.1 日常/正面分享时刻）
 
 
 class MailboxTodayIn(BaseModel):
@@ -216,7 +308,27 @@ class GardenState(BaseModel):
     continue_from: dict | None = None    # {conversation_id, summary, started_at}
     domains: list[str] = []              # 已有画像的领域（我的宇宙）
     trust_level: str = "stranger"        # 关系层（A2）：当前信任等级
-    pending_verifications: int = 0       # 行动层（B2）：待验证判断数（主动提醒）
+    pending_verifications: int = 0       # 行动层（B2）：待验证判断数（我的宇宙 nav 红点）
+    # 首页红点细粒度：今日来信未读（用户打开信箱 → read_at 落库 → 消除）
+    letter_unread: bool = False
+    # 站内"回家看看"兜底（推送后置）：今天（本地日）点亮的 top3 灵魂碎片
+    soul_fragments: list[SoulFragmentOut] = []
+
+
+def _local_day_utc(person: Person) -> tuple[datetime, str]:
+    """盘主本地日的起点（UTC）与本地日期字符串（YYYY-MM-DD）。
+
+    与来信 letter_date 同口径：本地 00:00 起算当日账本，供"今日灵魂碎片"聚合。
+    """
+    tz_name = person.birth.location.timezone_name or "Asia/Shanghai"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:  # noqa: BLE001 - 非法时区兜底东八区（与来信一致）
+        tz = ZoneInfo("Asia/Shanghai")
+    local_now = datetime.now(tz)
+    local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    utc_start = local_start.astimezone(timezone.utc)
+    return utc_start, local_now.strftime("%Y-%m-%d")
 
 
 # ----------------------------------------------------------------------
@@ -255,6 +367,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         chart_provider=lambda p: agent._calculator.compute(p),
     )
     action = ActionService()              # B2 行动层：待验证清单 + 偏好
+    fragments = FragmentService()         # 随聊记录层：34 子类点亮（纯逻辑，无 io）
+    confirmation = ConfirmationDetector(agent._llm)  # 被照见（§4.2 +5）确认识别
+    action_detector = ActionDetector(agent._llm)     # 触发行动（§4.2 +20）识别器
+    push_service = PushService(store, config.push)   # Web Push：订阅管理 + 来信推送
 
     # 注入到 app.state，供路由与测试访问
     app.state.config = config
@@ -267,6 +383,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.relationship = relationship
     app.state.learning = learning
     app.state.action = action
+    app.state.fragments = fragments
+    app.state.confirmation = confirmation
+    app.state.action_detector = action_detector
+    app.state.push_service = push_service
 
     def _get_person(person_id: str) -> Person:
         """读用户档案；缺失 → 404，解密失败（密钥变更/损坏）→ 410。
@@ -327,6 +447,37 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             updated_at=_iso_str(profile.updated_at),
         )
 
+    @app.get("/person/{person_id}/fragments", response_model=FragmentsOut)
+    def get_fragments(person_id: str) -> FragmentsOut:
+        """自我星盘轮：全部 34 子类 + 深度分（未点亮 = 0，供"盲区即课题"）。"""
+        _get_person(person_id)
+        profile = store.get_profile(person_id)
+        return FragmentsOut(
+            person_id=person_id,
+            fragments=[
+                FragmentOut(**row)
+                for row in fragments.grid(
+                    profile,
+                    action_counts=store.count_fragment_actions(person_id),
+                )
+            ],
+        )
+
+    @app.get("/person/{person_id}/soul-fragments/today", response_model=SoulFragmentsTodayOut)
+    def soul_fragments_today(person_id: str) -> SoulFragmentsTodayOut:
+        """今日灵魂碎片（§2.5 每日结算）：今天（盘主本地日）点亮的 top3 子类。
+
+        账本按"盘主本地日 00:00 → now"聚合，与每日来信 letter_date 同日口径。
+        """
+        person = _get_person(person_id)
+        utc_start, date_str = _local_day_utc(person)
+        lights = store.list_fragment_lights(person_id, since=utc_start)
+        return SoulFragmentsTodayOut(
+            person_id=person_id,
+            date=date_str,
+            fragments=FragmentService.top_soul_fragments(lights, limit=3),
+        )
+
     @app.post("/journal", response_model=JournalOut)
     def create_journal(body: JournalIn) -> JournalOut:
         _get_person(body.person_id)  # 用户必须存在
@@ -364,14 +515,30 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         _get_person(person_id)
         return [_to_letter_out(l) for l in letter.list(person_id)]
 
+    @app.post("/person/{person_id}/letters/read-today", response_model=dict)
+    def mark_letters_read_today(person_id: str) -> dict:
+        """把今天（盘主本地日）未读的信标记为已读 → 首页信箱红点消除。
+
+        打开信箱时调一次（幂等：只更新 read_at IS NULL 的行）。返回标记数。
+        """
+        person = _get_person(person_id)
+        _, today_str = _local_day_utc(person)
+        marked = store.mark_letters_read_today(person_id, today_str)
+        return {"ok": True, "marked": marked}
+
     @app.get("/garden", response_model=GardenState)
     def garden(person_id: str = Query(...)) -> GardenState:
-        """花园首页聚合：今日来信 + 继续昨天 + 我的宇宙领域。"""
+        """花园首页聚合（站内"回家看看"）：今日来信 + 今日灵魂碎片 + 继续昨天 + 领域 + 待验证。"""
         person = _get_person(person_id)
         today_letter = letter.get_or_create_daily(person)
         recent = store.list_conversation_summaries(person_id, limit=1)
         profile = store.get_profile(person_id)
         domains = list(profile.domain_summaries.keys()) if profile else []
+        utc_start, _ = _local_day_utc(person)
+        lights = store.list_fragment_lights(person_id, since=utc_start)
+        # 继续昨天：摘要在读出口统一自然化（首页卡片与开场白同源，旧转写数据也可读）
+        if recent:
+            recent[0]["summary"] = naturalize_recall(recent[0].get("summary"))
         return GardenState(
             person_id=person_id,
             today=today_letter.letter_date,
@@ -380,6 +547,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             domains=domains,
             trust_level=relationship.level(profile).value,
             pending_verifications=action.pending_count(profile),
+            letter_unread=today_letter.read_at is None,  # 今日来信未读 → 信箱 nav 红点
+            soul_fragments=FragmentService.top_soul_fragments(lights, limit=3),
         )
 
     @app.get("/person/{person_id}/opening", response_model=OpeningOut)
@@ -486,6 +655,61 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         store.save_profile(profile)
         return action.preferences(profile)
 
+    # ------------------------------------------------------------------
+    # Web Push（真实推送通道）：订阅 + VAPID 公钥 + 每日触发
+    # ------------------------------------------------------------------
+
+    @app.get("/push/vapid-public-key")
+    def push_vapid_public_key() -> dict:
+        """VAPID 公钥（base64url），前端 PushManager.subscribe 用。"""
+        return {"public_key": push_service.vapid_public_key()}
+
+    @app.post("/push/subscribe")
+    def push_subscribe(body: PushSubscribeIn) -> dict:
+        """存一条浏览器推送订阅（PushSubscription.toJSON()，加密落库）。"""
+        _get_person(body.person_id)
+        push_service.subscribe(body.person_id, body.subscription)
+        return {"ok": True}
+
+    @app.post("/push/unsubscribe")
+    def push_unsubscribe(body: PushUnsubscribeIn) -> dict:
+        """退订（endpoint 失效 / 用户关通知）。"""
+        _get_person(body.person_id)
+        deleted = push_service.unsubscribe(body.person_id, body.endpoint)
+        return {"ok": True, "deleted": deleted}
+
+    @app.post("/push/trigger", response_model=PushTriggerResult)
+    def push_trigger() -> PushTriggerResult:
+        """每日推送触发（external cron 调 scripts/push_daily.py）。
+
+        遍历所有用户：push_frequency != daily 跳过；生成今天的来信（幂等）；
+        推送给该用户所有设备。生产须限制本端点只允许内网/localhost 访问。
+        """
+        total = skipped_quiet = skipped_no_sub = pushed = 0
+        for person in person_repo.list_all():
+            total += 1
+            profile = store.get_profile(person.id)
+            if action.preferences(profile).get("push_frequency", "daily") != "daily":
+                skipped_quiet += 1
+                continue
+            letter_obj = letter.get_or_create_daily(person)  # 幂等：已有则复用
+            n = push_service.send_to_person(
+                person.id,
+                title=letter_obj.title or "星灵来信",
+                body=(letter_obj.body or "").replace("\n", " ")[:80],
+                url="/pages/mailbox/mailbox",
+            )
+            if n > 0:
+                pushed += n
+            else:
+                skipped_no_sub += 1
+        return PushTriggerResult(
+            total_persons=total,
+            skipped_quiet=skipped_quiet,
+            skipped_no_sub=skipped_no_sub,
+            pushed=pushed,
+        )
+
     @app.get("/person/{person_id}/timeline", response_model=list[TimelineEventOut])
     def get_timeline(person_id: str) -> list[TimelineEventOut]:
         events = store.list_life_events(person_id)
@@ -497,6 +721,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 kind=e.kind,
                 detail=e.detail,
                 related_conclusion_id=e.related_conclusion_id,
+                domain=e.domain,
+                need=e.need,
             )
             for e in events
         ]
@@ -506,7 +732,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         person = _get_person(body.person_id)
 
         session_id = body.session_id or new_id("sess")
-        persona = PersonaType(body.persona) if body.persona else None
+        # 10 星灵回归：非法/旧宝石人格名（zircon/rose_quartz…）→ 落默认（月亮），不 500
+        persona = None
+        if body.persona:
+            try:
+                persona = PersonaType(body.persona)
+            except ValueError:
+                persona = None
         mode = _parse_mode(body.mode)
 
         # 已有会话且该用户请求过合盘对象 → 登记（单会话内生效）
@@ -534,13 +766,125 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             relationship.record_consult(profile, mode=mode)
         elif is_casual:
             relationship.record_consult(profile, casual=True)
+
+        # 34 子类点亮（随聊记录层 §2 + 咨询反向点亮 §5）：只记"聊过什么"，不声称用户属性（硬线）。
+        # - 随聊/问候轨道：按话题分类，深度分=倾诉（负面情绪）→ +3，一般提及 → +1。
+        # - 咨询轨道：出了 Domain 结论 → 按领域确定性映射反向点亮，给最高深度分 +10（§5）。
+        lit_fragments: list[str] = []
+        seen_fragments: list[str] = []     # 被照见（§4.2 +5）：用户确认上一轮镜映 → 补亮
+        actioned_fragments: list[str] = [] # 触发行动（§4.2 +20）：行动回报 → 上一段会话子类 +20
+        keepsake_created = False
+        # 成长复利账本（fragment_lights）：本轮所有点亮事件，连同 profile 一起落库。
+        ledger: list = []
+        if ctx is not None:
+            # 触发行动（§4.2 +20）：必须先于随聊/咨询点亮跑——这样本轮点亮的
+            # 不会混进"行动目标"（行动目标 = 更早的会话/轮次，见 _action_lighting）。
+            actioned_fragments = _action_lighting(
+                action_detector, store, body, ctx, profile, ledger,
+            )
+            # 被照见（§4.2 +5）：上一轮镜映/解读点亮的子类，本轮用户确认"对，就是这样"
+            # → 补 +5（kind=seen）。确认检测 LLM 受控枚举 + 规则兜底，宁缺毋滥。
+            if ctx.previous_lit_fragments and ctx.previous_lighted:
+                if confirmation.is_confirmation(body.message):
+                    seen_fragments = fragments.light(
+                        profile, ctx.previous_lit_fragments, depth=DEPTH_SEEN,
+                        kind="seen", source=body.message, ledger=ledger,
+                    )
+            if ctx.last_was_companion or ctx.last_was_chat:
+                depth = 3 if (ctx.emotion_result and ctx.emotion_result.needs_care) else 1
+                lit_fragments = fragments.light(
+                    profile, ctx.fragments, depth=depth,
+                    source=body.message, ledger=ledger,
+                )
+                # §6.1/§6.2 来信式日记：倾诉时刻（需要被接住）→ 星灵那段回复原样成信，
+                # 落款走"内容→情绪需求→疗愈名"推导链（显式可解释）；次需求点亮的
+                # 灵魂碎片同样 light() 进轮盘（两条路径汇入同一账本）。
+                if (
+                    ctx.last_was_companion
+                    and ctx.emotion_result is not None
+                    and ctx.emotion_result.needs_care
+                ):
+                    _keepsake, sig = letter.record_keepsake(
+                        person,
+                        content=body.message,
+                        reply=answer,
+                        lit_fragments=tuple(lit_fragments),
+                    )
+                    fragments.light(
+                        profile, sig.soul_fragments, depth=DEPTH_OUTPOURING,
+                        source=body.message, ledger=ledger,
+                    )
+                    keepsake_created = True
+                # §6.1 词条式来信：日常/正面分享时刻（memorable 且非负面倾诉）→
+                # LLM 当场蒸馏一句诗化记忆词条成信，落款照走推导链。不与上面的
+                # 倾诉来信重复（memorable 的负面倾诉仍走 needs_care 分支，保留整段回复）。
+                elif (
+                    ctx.last_was_companion
+                    and ctx.emotion_result is not None
+                    and ctx.emotion_result.memorable
+                ):
+                    _entry, sig = letter.record_memorable(
+                        person,
+                        content=body.message,
+                        reply=answer,
+                        lit_fragments=tuple(lit_fragments),
+                    )
+                    fragments.light(
+                        profile, sig.soul_fragments, depth=DEPTH_OUTPOURING,
+                        source=body.message, ledger=ledger,
+                    )
+                    keepsake_created = True
+            elif ctx.latest_conclusion is not None:
+                consult_ids = FragmentService.fragments_for_domain(
+                    ctx.latest_intent.domain.value
+                )
+                lit_fragments = fragments.light(
+                    profile, consult_ids, depth=DEPTH_CONSULT,
+                    source=f"consult:{ctx.latest_intent.domain.value}", ledger=ledger,
+                )
+            # 本轮点亮 → 作为下一轮的照见候选（本轮没点亮/澄清轮 → 保留上一轮候选）
+            if lit_fragments:
+                ctx.previous_lit_fragments = lit_fragments
+                ctx.previous_lighted = True
+
+        # 账本统一盖章所属会话（conversation.id）——触发行动（§4.2 +20）靠它精确回溯
+        store.append_fragment_lights(
+            body.person_id, ledger,
+            session_id=ctx.conversation.id if ctx is not None else "",
+        )
         store.save_profile(profile)
+
+        # 陪伴轨道递出口（§7.2 第 4 步 + §7.3 软牵引门控）：
+        # 只在随聊轨道递盘——诉求=被梳理/被推动（想理清/想行动）且信任达标。
+        # 被听见/被安慰 → 不递盘（can_offer_chart 返回 False），继续陪。
+        # 咨询轨道已出过星盘结论 → 不再重复递盘。
+        from application.conversation.companion import can_offer_chart, soft_pull_line
+
+        emotion_res = ctx.emotion_result if ctx else None
+        if (
+            ctx is not None
+            and ctx.last_was_companion
+            and emotion_res is not None
+            and can_offer_chart(emotion_res.request, relationship.level(profile))
+            and not answer.rstrip().endswith(("？", "?"))
+        ):
+            # §7.3 软牵引 = 诉求类型门控 × 共振星灵：语境定刻报告了哪颗星被触动，
+            # 就指名这颗星邀请（仍只是邀请，结论由 Domain 在用户接受后出）。
+            resonant = (
+                ctx.planet_activation.primary
+                if ctx.planet_activation is not None else None
+            )
+            pull = soft_pull_line(emotion_res.request, planet=resonant)
+            if pull:
+                answer = f"{answer}{pull}"
 
         # 邀请式引导：深度咨询且信任达标，且回答不以问句结尾（不打断提问）
         if written_back and not answer.rstrip().endswith(("？", "?")):
             invite = relationship.invitation(profile)
             if invite:
                 answer = f"{answer}\n\n{invite}"
+
+        emotion_res = ctx.emotion_result if ctx else None
 
         return ChatOut(
             answer=answer,
@@ -550,6 +894,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             written_back=written_back,
             mode=mode.value,
             trust_level=relationship.level(profile).value,
+            emotion=emotion_res.emotion.value if emotion_res else None,
+            request_type=emotion_res.request.value if emotion_res else None,
+            lit_fragments=lit_fragments,
+            seen_fragments=seen_fragments,
+            keepsake_created=keepsake_created,
+            actioned_fragments=actioned_fragments,
         )
 
     return app
@@ -568,6 +918,38 @@ def _parse_mode(raw: str | None) -> ConsultMode:
         return ConsultMode(raw)
     except ValueError:
         return ConsultMode.DEEP
+
+
+def _action_lighting(detector, store, body, ctx, profile, ledger) -> list[str]:
+    """触发行动（§4.2 +20）：本条是"我真的去做了"行动回报 → 补亮 +20 落账本。
+
+    行动目标 = 上一段会话点亮的子类 ∪ 当前会话此前几轮点亮的子类：
+    - 上一段会话：list_conversation_summaries 排除当前会话（ctx.conversation.id），
+      逐段回溯其账本（session_id 精确锁定，不靠时间边界——会话 started_at 会随写回改写）。
+    - 当前会话此前：账本 session_id=当前 conversation.id（本轮点亮还没落库，
+      所以这里拿到的一定是"更早轮次"的点亮）。
+
+    两者都没有 → 无从谈起（不能对从没聊过的子类"行动"），返回空。
+    识别宁缺毋滥：+20 是稀有分，只有明确"完成"才算行动（ActionDetector LLM+规则兜底）。
+    """
+    if not detector.is_action_report(body.message):
+        return []
+    conv_id = ctx.conversation.id
+    target: set[str] = set()
+    for summary in store.list_conversation_summaries(body.person_id, limit=20):
+        cid = summary.get("id")
+        if not cid or cid == conv_id:
+            continue
+        for light in store.list_fragment_lights(body.person_id, session_id=cid, limit=200):
+            target.add(light.subtype_id)
+    for light in store.list_fragment_lights(body.person_id, session_id=conv_id, limit=200):
+        target.add(light.subtype_id)
+    if not target:
+        return []
+    return FragmentService.light(
+        profile, sorted(target), depth=DEPTH_ACTION, kind="action",
+        source=body.message, ledger=ledger,
+    )
 
 
 def _to_person(body: PersonIn) -> Person:
@@ -703,16 +1085,30 @@ def _get_or_init_profile(store: GardenStore, person_id: str) -> ChartProfile:
 
 
 def _maybe_writeback(agent, memory, session_id: str, person_id: str) -> bool:
+    """写回记忆。返回 True 表示"出了占星结论"（信任层按咨询计分）。
+
+    咨询轨道 → apply_writeback（领域理解/沉淀判断/成长事件）→ True。
+    随聊/问候轨道 → apply_chat_writeback（只存摘要，§6 双存）→ False
+    （信任层仍按 casual 计分，见 /chat 的 is_casual 分支）。
+    """
     ctx = agent.get_session_context(session_id)
-    if ctx is None or ctx.latest_conclusion is None:
+    if ctx is None:
         return False
-    memory.apply_writeback(
-        person_id=person_id,
-        conversation=ctx.conversation,
-        intent=ctx.latest_intent,
-        conclusion=ctx.latest_conclusion,
-    )
-    return True
+    if ctx.latest_conclusion is not None:
+        memory.apply_writeback(
+            person_id=person_id,
+            conversation=ctx.conversation,
+            intent=ctx.latest_intent,
+            conclusion=ctx.latest_conclusion,
+            need=ctx.emotion_result.request.value if ctx.emotion_result is not None else "",
+        )
+        return True
+    if ctx.last_was_companion or ctx.last_was_chat:
+        memory.apply_chat_writeback(
+            person_id=person_id,
+            conversation=ctx.conversation,
+        )
+    return False
 
 
 def _iso_str(dt: datetime | None) -> str | None:
@@ -720,6 +1116,7 @@ def _iso_str(dt: datetime | None) -> str | None:
 
 
 def _to_letter_out(l: Letter) -> LetterOut:
+    meta = l.metadata or {}
     return LetterOut(
         id=l.id,
         person_id=l.person_id,
@@ -730,6 +1127,13 @@ def _to_letter_out(l: Letter) -> LetterOut:
         body=l.body,
         kind=l.kind,
         created_at=_iso_str(l.created_at),
+        read_at=_iso_str(l.read_at),
+        primary_need=meta.get("primary_need"),
+        healing_name=meta.get("healing_name"),
+        soul_fragments=list(meta.get("soul_fragments") or []),
+        lit_fragments=list(meta.get("lit_fragments") or []),
+        explain=meta.get("explain"),
+        entry=bool(meta.get("entry")),
     )
 
 

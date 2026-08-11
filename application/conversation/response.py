@@ -234,7 +234,7 @@ def _format_natal(natal: object | None) -> str:
 
 def build_prompt(
     conclusion: Conclusion,
-    persona: PersonaType = PersonaType.ZIRCON,
+    persona: PersonaType = PersonaType.MOON,
     evidence_cards: list | None = None,
     natal: object | None = None,
     planet_profiles: list | None = None,
@@ -370,7 +370,7 @@ def _build_topic_injection(topic_plan) -> str:
 
 def paraphrase(
     conclusion: Conclusion,
-    persona: PersonaType = PersonaType.ZIRCON,
+    persona: PersonaType = PersonaType.MOON,
     evidence_cards: list | None = None,
     natal: object | None = None,
     planet_profiles: list | None = None,

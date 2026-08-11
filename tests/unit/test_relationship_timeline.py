@@ -68,7 +68,7 @@ def test_agent_relationship_status():
             GeoLocation(31.2304, 121.4737, timezone_name="Asia/Shanghai", place_name="上海"),
         ),
     )
-    answer = agent.handle_message("s_rel", "我们感情怎么样？", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_rel", "我们感情怎么样？", user, PersonaType.MOON)
     ctx = agent.context_builder._sessions["s_rel"]
     # 不应要求对方数据（非具体对象）
     assert "出生时间" not in answer
@@ -86,7 +86,7 @@ def test_agent_marriage_potential():
             GeoLocation(31.2304, 121.4737, timezone_name="Asia/Shanghai", place_name="上海"),
         ),
     )
-    answer = agent.handle_message("s_mar", "我适合结婚吗？", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_mar", "我适合结婚吗？", user, PersonaType.MOON)
     assert "出生时间" not in answer
     assert "解读" in answer or "倾向" in answer
 
@@ -101,6 +101,6 @@ def test_agent_daily():
             GeoLocation(31.2304, 121.4737, timezone_name="Asia/Shanghai", place_name="上海"),
         ),
     )
-    answer = agent.handle_message("s_day", "今天运势怎么样", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_day", "今天运势怎么样", user, PersonaType.MOON)
     assert "今日" in answer
     assert "尚未启用" not in answer  # Daily 不再缺失

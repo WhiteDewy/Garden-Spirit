@@ -23,6 +23,7 @@ class Letter:
     body: str = ""
     kind: str = "daily"         # "daily" | "consult_followup"
     created_at: datetime | None = None
+    read_at: datetime | None = None   # 用户打开信箱设已读（首页红点：今日来信未读）
     metadata: dict[str, object] = field(default_factory=dict)
 
 

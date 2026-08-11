@@ -91,7 +91,7 @@ def xiatian_all_materials(xiatian_chart):
 def test_system_prompt_contains_methodology():
     """system prompt 含梦老师方法论。"""
     c = _make_conclusion()
-    messages = build_prompt(c, persona=PersonaType.ZIRCON)
+    messages = build_prompt(c, persona=PersonaType.MOON)
     system = messages[0]["content"]
     assert "掌宫优于落宫" in system
     assert "链式追踪" in system
@@ -148,11 +148,11 @@ def test_cards_dont_leak_title(xiatian_chart_cards):
 def test_persona_variation():
     """不同人格 → system prompt 不同。"""
     c = _make_conclusion()
-    zircon = build_prompt(c, persona=PersonaType.ZIRCON)[0]["content"]
-    rose = build_prompt(c, persona=PersonaType.ROSE_QUARTZ)[0]["content"]
-    assert zircon != rose
-    assert "锆石" in zircon
-    assert "粉晶" in rose
+    moon = build_prompt(c, persona=PersonaType.MOON)[0]["content"]
+    venus = build_prompt(c, persona=PersonaType.VENUS)[0]["content"]
+    assert moon != venus
+    assert "月亮" in moon
+    assert "金星" in venus
 
 
 def test_format_conclusion_no_llm():

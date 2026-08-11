@@ -8,6 +8,8 @@
 - invitation：信任达标才返回，未达标为 None
 """
 
+from datetime import datetime, timedelta, timezone
+
 from shared.enums import ConsultMode, TrustLevel
 from shared.models import ChartProfile
 
@@ -163,6 +165,73 @@ def test_opening_trusted_prefix():
     p = _profile(score=12.0, signals={"deep_consult": 2})
     opening = RelationshipService().opening_message(p, person_name="小明")
     assert "我们聊过几回了" in opening
+
+
+def test_opening_returning_user_with_day_gap():
+    """老用户 + 上次对话 9 天前 → 天数缺口钩子（"已经 9 天没来找我"）。"""
+    p = _profile(score=6.0, signals={"deep_consult": 1})
+    opened_at = datetime.now(timezone.utc) - timedelta(days=9)
+    opening = RelationshipService().opening_message(
+        p,
+        person_name="小明",
+        continue_from={"started_at": opened_at.isoformat(), "summary": "关于离职的抉择"},
+    )
+    assert "9 天没来找我" in opening
+    assert "小明" in opening
+    assert "离职" in opening  # 上次聊到…仍保留
+
+
+def test_opening_returning_user_same_day():
+    """老用户同天再聊 → "我们又见面了"（不刻意提天数）。"""
+    p = _profile(score=6.0, signals={"deep_consult": 1})
+    opening = RelationshipService().opening_message(
+        p,
+        person_name="小明",
+        continue_from={"started_at": datetime.now(timezone.utc).isoformat()},
+    )
+    assert "我们又见面了" in opening
+    assert "小明" in opening
+
+
+def test_opening_returning_user_without_timestamp():
+    """老用户但拿不到上次时间 → 兜底"欢迎回来"。"""
+    p = _profile(score=6.0, signals={"deep_consult": 1})
+    opening = RelationshipService().opening_message(
+        p, person_name="小明", continue_from={"summary": "关于离职的抉择"}
+    )
+    assert "欢迎回来" in opening
+
+
+def test_opening_naturalizes_legacy_transcript_summary():
+    """旧数据摘要可能是「用户:/星灵:」转写——开场只该露出用户话题，不 dump 整段对话。
+
+    回归：用户反馈"上次我们聊到「用户: 最近在看九门 星灵: 你现在的状态…」"很丑。
+    """
+    p = _profile(score=6.0, signals={"deep_consult": 1})
+    legacy = (
+        "用户: 最近在看九门\n"
+        "星灵: 你现在的状态听起来很平静，像在慢慢翻着一本旧书。九门这个词，让我想到那"
+    )
+    opening = RelationshipService().opening_message(
+        p, person_name="夏天", continue_from={"summary": legacy}
+    )
+    assert "最近在看九门" in opening          # 用户话题保留
+    assert "用户:" not in opening           # 标签不再漏出
+    assert "星灵:" not in opening           # 回复正文不再漏出
+    assert "上次我们聊到「最近在看九门」" in opening
+
+
+def test_naturalize_recall_keeps_last_user_topic():
+    """多轮转写 → 取最后一条用户话题；外层引号剥掉；结尾标点收敛。"""
+    from application.relationship.service import naturalize_recall
+
+    transcript = "用户: 你好\n星灵: 你好呀\n用户: 我该不该离职\n星灵: 土星落九宫…"
+    assert naturalize_recall(transcript) == "我该不该离职"
+
+    assert naturalize_recall("「关于离职的抉择」。") == "关于离职的抉择"
+    assert naturalize_recall("《九门》那部剧，你说看的时候很平静。") == "《九门》那部剧，你说看的时候很平静"
+    assert naturalize_recall("") == ""
+    assert naturalize_recall(None) == ""
 
 
 # --- 邀请式引导 ---

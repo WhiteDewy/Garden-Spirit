@@ -30,6 +30,10 @@ class LifeEvent:
     related_journal_id: EntityId | None = None
     related_intent_id: EntityId | None = None
     related_conclusion_id: EntityId | None = None
+    # 咨询记录补意图/需求（喂记忆写回，Phase 1 剩余）：
+    # domain = 八大领域（career/relationship/…），need = 诉求类型（heard/soothed/sorted/pushed）。
+    domain: str = ""
+    need: str = ""
     created_at: datetime | None = None
 
 

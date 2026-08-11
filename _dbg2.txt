@@ -1,0 +1,4 @@
+落款需求 LLM 识别失败，规则兜底
+signature llm type: FakeMemorableLLM
+  complete(system_hit=['情绪需求识别器'], prompt='最近在看九门')
+classify -> EmotionalNeed.SOOTHED

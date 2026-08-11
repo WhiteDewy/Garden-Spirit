@@ -19,3 +19,6 @@ dist
 *.njsproj
 *.sln
 *.sw?
+
+# 原图备份（src/static/imgs 压缩前的 20.8MB 原始文件，勿提交）
+_raw_imgs/

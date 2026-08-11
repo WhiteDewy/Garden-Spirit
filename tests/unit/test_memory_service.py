@@ -55,6 +55,20 @@ def test_summarizer_fallback_without_llm():
     assert updates == {}  # 降级：不产结构化更新
 
 
+def test_summarizer_fallback_is_topic_not_transcript():
+    """降级摘要 = 最后一条用户消息作话题，不 dump「用户:/星灵:」转写（回访开场丑）。"""
+    summarizer = MemorySummarizer(llm_client=None)
+    conv = _make_conversation()
+    conv.add_turn(DialogueTurn(
+        id=new_id("t"), user_message="我该不该离职？",
+        assistant_response="土星落九宫，深造是跃迁之路", persona_used=None,
+        timestamp=datetime.now(timezone.utc),
+    ))
+    summary, updates = summarizer.summarize(conv, "career")
+    assert summary == "我该不该离职？"
+    assert "用户:" not in summary and "星灵:" not in summary
+
+
 def test_summarizer_empty_conversation():
     conv = Conversation(id=new_id("conv"), person_id="p1", persona=None)
     summary, updates = MemorySummarizer(None).summarize(conv, "career")
@@ -72,6 +86,7 @@ def test_writeback_end_to_end():
 
     result = service.apply_writeback(
         person_id="p1", conversation=conv, intent=intent, conclusion=conclusion,
+        need="sorted",
     )
     assert result["conversation_id"] == conv.id
     assert result["summary"]  # 摘要已生成
@@ -94,6 +109,9 @@ def test_writeback_end_to_end():
     assert len(events) == 1
     assert events[0].kind == "consult"
     assert events[0].related_conclusion_id == conclusion.id
+    # 咨询记录补意图/需求（喂记忆写回）：domain=八大领域，need=诉求类型
+    assert events[0].domain == "career"
+    assert events[0].need == "sorted"
 
 
 def test_writeback_replay_no_duplicate_life_event():

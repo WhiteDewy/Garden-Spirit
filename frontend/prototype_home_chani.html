@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>星灵花园 · 首页氛围原型 v3（CHANI 暖金 · 极简留白版）</title>
+<style>
+  /* ============================================================
+     v3 · 疗愈氛围感 = 留白 + 柔光，不是堆元素
+     教训：v2 太密太卡通 —— 小花/蝴蝶/光尘/文字卡各自清晰=噪音
+     v3 原则：
+       · 天空/草地/云/花 = 环境（氛围），不是装饰物 → 低饱和、模糊、稀疏、克制的动效
+       · 唯一焦点 = 星灵（暖金光体），其它全部后退
+       · 颜色收敛到一屏 3-4 个族色
+     白天：软蓝天空（保留"蓝天"直觉）→ 奶油地平线
+     夜晚：深紫星空 + 暖金月
+     ============================================================ */
+
+  :root {
+    --purple: #3D2A5C;
+    --purple-deep: #251A3F;
+    --gold: #D4A574;
+    --gold-bright: #E8C68A;
+
+    /* 白天（软、干净、空气感） */
+    --day-sky-1: #C7DCEC;   /* 软蓝，够"蓝"但不艳 */
+    --day-sky-2: #E4EDF2;
+    --day-sky-3: #F1EFEB;   /* 奶油地平线 */
+    --day-grass-1: #C9D3B6; /* 雾霭鼠尾草绿 */
+    --day-grass-2: #AAB99B;
+    --day-grass-3: #8B9E80;
+    --day-text: var(--purple);
+    --day-text-soft: rgba(61, 42, 92, 0.62);
+    --day-card: rgba(255, 255, 255, 0.5);
+
+    /* 夜晚（深紫，CHANI 神秘感） */
+    --night-sky-1: #3D2A5C;
+    --night-sky-2: #2C1F48;
+    --night-sky-3: #201737;
+    --night-grass-1: #2A2340;
+    --night-grass-2: #1B1730;
+    --night-text: #F7F1E7;
+    --night-text-soft: rgba(247, 241, 231, 0.55);
+    --night-card: rgba(32, 23, 55, 0.55);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "HarmonyOS Sans", "MiSans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--day-sky-1);
+    transition: background 1.4s ease;
+  }
+
+  /* ============================================================
+     天空层 —— 就是"一大块干净的空气"
+     ============================================================ */
+  .sky {
+    position: relative;
+    height: 58%;
+    background: linear-gradient(180deg, var(--day-sky-1) 0%, var(--day-sky-2) 55%, var(--day-sky-3) 100%);
+    transition: background 1.4s ease;
+    overflow: hidden;
+  }
+
+  /* 云：软、稀、几乎融入天空（氛围不是贴纸） */
+  .cloud {
+    position: absolute;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.25) 70%);
+    border-radius: 50%;
+    filter: blur(7px);
+    opacity: 0.38;
+    animation: drift linear infinite;
+  }
+  .cloud.c1 { width: 260px; height: 90px; top: 16%; animation-duration: 90s; }
+  .cloud.c2 { width: 340px; height: 110px; top: 44%; opacity: 0.28; animation-duration: 120s; animation-delay: -40s; }
+  @keyframes drift {
+    0%   { transform: translateX(-40vw); }
+    100% { transform: translateX(130vw); }
+  }
+  .night .cloud {
+    background: radial-gradient(ellipse at center, rgba(37, 26, 63, 0.5), rgba(37, 26, 63, 0.15) 70%);
+    opacity: 0.35;
+  }
+
+  /* 太阳：柔光团，无硬边 */
+  .day-sun {
+    position: absolute;
+    top: 7%; right: 13%;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 244, 214, 0.95) 0%, rgba(255, 226, 170, 0.5) 45%, rgba(255, 226, 170, 0) 72%);
+    filter: blur(2px);
+    opacity: 0.9;
+    transition: opacity 1.4s ease;
+  }
+
+  /* 月亮：同样只留柔光 */
+  .night-moon {
+    position: absolute;
+    top: 7%; right: 13%;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(247, 232, 201, 0.95) 0%, rgba(232, 198, 138, 0.5) 45%, rgba(232, 198, 138, 0) 72%);
+    filter: blur(2px);
+    opacity: 0;
+    transition: opacity 1.4s ease;
+  }
+
+  /* 星：少、小、暗一点，安静地呼吸 */
+  .star {
+    position: absolute;
+    background: #F2E3C2;
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle 5s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.6); }
+    50%      { opacity: 0.6; transform: scale(1); }
+  }
+
+  /* 问候：一行大字 + 一行小字，留够气 */
+  .greeting {
+    position: absolute;
+    top: 15%;
+    left: 0; right: 0;
+    text-align: center;
+    z-index: 5;
+  }
+  .greeting .hello {
+    color: var(--day-text);
+    font-size: 29px;
+    font-weight: 500;
+    letter-spacing: 9px;
+    transition: color 1.4s ease;
+  }
+  .greeting .hint {
+    margin-top: 13px;
+    color: var(--day-text-soft);
+    font-size: 13.5px;
+    letter-spacing: 2px;
+    transition: color 1.4s ease;
+  }
+
+  /* 今日星象卡：轻、透，不抢眼 */
+  .sky-card {
+    position: absolute;
+    bottom: 24px;
+    left: 24px; right: 24px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--day-card);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 20px;
+    padding: 12px 16px;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 6px 24px rgba(61, 42, 92, 0.05);
+    transition: background 1.4s ease, border-color 1.4s ease;
+  }
+  .night .sky-card {
+    background: var(--night-card);
+    border-color: rgba(232, 198, 138, 0.18);
+  }
+  .moon-icon svg { display: block; opacity: 0.9; }
+  .sky-card .moon-title {
+    color: var(--day-text);
+    font-size: 15.5px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    transition: color 1.4s ease;
+  }
+  .sky-card .moon-sub {
+    margin-top: 3px;
+    color: var(--day-text-soft);
+    font-size: 12.5px;
+    letter-spacing: 0.5px;
+    transition: color 1.4s ease;
+  }
+  .night .sky-card .moon-title { color: var(--night-text); }
+  .night .sky-card .moon-sub { color: var(--night-text-soft); }
+
+  /* ============================================================
+     花园层 —— 一大片安静的草地
+     ============================================================ */
+  .garden {
+    position: relative;
+    height: 42%;
+    background: linear-gradient(180deg, var(--day-grass-1) 0%, var(--day-grass-2) 45%, var(--day-grass-3) 100%);
+    transition: background 1.4s ease;
+    overflow: hidden;
+  }
+
+  /* 地平线：一条若有若无的柔光分隔 */
+  .garden::before {
+    content: "";
+    position: absolute;
+    top: -1px; left: 0; right: 0;
+    height: 34px;
+    background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.22));
+    pointer-events: none;
+    transition: background 1.4s ease;
+  }
+  .night .garden::before {
+    background: linear-gradient(180deg, transparent, rgba(232, 198, 138, 0.06));
+  }
+
+  /* 花：远处的小色点，模糊、稀疏、低对比 —— 是氛围不是贴纸 */
+  .flower {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    opacity: 0.32;
+  }
+  .flower.f1 { width: 16px; height: 16px; left: 12%; bottom: 24%;
+    background: radial-gradient(circle, rgba(230, 184, 188, 0.9), rgba(230, 184, 188, 0) 70%); }
+  .flower.f2 { width: 11px; height: 11px; left: 30%; bottom: 16%;
+    background: radial-gradient(circle, rgba(226, 196, 160, 0.9), rgba(226, 196, 160, 0) 70%); }
+  .flower.f3 { width: 14px; height: 14px; left: 55%; bottom: 30%;
+    background: radial-gradient(circle, rgba(188, 200, 222, 0.9), rgba(188, 200, 222, 0) 70%); }
+  .flower.f4 { width: 10px; height: 10px; left: 74%; bottom: 18%;
+    background: radial-gradient(circle, rgba(230, 184, 188, 0.85), rgba(230, 184, 188, 0) 70%); }
+  .flower.f5 { width: 13px; height: 13px; left: 90%; bottom: 26%;
+    background: radial-gradient(circle, rgba(226, 196, 160, 0.85), rgba(226, 196, 160, 0) 70%); }
+  .night .flower { opacity: 0.16; }
+
+  /* 蝴蝶：一只，很小，几乎融进空气 */
+  .butterfly {
+    position: absolute;
+    width: 14px; height: 12px;
+    filter: blur(0.6px);
+    opacity: 0.4;
+    z-index: 3;
+    animation: fly 26s ease-in-out infinite;
+  }
+  .butterfly::before, .butterfly::after {
+    content: "";
+    position: absolute; top: 0;
+    width: 7px; height: 10px;
+    background: radial-gradient(circle at 40% 40%, #E8D3AC, #C9A97C);
+    border-radius: 50% 60% 45% 55%;
+    animation: flap 0.8s ease-in-out infinite alternate;
+  }
+  .butterfly::before { left: 0; transform-origin: right center; }
+  .butterfly::after  { right: 0; transform-origin: left center; }
+  @keyframes flap {
+    from { transform: rotate(18deg) scaleX(1); }
+    to   { transform: rotate(-18deg) scaleX(0.75); }
+  }
+  @keyframes fly {
+    0%   { transform: translate(8vw, 26%) translateY(0); }
+    25%  { transform: translate(30vw, 20%) translateY(-14px); }
+    50%  { transform: translate(52vw, 30%) translateY(4px); }
+    75%  { transform: translate(74vw, 22%) translateY(-10px); }
+    100% { transform: translate(96vw, 26%) translateY(0); }
+  }
+  .night .butterfly { display: none; }
+
+  /* 萤火虫：夜晚 3 点柔光 */
+  .firefly {
+    position: absolute;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 244, 214, 0.95), rgba(232, 198, 138, 0) 70%);
+    opacity: 0;
+    animation: firefly 6s ease-in-out infinite;
+  }
+  @keyframes firefly {
+    0%, 100% { opacity: 0; transform: translate(0, 0); }
+    50%      { opacity: 0.55; transform: translate(18px, -14px); }
+  }
+  .firefly.ff1 { bottom: 22%; left: 14%; animation-delay: 0s; }
+  .firefly.ff2 { bottom: 14%; left: 48%; animation-delay: 2s; }
+  .firefly.ff3 { bottom: 26%; left: 82%; animation-delay: 4s; }
+
+  /* ============================================================
+     星灵 —— 唯一的焦点
+     ============================================================ */
+  .spirit {
+    position: absolute;
+    left: 50%;
+    bottom: 22%;
+    transform: translateX(-50%);
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+  }
+  /* 光体：羽毛一样融进空气，不是一颗"球" */
+  .spirit .orb {
+    position: relative;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 42% 36%,
+      rgba(255, 249, 240, 0.98) 0%,
+      rgba(244, 218, 180, 0.9) 38%,
+      rgba(228, 185, 138, 0.55) 68%,
+      rgba(228, 185, 138, 0) 100%);
+    box-shadow:
+      0 0 46px rgba(244, 214, 168, 0.5),
+      0 0 110px rgba(244, 214, 168, 0.28);
+    animation: breathe 4.5s ease-in-out infinite;
+  }
+  .spirit .orb .glyph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+    color: #8A6240;
+    opacity: 0.85;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-5px) scale(1.03); }
+  }
+
+  .spirit .s-name {
+    margin-top: 15px;
+    color: #FFF9EF;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 5px;
+    text-shadow: 0 2px 10px rgba(30, 22, 50, 0.45);
+  }
+  .spirit .s-heal {
+    margin-top: 5px;
+    color: rgba(255, 249, 239, 0.85);
+    font-size: 12px;
+    letter-spacing: 2.5px;
+    text-shadow: 0 1px 8px rgba(30, 22, 50, 0.4);
+  }
+  .spirit .s-line {
+    margin-top: 11px;
+    color: var(--purple);
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.62);
+    padding: 6px 16px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 18px rgba(61, 42, 92, 0.08);
+  }
+  .night .spirit .s-line {
+    color: var(--night-text);
+    background: rgba(247, 241, 231, 0.1);
+  }
+
+  /* 今日行运星灵来访：一抹更小的微光，只是"有客来" */
+  .visit {
+    position: absolute;
+    right: 15%;
+    bottom: 26%;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    opacity: 0.8;
+  }
+  .visit .v-orb {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 36%,
+      rgba(218, 240, 231, 0.95) 0%,
+      rgba(160, 198, 180, 0.55) 60%,
+      rgba(160, 198, 180, 0) 100%);
+    box-shadow: 0 0 22px rgba(160, 198, 180, 0.4);
+    filter: blur(0.4px);
+    animation: breathe 4s ease-in-out infinite;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    color: #4E7363;
+    opacity: 0.85;
+  }
+  .visit .v-note {
+    margin-top: 7px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(255, 249, 239, 0.78);
+    text-shadow: 0 1px 6px rgba(30, 22, 50, 0.4);
+  }
+
+  /* ============================================================
+     顶栏 & 底栏 —— 尽量退后
+     ============================================================ */
+  .avatar {
+    position: fixed;
+    top: 16px; right: 16px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(232, 198, 138, 0.95), rgba(169, 122, 78, 0.9));
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    z-index: 100;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(61, 42, 92, 0.15);
+    opacity: 0.9;
+  }
+  .toggle {
+    position: fixed;
+    top: 18px; left: 16px;
+    z-index: 100;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.4);
+    color: var(--day-text);
+    font-size: 15px;
+    cursor: pointer;
+    opacity: 0.7;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 1.4s ease, color 1.4s ease;
+  }
+  .night .toggle {
+    background: rgba(32, 23, 55, 0.5);
+    border-color: rgba(232, 198, 138, 0.25);
+    color: var(--night-text);
+  }
+
+  .tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: var(--day-card);
+    backdrop-filter: blur(20px);
+    z-index: 50;
+    transition: background 1.4s ease;
+  }
+  .night .tabbar { background: var(--night-card); }
+  .tab {
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: var(--day-text-soft);
+    text-align: center;
+    padding: 4px 20px;
+    transition: color 1.4s ease;
+  }
+  .night .tab { color: var(--night-text-soft); }
+  .tab .ic { font-size: 19px; display: block; margin-bottom: 2px; opacity: 0.85; }
+  .tab.active { color: var(--purple); font-weight: 500; }
+  .night .tab.active { color: var(--night-text); }
+  .tab .dot { position: relative; }
+  .tab .dot::after {
+    content: "";
+    position: absolute;
+    top: 1px; right: -9px;
+    width: 7px; height: 7px;
+    background: #E0645A;
+    border-radius: 50%;
+    opacity: 0.85;
+  }
+
+  /* ============================================================
+     昼夜切换
+     ============================================================ */
+  .star, .firefly, .night-moon { display: none; }
+  .night .star, .night .firefly, .night .night-moon { display: block; }
+  .night .cloud, .night .day-sun, .night .butterfly { display: none; }
+  .night .sky { background: linear-gradient(180deg, var(--night-sky-1) 0%, var(--night-sky-2) 55%, var(--night-sky-3) 100%); }
+  .night .garden { background: linear-gradient(180deg, var(--night-grass-1) 0%, var(--night-grass-2) 100%); }
+  .night .greeting .hello { color: var(--night-text); }
+  .night .greeting .hint { color: var(--night-text-soft); }
+
+  /* ============================================================
+     无障碍 & 兜底
+     ============================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  @supports not (backdrop-filter: blur(10px)) {
+    .sky-card, .spirit .s-line, .tabbar { background: rgba(255, 255, 255, 0.8); }
+    .night .sky-card, .night .spirit .s-line, .night .tabbar { background: rgba(32, 23, 55, 0.8); }
+  }
+</style>
+</head>
+<body>
+  <button class="toggle" onclick="document.body.classList.toggle('night'); this.textContent = document.body.classList.contains('night') ? '☀' : '☾';" title="切昼夜">☾</button>
+  <div class="avatar" onclick="alert('右上角 = 头像 → 设置/档案')">🧑‍🚀</div>
+
+  <!-- ============ 天空层 ============ -->
+  <div class="sky">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="day-sun"></div>
+    <div class="night-moon"></div>
+
+    <span class="star" style="top:13%;left:22%;width:2.5px;height:2.5px;animation-delay:0s"></span>
+    <span class="star" style="top:24%;left:48%;width:2px;height:2px;animation-delay:1.6s"></span>
+    <span class="star" style="top:11%;left:72%;width:2.5px;height:2.5px;animation-delay:2.4s"></span>
+    <span class="star" style="top:33%;left:84%;width:2px;height:2px;animation-delay:0.9s"></span>
+    <span class="star" style="top:42%;left:12%;width:2px;height:2px;animation-delay:3.2s"></span>
+
+    <div class="greeting">
+      <div class="hello">早安 · 夏天</div>
+      <div class="hint">今日水星在你的 10宫·事业搭了座桥，适合推进那件悬着的事</div>
+    </div>
+
+    <!-- 今日星象卡：月相 + 月亮落座 + Domain 建议 -->
+    <div class="sky-card">
+      <div class="moon-icon">
+        <svg width="40" height="40" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="cres" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#F7E8C9"/>
+              <stop offset="100%" stop-color="#E0BC8A"/>
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="40" fill="#E4E0E8"/>
+          <circle cx="62" cy="40" r="40" fill="url(#cres)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="moon-title">今日 · 上弦月 · 月亮落射手座</div>
+        <div class="moon-sub">适合推进那件悬着的事</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 花园层 ============ -->
+  <div class="garden">
+    <!-- 远处的小花（氛围，模糊色点） -->
+    <span class="flower f1"></span><span class="flower f2"></span>
+    <span class="flower f3"></span><span class="flower f4"></span>
+    <span class="flower f5"></span>
+
+    <!-- 一只安静的蝴蝶（昼）/ 3 点萤火（夜） -->
+    <span class="butterfly"></span>
+    <span class="firefly ff1"></span><span class="firefly ff2"></span><span class="firefly ff3"></span>
+
+    <!-- 今日行运星灵来访：一抹小微光 -->
+    <div class="visit" onclick="alert('「今日水星想见你」→ 选择页/换星灵')">
+      <div class="v-orb">☿</div>
+      <div class="v-note">今日它想见你</div>
+    </div>
+
+    <!-- 用户链接的星灵：月亮（唯一焦点） -->
+    <div class="spirit" onclick="alert('点星灵 → 和「想被抱抱的我」聊聊')">
+      <div class="orb"><span class="glyph">☾</span></div>
+      <div class="s-name">月亮</div>
+      <div class="s-heal">想被抱抱的我</div>
+      <div class="s-line">你回来了，今天想靠一下吗？</div>
+    </div>
+  </div>
+
+  <!-- ============ 底部 tab ============ -->
+  <div class="tabbar">
+    <div class="tab active"><span class="ic">🏡</span>花园</div>
+    <div class="tab"><span class="ic dot">✉️</span>信箱</div>
+    <div class="tab"><span class="ic">🪐</span>我的宇宙</div>
+  </div>
+</body>
+</html>

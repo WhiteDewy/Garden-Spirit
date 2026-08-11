@@ -80,6 +80,9 @@ class ChartProfile:
     #: 用户偏好（B2 行动层）：push_frequency / sensitive_topics / preferred_persona。
     #: 灵活 dict，校验在 API 边界，避免模型层与产品字段耦合。
     preferences: dict[str, object] = field(default_factory=dict)
+    #: 34 子类点亮（随聊记录层，self_map_design §2）。key = 子类 id（如 "moon_tide"），
+    #: value = 深度分（提及+1/倾诉+3/咨询反向+10）。只记录话题，不声称用户属性（硬线）。
+    fragments: dict[str, int] = field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

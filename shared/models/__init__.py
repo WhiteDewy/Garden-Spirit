@@ -24,6 +24,7 @@ from shared.models.evidence import (
 )
 from shared.models.execution_plan import ExecutionPlan, ExecutionStatus, ExecutionStep
 from shared.models.facts import Fact, FactSet
+from shared.models.fragment_light import FragmentLight
 from shared.models.intent import Intent, IntentSlot
 from shared.models.journal import JournalEntry
 from shared.models.letter import Letter
@@ -31,6 +32,7 @@ from shared.models.life_event import LifeEvent
 from shared.models.memory import Memory, MemoryItem
 from shared.models.person import BirthData, GeoLocation, Person
 from shared.models.profile import ChartProfile, DomainSummary, KeyDate, VerifiedFinding
+from shared.models.push_subscription import PushSubscription
 from shared.models.strategy import (
     StepDependencyType,
     Strategy,
@@ -81,6 +83,8 @@ __all__ = [
     # memory
     "Memory",
     "MemoryItem",
+    # fragment_light（成长复利账本）
+    "FragmentLight",
     # profile（第四层记忆）
     "ChartProfile",
     "DomainSummary",
@@ -90,6 +94,8 @@ __all__ = [
     "JournalEntry",
     # letter
     "Letter",
+    # push_subscription
+    "PushSubscription",
     # life_event
     "LifeEvent",
     # conversation

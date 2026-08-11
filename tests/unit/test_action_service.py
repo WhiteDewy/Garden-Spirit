@@ -93,11 +93,11 @@ def test_validate_preferences_valid():
     cleaned = SVC.validate_preferences({
         "push_frequency": "off",
         "sensitive_topics": ["health", "家庭"],
-        "preferred_persona": "rose_quartz",
+        "preferred_persona": "moon",  # 10 星灵回归：行星人格值（sun/moon/…）
     })
     assert cleaned["push_frequency"] == "off"
     assert cleaned["sensitive_topics"] == ["health", "家庭"]
-    assert cleaned["preferred_persona"] == "rose_quartz"
+    assert cleaned["preferred_persona"] == "moon"
 
 
 def test_validate_preferences_invalid():

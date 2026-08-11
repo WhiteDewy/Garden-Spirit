@@ -1,0 +1,7 @@
+34 子类 LLM 分类失败，规则兜底
+星灵激活 LLM 分类失败，规则兜底
+落款需求 LLM 识别失败，规则兜底
+落款需求 LLM 识别失败，规则兜底
+落款需求 LLM 识别失败，规则兜底
+DIRECT classify -> EmotionalNeed.SOOTHED
+EN classify -> EmotionalNeed.SOOTHED

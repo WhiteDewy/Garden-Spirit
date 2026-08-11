@@ -234,6 +234,38 @@ class Role(str, Enum):
     SYSTEM = "system"
 
 
+class EmotionState(str, Enum):
+    """用户情绪状态（情绪感知层——陪伴协议第 1 步）。
+
+    只描述"此刻的情绪"，不描述用户人格（对应 self_map_design §7.1：
+    按 情绪状态 × 诉求类型 判断，而非按领域分类）。
+    """
+
+    CALM = "calm"            # 平静/日常
+    HAPPY = "happy"          # 开心/满足
+    LOW = "low"              # 低落/难过/伤心
+    ANXIOUS = "anxious"      # 焦虑/担心/不安
+    ANGRY = "angry"          # 生气/烦躁
+    TIRED = "tired"          # 疲惫/无力
+    LONELY = "lonely"        # 孤独/想被陪伴
+    CONFUSED = "confused"    # 迷茫/纠结/想不通
+    PRESSURED = "pressured"  # 压力大/紧绷
+    FEARFUL = "fearful"      # 害怕/恐惧
+
+
+class RequestType(str, Enum):
+    """诉求类型（情绪感知层）——用户此刻最想要的回应方式。
+
+    self_map_design §7.1 定稿四选一：被听见 / 被安慰 / 被梳理 / 被推动。
+    软牵引门控（§7.3）据此决定"递盘 or 继续陪"。
+    """
+
+    HEARD = "heard"        # 被听见：分享/倾诉，想要认真听
+    SOOTHED = "soothed"    # 被安慰：难过/累，想要安抚
+    SORTED = "sorted"      # 被梳理：一团乱/纠结/要决策，想要理清
+    PUSHED = "pushed"      # 被推动：没动力/犹豫，想要方向推一把
+
+
 class ConsultMode(str, Enum):
     """咨询模式——影响分析深度与叙事长度（产品层"今天想怎么聊"）。
 
@@ -260,15 +292,20 @@ class TrustLevel(str, Enum):
 
 
 class PersonaType(str, Enum):
-    """十大星灵人格（占位名，产品阶段可改）。"""
+    """十大星灵人格（self_map_design §1.1 回归行星）——人格只改变语言风格，不改结论。
 
-    ZIRCON = "zircon"          # 锆石
-    OBSIDIAN = "obsidian"      # 黑曜石
-    AMETHYST = "amethyst"      # 紫水晶
-    CITRINE = "citrine"        # 黄水晶
-    ROSE_QUARTZ = "rose_quartz"  # 粉晶
-    TURQUOISE = "turquoise"    # 绿松石
-    MOONSTONE = "moonstone"    # 月光石
-    JADE = "jade"              # 翡翠
-    GARNET = "garnet"          # 石榴石
-    LAPIS = "lapis"            # 青金石
+    值 = 行星名（与 Planet 值一致），疗愈名（想被看见的我…）见
+    application/mailbox/signature.py HEALING_NAMES（单一来源）。
+    默认人格 = 月亮（产品 mascot：每日来信默认 sender moon / 聊天占位 🌙）。
+    """
+
+    SUN = "sun"          # 太阳 · 想被看见的我
+    MOON = "moon"        # 月亮 · 想被抱抱的我
+    MERCURY = "mercury"  # 水星 · 想说话的我
+    VENUS = "venus"      # 金星 · 想爱与被爱的我
+    MARS = "mars"        # 火星 · 想要就冲的我
+    JUPITER = "jupiter"  # 木星 · 想飞的我
+    SATURN = "saturn"    # 土星 · 想负责的我
+    URANUS = "uranus"    # 天王星 · 想挣脱的我
+    NEPTUNE = "neptune"  # 海王星 · 想做梦的我
+    PLUTO = "pluto"      # 冥王星 · 想深挖的我

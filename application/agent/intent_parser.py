@@ -71,9 +71,10 @@ class IntentParser:
             if intent is not None:
                 return intent
 
-        # 兜底：规则路由（可含 LLM 槽抽取，领域仍由规则定）
+        # 兜底：规则路由（可含 LLM 槽抽取，领域仍由规则定）。
+        # LLM 不可用时不调槽抽取——离线/无 key 时不产生无谓的 LLM 调用日志。
         slots: dict[str, IntentSlot] = {}
-        if self._llm is not None:
+        if self._llm is not None and getattr(self._llm, "available", False):
             raw = self._llm_extract_slots(message, context)
             for name, value in raw.items():
                 if isinstance(value, str) and value.strip():

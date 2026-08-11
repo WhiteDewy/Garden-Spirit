@@ -34,7 +34,7 @@ def _make_intent() -> Intent:
 # --- prompt 指令注入 ---
 
 def test_quick_mode_injects_instruction():
-    messages = build_prompt(_make_conclusion(), persona=PersonaType.ZIRCON,
+    messages = build_prompt(_make_conclusion(), persona=PersonaType.MOON,
                             question="该不该换工作？", mode=ConsultMode.QUICK)
     system = messages[0]["content"]
     assert "快速咨询" in system
@@ -42,7 +42,7 @@ def test_quick_mode_injects_instruction():
 
 
 def test_deep_mode_no_quick_instruction():
-    messages = build_prompt(_make_conclusion(), persona=PersonaType.ZIRCON,
+    messages = build_prompt(_make_conclusion(), persona=PersonaType.MOON,
                             question="该不该换工作？", mode=ConsultMode.DEEP)
     system = messages[0]["content"]
     assert "快速咨询" not in system
@@ -50,7 +50,7 @@ def test_deep_mode_no_quick_instruction():
 
 
 def test_default_mode_is_deep():
-    messages = build_prompt(_make_conclusion(), persona=PersonaType.ZIRCON)
+    messages = build_prompt(_make_conclusion(), persona=PersonaType.MOON)
     assert "快速咨询" not in messages[0]["content"]
 
 

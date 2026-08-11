@@ -104,7 +104,7 @@ def test_build_prompt_injects_healing_instruction():
         id="c1", intent_id="i1", evidence_set_id="e1",
         domain="career", summary="总体判断",
     )
-    messages = build_prompt(conclusion=conclusion, persona=PersonaType.ZIRCON)
+    messages = build_prompt(conclusion=conclusion, persona=PersonaType.MOON)
     system = "\n".join(m["content"] for m in messages if m["role"] == "system")
     assert "疗愈叙事协议" in system
     assert "5 步节奏" in system

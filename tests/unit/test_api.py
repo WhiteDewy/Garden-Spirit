@@ -110,6 +110,9 @@ def test_chat_then_profile_writeback(client):
     events = tl.json()
     assert len(events) >= 1
     assert events[0]["kind"] == "consult"
+    # 咨询记录补意图/需求（喂记忆写回）：domain=八大领域，need=诉求类型
+    assert events[0]["domain"] == "career"
+    assert events[0]["need"] in ("heard", "soothed", "sorted", "pushed")
 
 
 def test_chat_followup_same_session(client):
@@ -343,7 +346,11 @@ def test_opening_new_vs_returning(client):
     client.post("/chat", json={"person_id": pid, "message": "我该不该离职？"})
 
     again = client.get(f"/person/{pid}/opening")
-    assert "欢迎回来" in again.json()["opening"]      # 老用户
+    returning = again.json()["opening"]
+    # 老用户：认得出名字 + 记得上次话题 + 回访亲昵（同天刚聊过 → "我们又见面了"）
+    assert "测试用户" in returning
+    assert "上次我们聊到" in returning
+    assert any(h in returning for h in ("我们又见面了", "昨天才聊过", "欢迎回来"))
     assert again.json()["trust_level"] == "acquaintance"
 
 
@@ -567,3 +574,112 @@ def test_garden_pending_verifications(client):
     client.post(f"/person/{pid}/findings/f1/feedback", json={"feedback": "confirmed"})
     g2 = client.get(f"/garden?person_id={pid}").json()
     assert g2["pending_verifications"] == 0
+
+
+# --- Web Push（真实推送通道）---
+
+def test_push_vapid_public_key(client):
+    resp = client.get("/push/vapid-public-key")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "public_key" in body
+    assert isinstance(body["public_key"], str)
+
+
+def test_push_subscribe_unknown_person_404(client):
+    resp = client.post("/push/subscribe", json={
+        "person_id": "ghost",
+        "subscription": {"endpoint": "ep_x", "keys": {"p256dh": "a", "auth": "b"}},
+    })
+    assert resp.status_code == 404
+
+
+def test_push_subscribe_then_unsubscribe(client):
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    sub = {"endpoint": "https://push.example/ep_1",
+           "keys": {"p256dh": "k1", "auth": "k2"}}
+
+    r1 = client.post("/push/subscribe", json={"person_id": pid, "subscription": sub})
+    assert r1.status_code == 200
+    assert r1.json()["ok"] is True
+
+    # 幂等 upsert：同 endpoint 重复订阅不炸
+    r2 = client.post("/push/subscribe", json={"person_id": pid, "subscription": sub})
+    assert r2.status_code == 200
+    assert r2.json()["ok"] is True
+
+    r3 = client.post("/push/unsubscribe",
+                     json={"person_id": pid, "endpoint": "https://push.example/ep_1"})
+    assert r3.status_code == 200
+    assert r3.json()["deleted"] is True
+
+    # 已删 → deleted False（幂等）
+    r4 = client.post("/push/unsubscribe",
+                     json={"person_id": pid, "endpoint": "https://push.example/ep_1"})
+    assert r4.json()["deleted"] is False
+
+
+def test_push_trigger_skips_quiet(client):
+    """push_frequency=quiet → 触发时跳过（不生成来信、不推送）。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    client.put(f"/person/{pid}/preferences", json={"push_frequency": "quiet"})
+
+    resp = client.post("/push/trigger")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_persons"] >= 1
+    assert data["skipped_quiet"] >= 1   # 至少这个 quiet 用户被跳过
+    assert data["pushed"] == 0          # 无 VAPID 私钥（测试）永远推不出
+
+
+def test_push_trigger_no_subscription(client):
+    """daily 用户但没订阅过（无 endpoint）→ 记为 skipped_no_sub，不崩。"""
+    client.post("/person", json=_person_payload())
+
+    resp = client.post("/push/trigger")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_persons"] >= 1
+    assert data["skipped_no_sub"] >= 1  # 至少这个 daily 无订阅用户
+    assert data["pushed"] == 0
+
+
+# --- 首页红点（来信未读 + 待验证）---
+
+def test_garden_letter_unread_true(client):
+    """刚生成的今日来信 read_at=None → 首页信箱红点亮起。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    g = client.get(f"/garden?person_id={pid}").json()
+    assert g["letter_unread"] is True
+    # 信件本身也带 read_at 字段（None = 未读）
+    assert g["letter"]["read_at"] is None
+
+
+def test_mark_read_today_clears_unread(client):
+    """打开信箱（read-today）→ 首页再拉 /garden → 信箱红点消除。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    assert client.get(f"/garden?person_id={pid}").json()["letter_unread"] is True
+
+    r = client.post(f"/person/{pid}/letters/read-today")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["marked"] == 1
+
+    # 已标记后，今日来信 read_at 非空 → 红点消失；幂等再标 → 0
+    g = client.get(f"/garden?person_id={pid}").json()
+    assert g["letter_unread"] is False
+    assert g["letter"]["read_at"] is not None
+    assert client.post(f"/person/{pid}/letters/read-today").json()["marked"] == 0
+
+
+def test_mark_read_today_unknown_person_404(client):
+    resp = client.post("/person/ghost/letters/read-today")
+    assert resp.status_code == 404
+
+
+def test_garden_pending_verifications_dot(client):
+    """有待验证判断 → pending_verifications>0（我的宇宙 nav 红点后端字段）。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    _inject_finding(client, pid, "土星落九宫：深造是必经之路", fid="dot1")
+    g = client.get(f"/garden?person_id={pid}").json()
+    assert g["pending_verifications"] == 1

@@ -37,7 +37,7 @@ def main() -> None:
     for i, msg in enumerate(turns):
         print("=" * 60)
         print(f"[第{i}轮] 用户：{msg}")
-        answer = agent.handle_message(sid, msg, person, PersonaType.ZIRCON)
+        answer = agent.handle_message(sid, msg, person, PersonaType.MOON)
         print(f"助手：{answer}")
         ctx = agent.context_builder._sessions[sid]
         if ctx.latest_intent:

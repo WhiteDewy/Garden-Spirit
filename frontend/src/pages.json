@@ -27,6 +27,27 @@
 				"navigationBarTitleText": "我的宇宙",
 				"navigationStyle": "custom"
 			}
+		},
+		{
+			"path": "pages/universe/wheel",
+			"style": {
+				"navigationBarTitleText": "自我星盘轮",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/universe/consult",
+			"style": {
+				"navigationBarTitleText": "星盘咨询",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/universe/fragment",
+			"style": {
+				"navigationBarTitleText": "子类介绍",
+				"navigationStyle": "custom"
+			}
 		}
 	],
 	"globalStyle": {

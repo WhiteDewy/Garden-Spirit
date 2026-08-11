@@ -79,6 +79,30 @@ class StorageConfig:
 
 
 @dataclass
+class PushConfig:
+    """Web Push 通知配置（VAPID 密钥对）。
+
+    从环境变量加载（.env 或系统环境），不硬编码：
+      GS_VAPID_PRIVATE_KEY / GS_VAPID_PUBLIC_KEY / GS_VAPID_SUBJECT
+    VAPID 密钥对生成见 .env.example。
+    """
+
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_subject: str = "mailto:admin@garden-spirit.app"
+
+    def __post_init__(self) -> None:
+        import os
+
+        if not self.vapid_private_key:
+            self.vapid_private_key = os.getenv("GS_VAPID_PRIVATE_KEY", "")
+        if not self.vapid_public_key:
+            self.vapid_public_key = os.getenv("GS_VAPID_PUBLIC_KEY", "")
+        if self.vapid_subject == "mailto:admin@garden-spirit.app":
+            self.vapid_subject = os.getenv("GS_VAPID_SUBJECT", self.vapid_subject)
+
+
+@dataclass
 class AppConfig:
     """应用级配置。"""
 
@@ -86,8 +110,9 @@ class AppConfig:
     llm: LLMConfig = field(default_factory=LLMConfig)
     evidence: EvidenceConfig = field(default_factory=EvidenceConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    push: PushConfig = field(default_factory=PushConfig)
 
-    default_persona: PersonaType = PersonaType.ZIRCON
+    default_persona: PersonaType = PersonaType.MOON  # 产品默认星灵 = 月亮（mascot）
     cache_ttl_seconds: int = 3600
     max_conversation_turns: int = 50
     debug: bool = False

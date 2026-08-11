@@ -74,7 +74,7 @@ def test_llm_receives_all_four_materials():
     chart = NatalChartCalculator().compute(_make_person())
     intent = Intent(id="i", raw_query="我适合换工作吗", domain=IntentDomain.CAREER)
     agent._format_response(
-        _make_conclusion(), intent, PersonaType.ZIRCON, chart
+        _make_conclusion(), intent, PersonaType.MOON, chart
     )
 
     assert fake.captured is not None, "LLM 应被调用"
@@ -96,7 +96,7 @@ def test_planet_profiles_actually_present():
     chart = NatalChartCalculator().compute(_make_person())
     intent = Intent(id="i", raw_query="我适合换工作吗", domain=IntentDomain.CAREER)
     agent._format_response(
-        _make_conclusion(), intent, PersonaType.ZIRCON, chart
+        _make_conclusion(), intent, PersonaType.MOON, chart
     )
 
     user = fake.captured[1]["content"]
@@ -120,7 +120,7 @@ def test_llm_unavailable_falls_back():
 
     intent = Intent(id="i", raw_query="我适合换工作吗", domain=IntentDomain.CAREER)
     answer = agent._format_response(
-        _make_conclusion(), intent, PersonaType.ZIRCON, None
+        _make_conclusion(), intent, PersonaType.MOON, None
     )
     assert isinstance(answer, str)
     assert len(answer) > 0

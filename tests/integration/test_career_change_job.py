@@ -52,7 +52,7 @@ def test_intent_router_requires_clarification():
 def test_full_pipeline_change_job(agent, person):
     """从话语到回答的完整链路。"""
     answer = agent.handle_message(
-        "session_1", "我想换工作，今年合适吗？", person, PersonaType.ZIRCON
+        "session_1", "我想换工作，今年合适吗？", person, PersonaType.MOON
     )
     # 有实质回答，不是澄清提问
     assert "换工作" in answer or "职业" in answer or "询问" in answer
@@ -69,13 +69,13 @@ def test_full_pipeline_change_job(agent, person):
 def test_astrology_domain_does_not_need_llm(agent, person):
     """原则二：无 LLM 也能给出完整结论。"""
     answer = agent.handle_message(
-        "session_2", "我的事业运怎么样？", person, PersonaType.OBSIDIAN
+        "session_2", "我的事业运怎么样？", person, PersonaType.URANUS
     )
     assert "解读" in answer
 
 
 def test_pipeline_is_deterministic(agent, person):
     """同一输入产出确定性结论（无随机性）。"""
-    a1 = agent.handle_message("session_3", "我要不要创业？", person, PersonaType.ZIRCON)
-    a2 = agent.handle_message("session_3b", "我要不要创业？", person, PersonaType.ZIRCON)
+    a1 = agent.handle_message("session_3", "我要不要创业？", person, PersonaType.MOON)
+    a2 = agent.handle_message("session_3b", "我要不要创业？", person, PersonaType.MOON)
     assert a1 == a2

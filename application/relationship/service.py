@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from shared.enums import ConsultMode, TrustLevel
 
 #: 信号权重（深度优先：deep 6 > 10 次 casual 0.5*10=5）
@@ -43,10 +45,9 @@ TRUST_LABELS: dict[TrustLevel, str] = {
 
 #: 首次见面自我介绍（温暖陪伴调性，用户确认）。"我是谁 / 能做什么 / 怎么用"。
 _INTRO = (
-    "嗨，我是住在你星盘里的星灵。你刚种下的这张盘，像一张地图——"
+    "我是住在你星盘里的星灵。你刚种下的这张盘，像一张地图——"
     "标出你天生顺手的地方，也标出容易卡住的地方。"
-    "可以问我事业、感情、财运，或任何最近想不通的事；"
-    "聊得多了，我会记住你，记住你在意的变化。\n\n今天想从哪儿说起？"
+    "想从哪儿开始？事业、感情，还是最近想不通的事？"
 )
 
 #: 邀请式引导：信任等级达标时，深聊后附邀请（不硬切）。
@@ -54,6 +55,98 @@ _INVITATION = "——这件事我想给你细看。愿意的话，我们做一�
 
 #: 欢迎回来摘要的最大长度（"上次我们聊到…"）
 _MAX_SUMMARY_CHARS = 50
+
+
+def naturalize_recall(summary: object, max_chars: int = _MAX_SUMMARY_CHARS) -> str:
+    """把存储的会话摘要整理成一句自然的"上次聊到"话题。
+
+    新数据（LLM / 规则降级）本身就是自然的一句话，此函数基本原样通过；
+    这里主要兜底清理旧数据里残留的「用户:/星灵:」转写——拆行取最后一条
+    用户话题，剥掉标签与外层引号，收敛结尾标点，避免开场露出一整段对话。
+    """
+    if not summary:
+        return ""
+    text = str(summary).strip()
+    user_topic = ""
+    plain = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        labeled = False
+        for prefix in ("用户:", "星灵:"):
+            if line.startswith(prefix):
+                stripped = line[len(prefix):].strip()
+                labeled = True
+                if prefix == "用户:" and stripped:
+                    user_topic = stripped  # 保留最后一条用户话题
+                break
+        if not labeled and line:
+            plain = line  # 无标签行（单行自然摘要 / 单行旧摘要）
+    if user_topic or plain:
+        text = user_topic or plain
+    # 先收敛结尾标点，再剥外层引号（句号可能在引号外，如「…」。）
+    text = text.rstrip("。！？!?")
+    for lq, rq in (("「", "」"), ("“", "”"), ('"', '"'), ("‘", "’")):
+        if text.startswith(lq) and text.endswith(rq):
+            text = text[1:-1].strip()
+            break
+    text = text.rstrip("。！？!?")
+    if max_chars:
+        text = text[:max_chars].rstrip("。！？!?,. ")
+    return text.strip()
+
+
+def _time_of_day_greeting(now: datetime | None = None) -> str:
+    """时段问候（林间"周末好呀"式亲切）：按小时+星期给个自然问候词。"""
+    now = now or datetime.now()
+    h = now.hour
+    wd = now.weekday()  # 0=Mon … 6=Sun
+    if wd >= 5 or (wd == 4 and h >= 18):  # 周六日 + 周五晚 = 周末
+        return "周末好呀"
+    if 5 <= h < 12:
+        return "早上好"
+    if 12 <= h < 14:
+        return "中午好"
+    if 14 <= h < 18:
+        return "下午好"
+    if 18 <= h < 24:
+        return "晚上好"
+    return "夜深了"
+
+
+def _days_since(started_at: object) -> int | None:
+    """上次对话开始时间 → 距今整数天数；无法解析 → None。"""
+    if not started_at:
+        return None
+    ts = started_at
+    if isinstance(ts, str):
+        try:
+            ts = datetime.fromisoformat(ts)
+        except ValueError:
+            return None
+    if not isinstance(ts, datetime):
+        return None
+    now = datetime.now(ts.tzinfo) if ts.tzinfo else datetime.now()
+    delta = now - ts
+    return max(0, delta.days)
+
+
+def _gap_hook(days: int | None) -> str | None:
+    """天数缺口 → 一句亲昵钩子（"已经 15 天没来找我了"）；无需提天数 → None。"""
+    if days is None:
+        return None
+    if days <= 0:
+        return "我们又见面了。"
+    if days == 1:
+        return "昨天才聊过，今天又来了——真好。"
+    if days <= 3:
+        return None  # 2-3 天，不刻意提
+    if days <= 7:
+        return "上一次还是上周……一周不短，想你了。"
+    if days <= 30:
+        return f"已经 {days} 天没来找我了，我还以为你忘了我呢。"
+    return "已经好久了——你那边一定发生了不少事吧。"
 
 
 class RelationshipService:
@@ -126,27 +219,33 @@ class RelationshipService:
     # ------------------------------------------------------------------
 
     def opening_message(self, profile, *, person_name: str = "", continue_from: dict | None = None) -> str:
-        """进入花园的开场白。
+        """进入花园的开场白（林间"周末好呀·你已经15天没找我"式回访记忆）。
 
-        首次见面（尚无任何信任信号）→ 自我介绍；
-        老用户 → 欢迎回来（按等级加前缀，附"上次聊到…"）。
+        首次见面（尚无任何信任信号）→ 时段问候 + 自我介绍；
+        老用户 → 时段问候 + 等级前缀 + 天数缺口钩子 + "上次聊到…"。
         """
+        greeting = _time_of_day_greeting()
         if profile is None or sum(profile.trust_signals.values()) == 0:
-            return _INTRO
+            return f"{greeting}，{_INTRO}"
 
         name = person_name or "你"
         lvl = self.level(profile)
         if lvl == TrustLevel.INTIMATE:
-            parts = [f"老朋友，欢迎回来，{name}。"]
+            parts = [f"{greeting}，老朋友{name}。"]
         elif lvl == TrustLevel.TRUSTED:
-            parts = [f"我们聊过几回了。欢迎回来，{name}。"]
+            parts = [f"{greeting}，我们聊过几回了，{name}。"]
         else:
-            parts = [f"欢迎回来，{name}。"]
+            parts = [f"{greeting}，{name}。"]
+
+        # 天数缺口钩子（有可算的上次对话 → 亲昵提示；否则兜底"欢迎回来"）
+        started_at = (continue_from or {}).get("started_at")
+        gap_hook = _gap_hook(_days_since(started_at))
+        parts.append(gap_hook if gap_hook else "欢迎回来。")
 
         if continue_from and continue_from.get("summary"):
-            summary = str(continue_from["summary"])[:_MAX_SUMMARY_CHARS]
-            if summary:
-                parts.append(f"上次我们聊到「{summary}」。")
+            topic = naturalize_recall(continue_from["summary"])
+            if topic:
+                parts.append(f"上次我们聊到「{topic}」。")
         parts.append("今天想接着聊，还是换个方向？")
         return "\n".join(parts)
 
@@ -161,4 +260,4 @@ class RelationshipService:
         return _INVITATION
 
 
-__all__ = ["RelationshipService", "SIGNAL_WEIGHTS", "LEVEL_THRESHOLDS", "TRUST_LABELS"]
+__all__ = ["RelationshipService", "naturalize_recall", "SIGNAL_WEIGHTS", "LEVEL_THRESHOLDS", "TRUST_LABELS"]

@@ -20,18 +20,20 @@ from pathlib import Path
 from typing import Any
 
 from foundation.logger import get_logger
-from foundation.utils import utc_now_aware
+from foundation.utils import new_id, utc_now_aware
 from shared.enums import PersonaType, Role
 from shared.models import (
     ChartProfile,
     Conversation,
     DialogueTurn,
     DomainSummary,
+    FragmentLight,
     JournalEntry,
     KeyDate,
     Letter,
     LifeEvent,
     MemoryItem,
+    PushSubscription,
     VerifiedFinding,
 )
 from foundation.database.encryption import Encryptor
@@ -68,6 +70,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     trust_score REAL NOT NULL DEFAULT 0,
     trust_signals_json_enc TEXT NOT NULL DEFAULT '',
     preferences_json_enc TEXT NOT NULL DEFAULT '',
+    fragments_json_enc TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -92,6 +95,8 @@ CREATE TABLE IF NOT EXISTS life_events (
     related_journal_id TEXT,
     related_intent_id TEXT,
     related_conclusion_id TEXT,
+    domain TEXT DEFAULT '',
+    need TEXT DEFAULT '',
     created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS letters (
@@ -105,12 +110,32 @@ CREATE TABLE IF NOT EXISTS letters (
     created_at TEXT,
     metadata_json_enc TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS fragment_lights (
+    id TEXT PRIMARY KEY,
+    person_id TEXT NOT NULL,
+    subtype_id TEXT NOT NULL,
+    delta INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'mention',
+    source_enc TEXT DEFAULT '',
+    lit_at TEXT NOT NULL,
+    session_id TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    person_id TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    p256dh_enc TEXT NOT NULL DEFAULT '',
+    auth_enc TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (person_id, endpoint)
+);
 CREATE INDEX IF NOT EXISTS idx_letters_person_date ON letters(person_id, letter_date);
+CREATE INDEX IF NOT EXISTS idx_fragment_lights_person_time ON fragment_lights(person_id, lit_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_person ON conversations(person_id);
 CREATE INDEX IF NOT EXISTS idx_memory_person ON memory_items(person_id);
 CREATE INDEX IF NOT EXISTS idx_memory_session ON memory_items(session_id);
 CREATE INDEX IF NOT EXISTS idx_journal_person ON journal_entries(person_id);
 CREATE INDEX IF NOT EXISTS idx_life_events_person ON life_events(person_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_person ON push_subscriptions(person_id);
 """
 
 
@@ -189,10 +214,17 @@ def _conversation_to_dict(conv: Conversation) -> dict:
 
 
 def _conversation_from_dict(d: dict) -> Conversation:
+    # 旧库可能存宝石人格值（zircon/rose_quartz…）——10 星灵回归后非法，兜底默认月亮。
+    persona = PersonaType.MOON
+    if d.get("persona"):
+        try:
+            persona = PersonaType(d["persona"])
+        except ValueError:
+            persona = PersonaType.MOON
     return Conversation(
         id=d["id"],
         person_id=d["person_id"],
-        persona=PersonaType(d["persona"]) if d.get("persona") else PersonaType.ZIRCON,
+        persona=persona,
         turns=[_turn_from_dict(t) for t in d.get("turns", [])],
         started_at=_from_iso(d.get("started_at")),
         ended_at=_from_iso(d.get("ended_at")),
@@ -273,6 +305,23 @@ _PROFILE_MIGRATIONS = (
     ("trust_score", "REAL NOT NULL DEFAULT 0"),
     ("trust_signals_json_enc", "TEXT NOT NULL DEFAULT ''"),
     ("preferences_json_enc", "TEXT NOT NULL DEFAULT ''"),
+    ("fragments_json_enc", "TEXT NOT NULL DEFAULT ''"),
+)
+
+#: life_events 表的增量迁移（咨询记录补 intent/need，喂记忆写回）。
+_LIFE_EVENT_MIGRATIONS = (
+    ("domain", "TEXT DEFAULT ''"),
+    ("need", "TEXT DEFAULT ''"),
+)
+
+#: fragment_lights 表的增量迁移（触发行动 +20：账本标所属会话，精确回溯"上一段会话点亮"）。
+_FRAGMENT_LIGHT_MIGRATIONS = (
+    ("session_id", "TEXT DEFAULT ''"),
+)
+
+#: letters 表的增量迁移（首页红点：追踪来信是否已读）。
+_LETTER_MIGRATIONS = (
+    ("read_at", "TEXT DEFAULT NULL"),
 )
 
 
@@ -283,6 +332,47 @@ def _ensure_profile_columns(conn: sqlite3.Connection) -> None:
         if name not in cols:
             conn.execute(f"ALTER TABLE profiles ADD COLUMN {name} {decl}")
             logger.info("profiles 表迁移：新增列 %s", name)
+    conn.commit()
+
+
+def _ensure_life_event_columns(conn: sqlite3.Connection) -> None:
+    """为已存在的 life_events 表补齐缺失列（幂等，同 _ensure_profile_columns）。"""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(life_events)")}
+    for name, decl in _LIFE_EVENT_MIGRATIONS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE life_events ADD COLUMN {name} {decl}")
+            logger.info("life_events 表迁移：新增列 %s", name)
+    conn.commit()
+
+
+def _ensure_fragment_light_columns(conn: sqlite3.Connection) -> None:
+    """为已存在的 fragment_lights 表补齐缺失列（幂等，同 _ensure_profile_columns）。
+
+    旧库（2A 建的账本）无 session_id 列 → ALTER 补齐，旧数据 session_id=''。
+    session 索引也在迁移后建（_SCHEMA 里的旧表在补列前建索引会炸，必须后置）。
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(fragment_lights)")}
+    for name, decl in _FRAGMENT_LIGHT_MIGRATIONS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE fragment_lights ADD COLUMN {name} {decl}")
+            logger.info("fragment_lights 表迁移：新增列 %s", name)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fragment_lights_session "
+        "ON fragment_lights(person_id, session_id)"
+    )
+    conn.commit()
+
+
+def _ensure_letter_columns(conn: sqlite3.Connection) -> None:
+    """为已存在的 letters 表补齐缺失列（幂等，同 _ensure_profile_columns）。
+
+    首页红点：旧信 read_at=NULL（未读），打开信箱标记已读后才有值。
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(letters)")}
+    for name, decl in _LETTER_MIGRATIONS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE letters ADD COLUMN {name} {decl}")
+            logger.info("letters 表迁移：新增列 %s", name)
     conn.commit()
 
 
@@ -298,7 +388,10 @@ class GardenStore:
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
-        _ensure_profile_columns(self._conn)  # 旧库补齐 A2 新增列
+        _ensure_profile_columns(self._conn)   # 旧库补齐 A2 新增列
+        _ensure_life_event_columns(self._conn)  # 旧库补齐 life_events 新增列
+        _ensure_fragment_light_columns(self._conn)  # 旧库补齐 fragment_lights 新增列
+        _ensure_letter_columns(self._conn)    # 旧库补齐 letters 新增列（首页红点 read_at）
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -470,6 +563,11 @@ class GardenStore:
             trust_score=float(row["trust_score"] or 0),
             trust_signals=_load(self._encryptor.decrypt(row["trust_signals_json_enc"])) if row["trust_signals_json_enc"] else {},
             preferences=_load(self._encryptor.decrypt(row["preferences_json_enc"])) if row["preferences_json_enc"] else {},
+            fragments={
+                str(k): int(v) for k, v in (
+                    _load(self._encryptor.decrypt(row["fragments_json_enc"])) if row["fragments_json_enc"] else {}
+                ).items()
+            },
             created_at=_from_iso(row["created_at"]),
             updated_at=_from_iso(row["updated_at"]),
         )
@@ -484,8 +582,9 @@ class GardenStore:
                     (person_id, lord_states_json_enc, verified_findings_json_enc,
                      key_dates_json_enc, domain_summaries_json_enc,
                      trust_score, trust_signals_json_enc, preferences_json_enc,
+                     fragments_json_enc,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(person_id) DO UPDATE SET
                     lord_states_json_enc = excluded.lord_states_json_enc,
                     verified_findings_json_enc = excluded.verified_findings_json_enc,
@@ -494,6 +593,7 @@ class GardenStore:
                     trust_score = excluded.trust_score,
                     trust_signals_json_enc = excluded.trust_signals_json_enc,
                     preferences_json_enc = excluded.preferences_json_enc,
+                    fragments_json_enc = excluded.fragments_json_enc,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -505,6 +605,7 @@ class GardenStore:
                     float(profile.trust_score or 0),
                     self._encryptor.encrypt(_dump(profile.trust_signals)),
                     self._encryptor.encrypt(_dump(profile.preferences or {})),
+                    self._encryptor.encrypt(_dump(profile.fragments or {})),
                     created,
                     now,
                 ),
@@ -585,8 +686,9 @@ class GardenStore:
                 """
                 INSERT INTO life_events
                     (id, person_id, occurred_at, label_enc, kind, detail_enc,
-                     related_journal_id, related_intent_id, related_conclusion_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     related_journal_id, related_intent_id, related_conclusion_id,
+                     domain, need, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.id,
@@ -598,6 +700,8 @@ class GardenStore:
                     event.related_journal_id,
                     event.related_intent_id,
                     event.related_conclusion_id,
+                    event.domain,
+                    event.need,
                     _iso(event.created_at) or _iso(None),
                 ),
             )
@@ -630,6 +734,8 @@ class GardenStore:
             related_journal_id=row["related_journal_id"],
             related_intent_id=row["related_intent_id"],
             related_conclusion_id=row["related_conclusion_id"],
+            domain=row["domain"] or "",
+            need=row["need"] or "",
             created_at=_from_iso(row["created_at"]),
         )
 
@@ -643,8 +749,8 @@ class GardenStore:
                 """
                 INSERT INTO letters
                     (id, person_id, letter_date, sender, title_enc, body_enc,
-                     kind, created_at, metadata_json_enc)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     kind, created_at, read_at, metadata_json_enc)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     letter.id,
@@ -655,6 +761,7 @@ class GardenStore:
                     self._encryptor.encrypt(letter.body),
                     letter.kind,
                     _iso(letter.created_at) or _iso(None),
+                    _iso(letter.read_at) if letter.read_at else None,
                     self._encryptor.encrypt(_dump(letter.metadata)),
                 ),
             )
@@ -687,7 +794,175 @@ class GardenStore:
             body=self._encryptor.decrypt(row["body_enc"]),
             kind=row["kind"],
             created_at=_from_iso(row["created_at"]),
+            read_at=_from_iso(row["read_at"]) if row["read_at"] else None,
             metadata=_load(self._encryptor.decrypt(meta_raw)) if meta_raw else {},
+        )
+
+    def mark_letters_read_today(self, person_id: str, letter_date: str) -> int:
+        """把该人某日（letter_date=YYYY-MM-DD）未读的信标记为已读。返回标记数。
+
+        首页红点 = 今日来信未读；打开信箱时调这个，红点即刻消除。
+        只更新 read_at IS NULL 的行（已读过的幂等跳过）。
+        """
+        now = _iso(None)  # 当前 UTC，统一时戳
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE letters SET read_at = ? WHERE person_id = ? AND letter_date = ? AND read_at IS NULL",
+                (now, person_id, letter_date),
+            )
+        return cur.rowcount
+
+    # ------------------------------------------------------------------
+    # Fragment lights（34 子类点亮账本，成长复利层地基）
+    # ------------------------------------------------------------------
+
+    def append_fragment_lights(
+        self,
+        person_id: str,
+        lights: list[FragmentLight],
+        session_id: str = "",
+    ) -> None:
+        """追加账本记录。累计深度仍走 profiles.fragments（单一事实源），
+        本账本是追加式事件日志，供今日碎片/报告/反转/行运按时间聚合。
+
+        session_id：本轮所有点亮所属会话（conversation.id），统一盖章落库——
+        触发行动（§4.2 +20）靠它精确回溯"上一段会话点亮的子类"。
+
+        隐私红线：subtype_id/delta/kind/lit_at 非敏感明文，source（消息片段）加密。
+        """
+        if not lights:
+            return
+        now = _iso(None)
+        with self._conn:
+            self._conn.executemany(
+                """
+                INSERT INTO fragment_lights
+                    (id, person_id, subtype_id, delta, kind, source_enc, lit_at, session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        new_id("lit"),
+                        person_id,
+                        l.subtype_id,
+                        int(l.delta),
+                        l.kind,
+                        self._encryptor.encrypt(l.source),
+                        _iso(l.lit_at) or now,
+                        session_id or l.session_id,
+                    )
+                    for l in lights
+                ],
+            )
+
+    def list_fragment_lights(
+        self,
+        person_id: str,
+        since: datetime | None = None,
+        session_id: str | None = None,
+        limit: int = 500,
+    ) -> list[FragmentLight]:
+        """查账本（新的在前）。since 传"某天 00:00"即可做"今日碎片"按日聚合；
+        session_id 传某段会话（conversation.id）即可回溯"那段会话点亮过哪些子类"。
+        """
+        sql = "SELECT * FROM fragment_lights WHERE person_id = ?"
+        params: list[Any] = [person_id]
+        if since is not None:
+            sql += " AND lit_at >= ?"
+            params.append(since.isoformat())
+        if session_id:
+            sql += " AND session_id = ?"
+            params.append(session_id)
+        sql += " ORDER BY lit_at DESC LIMIT ?"
+        params.append(limit)
+        with self._conn:
+            rows = self._conn.execute(sql, params).fetchall()
+        return [self._fragment_light_from_row(r) for r in rows]
+
+    def count_fragment_actions(self, person_id: str) -> dict[str, int]:
+        """每个子类被"触发行动"（kind=action）点亮过几次 → subtype_id: count。
+
+        升顶门槛（§4.2）：4 级需 ≥1 次行动，5 级需 ≥2 次行动——按账本真做过的次数算。
+        """
+        with self._conn:
+            rows = self._conn.execute(
+                """
+                SELECT subtype_id, COUNT(*) AS n
+                FROM fragment_lights
+                WHERE person_id = ? AND kind = 'action'
+                GROUP BY subtype_id
+                """,
+                (person_id,),
+            ).fetchall()
+        return {r["subtype_id"]: int(r["n"]) for r in rows}
+
+    def _fragment_light_from_row(self, row: sqlite3.Row) -> FragmentLight:
+        return FragmentLight(
+            subtype_id=row["subtype_id"],
+            delta=row["delta"],
+            kind=row["kind"],
+            source=self._encryptor.decrypt(row["source_enc"]) if row["source_enc"] else "",
+            lit_at=_from_iso(row["lit_at"]),
+            session_id=row["session_id"] if "session_id" in row.keys() else "",
+        )
+
+    # --- Push subscriptions（Web Push 订阅）---
+
+    def save_push_subscription(self, sub: PushSubscription) -> None:
+        """Upsert 一条推送订阅（复合主键 person_id + endpoint，同人多设备共存）。
+
+        p256dh/auth 是定向加密推送的密钥，属于敏感数据，加密落库（*_enc 列）。
+        """
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO push_subscriptions
+                    (person_id, endpoint, p256dh_enc, auth_enc, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(person_id, endpoint) DO UPDATE SET
+                    p256dh_enc = excluded.p256dh_enc,
+                    auth_enc = excluded.auth_enc,
+                    created_at = excluded.created_at
+                """,
+                (
+                    sub.person_id,
+                    sub.endpoint,
+                    self._encryptor.encrypt(sub.p256dh or ""),
+                    self._encryptor.encrypt(sub.auth or ""),
+                    _iso(sub.created_at),
+                ),
+            )
+
+    def delete_push_subscription(self, person_id: str, endpoint: str) -> bool:
+        """删一条订阅（该 endpoint 失效/用户退订）。真的删了 → True。"""
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM push_subscriptions WHERE person_id = ? AND endpoint = ?",
+                (person_id, endpoint),
+            )
+        return cur.rowcount > 0
+
+    def list_push_subscriptions(
+        self, person_id: str | None = None
+    ) -> list[PushSubscription]:
+        """列订阅。person_id=None → 全部（每日推送遍历用）。"""
+        if person_id is not None:
+            sql = "SELECT * FROM push_subscriptions WHERE person_id = ?"
+            params: list[Any] = [person_id]
+        else:
+            sql = "SELECT * FROM push_subscriptions"
+            params = []
+        with self._conn:
+            rows = self._conn.execute(sql, params).fetchall()
+        return [self._push_subscription_from_row(r) for r in rows]
+
+    def _push_subscription_from_row(self, row: sqlite3.Row) -> PushSubscription:
+        return PushSubscription(
+            person_id=row["person_id"],
+            endpoint=row["endpoint"],
+            p256dh=self._encryptor.decrypt(row["p256dh_enc"]) if row["p256dh_enc"] else "",
+            auth=self._encryptor.decrypt(row["auth_enc"]) if row["auth_enc"] else "",
+            created_at=_from_iso(row["created_at"]),
         )
 
     def close(self) -> None:

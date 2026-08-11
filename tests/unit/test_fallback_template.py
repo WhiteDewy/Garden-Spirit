@@ -50,7 +50,7 @@ def _make_conclusion() -> Conclusion:
 
 
 def test_fallback_is_human_not_scoring_report():
-    out = GardenSpiritAgent._fallback_template(_make_conclusion(), _make_intent(), PersonaType.ZIRCON)
+    out = GardenSpiritAgent._fallback_template(_make_conclusion(), _make_intent(), PersonaType.MOON)
 
     # 生硬的评分报告残留不得出现
     assert "总体判断：" not in out
@@ -80,7 +80,7 @@ def test_fallback_filters_all_scoring_no_raw_dump():
         Finding(id="f2", category=ConclusionCategory.FINDING, text="职业风险综合评分 -0.7（凶星相位）",
                 polarity=EvidencePolarity.NEGATIVE, confidence=0.8),
     ]
-    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.ZIRCON)
+    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.MOON)
     assert "综合评分" not in out
     assert "想先和你分享几个观察" not in out
     assert "站在你这边" in out  # 判定开场仍在
@@ -89,7 +89,7 @@ def test_fallback_filters_all_scoring_no_raw_dump():
 def test_fallback_descriptive():
     c = _make_conclusion()
     c.metadata["descriptive"] = True
-    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.ZIRCON)
+    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.MOON)
     assert "关于时机" not in out  # 描述性解读不展开时机
     assert "不构成医疗" in out
 
@@ -98,7 +98,7 @@ def test_fallback_no_recommendations_gives_way_out():
     """A3 护栏：没有建议也不能留下绝路——兜底一句通用出路。"""
     c = _make_conclusion()
     c.recommendations = []
-    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.ZIRCON)
+    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.MOON)
     assert "不是死路" in out          # 通用出路
     assert "给出路" not in out        # 不出露"方案元语言"
     assert "不构成医疗" in out
@@ -108,7 +108,7 @@ def test_fallback_fatalistic_gets_coda():
     """A3 硬护栏：Domain 产出了致命判决词 → coda 补在免责声明前。"""
     c = _make_conclusion()
     c.summary = "你注定单身，感情这条路没有结果"
-    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.ZIRCON)
+    out = GardenSpiritAgent._fallback_template(c, _make_intent(), PersonaType.MOON)
     # 出路收尾在正文，位于免责声明之前
     assert "不过，这都不是判决" in out
     assert out.index("不过，这都不是判决") < out.index("不构成医疗")

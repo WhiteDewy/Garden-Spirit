@@ -70,3 +70,11 @@ def test_letter_local_date_uses_person_tz():
     # YYYY-MM-DD 且能解析
     from datetime import date as date_type
     assert date_type.fromisoformat(letter.letter_date)
+
+
+def test_new_daily_letter_unread_by_default():
+    """新生成的今日来信 read_at=None（未读）→ 首页信箱红点依据。"""
+    p = _make_person()
+    service = _make_service()
+    letter = service.get_or_create_daily(p)
+    assert letter.read_at is None

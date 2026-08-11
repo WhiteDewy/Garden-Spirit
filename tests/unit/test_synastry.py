@@ -103,7 +103,7 @@ def test_agent_annotates_house_system():
     agent = GardenSpiritAgent()
     user = make_person("hs2", 1985, 12, 21, 3, 15, lat=59.9139, lon=10.7522)
     user.house_system = HouseSystem.ALCABITIUS
-    answer = agent.handle_message("s_hs", "我的财运怎么样", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_hs", "我的财运怎么样", user, PersonaType.MOON)
     assert "阿卡比特" in answer
 
 
@@ -111,7 +111,7 @@ def test_agent_asks_for_partner_data():
     """提到男朋友但没对方数据 → 追问。"""
     agent = GardenSpiritAgent()
     user = make_person("u2", 1990, 6, 15, 9, 30)
-    answer = agent.handle_message("s_ask", "我和我男朋友合不合适", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_ask", "我和我男朋友合不合适", user, PersonaType.MOON)
     assert "出生时间" in answer
     ctx = agent.context_builder._sessions["s_ask"]
     assert ctx.pending_related_person is True
@@ -124,11 +124,11 @@ def test_agent_synastry_after_partner_registered():
     partner = make_person("p3", 1991, 11, 2, 15, 45, lat=39.9042, lon=116.4074)
 
     # 先问一次 → 得到追问
-    agent.handle_message("s_syn", "我和我男朋友合不合适", user, PersonaType.ZIRCON)
+    agent.handle_message("s_syn", "我和我男朋友合不合适", user, PersonaType.MOON)
     # 登记对方出生数据
     agent.set_related_person("s_syn", partner)
     # 再问 → 走合盘
-    answer = agent.handle_message("s_syn", "我和我男朋友合不合适", user, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_syn", "我和我男朋友合不合适", user, PersonaType.MOON)
     ctx = agent.context_builder._sessions["s_syn"]
     assert ctx.latest_conclusion is not None
     assert len(ctx.latest_conclusion.findings) > 0

@@ -80,7 +80,7 @@ def main() -> None:
     # --- 2. 完整管线：她的真实问题 ---
     print("\n" + "=" * 60)
     print("【完整管线】她的真实问题")
-    answer = agent.handle_message("s_xiatian", natural, person, PersonaType.ZIRCON)
+    answer = agent.handle_message("s_xiatian", natural, person, PersonaType.MOON)
     print(answer)
     ctx = agent.context_builder._sessions["s_xiatian"]
     concl = ctx.latest_conclusion
@@ -94,13 +94,13 @@ def main() -> None:
     q2 = "我想换工作，换行业去做AI产品经理，今年合适吗？风险大吗？"
     intent2 = router.route(q2)
     print("路由 →", intent2.domain.value, "/", intent2.subdomain)
-    answer2 = agent.handle_message("s_xiatian2", q2, person, PersonaType.ZIRCON)
+    answer2 = agent.handle_message("s_xiatian2", q2, person, PersonaType.MOON)
     print(answer2)
 
     # --- 4. 确定性验证 ---
     print("\n" + "=" * 60)
-    a1 = agent.handle_message("s_det1", "我适合转行做产品经理吗？", person, PersonaType.ZIRCON)
-    a2 = agent.handle_message("s_det2", "我适合转行做产品经理吗？", person, PersonaType.ZIRCON)
+    a1 = agent.handle_message("s_det1", "我适合转行做产品经理吗？", person, PersonaType.MOON)
+    a2 = agent.handle_message("s_det2", "我适合转行做产品经理吗？", person, PersonaType.MOON)
     print("【确定性】同一问题两次回答完全一致:", a1 == a2)
 
 

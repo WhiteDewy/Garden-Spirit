@@ -50,6 +50,16 @@ class SessionContext:
         self.memory = memory
         self.latest_intent = None
         self.latest_conclusion = None
+        self.emotion_result = None       # 情绪感知结果（陪伴协议第 1 步）; EmotionResult | None
+        self.last_was_companion = False  # 本条是否走陪伴轨道（递出口门控在 API 层）
+        self.fragments: list[str] = []   # 本条命中的 34 子类 id（§2 点亮，随聊轨道填）
+        #: 被照见（§4.2 +5）：上一轮镜映/解读点亮的子类，本轮用户确认"对，就是这样"→ 补 +5。
+        #: API 层结算本轮点亮后写入，下一轮作为照见候选读取。
+        self.previous_lit_fragments: list[str] = []
+        self.previous_lighted: bool = False   # 上一轮是否有值得确认的镜映/解读
+        #: 语境定刻（§1.1.1）：此刻被触动的星灵 + 抓手 + 情绪/诉求（陪伴轨道填）。
+        #: 只报激活，不判方向——方向由 Domain 相位表出（硬线）。
+        self.planet_activation = None    # PlanetActivation | None
         self.related_person: Person | None = None      # 合盘对象（含出生数据）
         self.pending_related_person: bool = False      # 已问过对方数据，等待提供
         #: A2 关系层：本条消息是否命中纯问候/闲聊快路径（_detect_chat）。

@@ -57,8 +57,12 @@ class MemoryService:
         conversation: Conversation,
         intent: Intent | None = None,
         conclusion: Conclusion | None = None,
+        need: str = "",
     ) -> dict:
         """一次咨询后的完整写回。可安全重放（会话/画像 upsert，成长事件按结论去重）。
+
+        need: 诉求类型（heard/soothed/sorted/pushed，情绪感知层出）——咨询记录
+        补意图/需求喂记忆写回（Phase 1 剩余），供时间轴/记忆消费。
 
         返回 {"conversation_id", "summary", "profile_updated", "life_event_id"}。
         """
@@ -86,6 +90,8 @@ class MemoryService:
                     detail=(conclusion.summary or "")[:300],
                     related_intent_id=intent.id if intent is not None else None,
                     related_conclusion_id=conclusion.id,
+                    domain=domain,          # 咨询记录补意图（八大领域）
+                    need=need,              # 咨询记录补需求（诉求类型）
                     created_at=utc_now_aware(),
                 )
                 self._store.save_life_event(event)
@@ -96,6 +102,29 @@ class MemoryService:
             "summary": summary,
             "profile_updated": profile_updated,
             "life_event_id": life_event_id,
+        }
+
+    def apply_chat_writeback(
+        self,
+        *,
+        person_id: str,
+        conversation: Conversation,
+    ) -> dict:
+        """随聊轨道写回（self_map_design §6 双存）：只存会话摘要，不碰领域画像。
+
+        咨询结论 → apply_writeback（领域理解/沉淀判断/成长事件）。
+        随聊/陪伴 → 这里——保存摘要供"继续昨天的话题"，不污染咨询画像
+        （Daily.Chat 的摘要不该塞进 domain_summaries["daily"]）。
+        可安全重放（会话 upsert）。
+
+        返回 {"conversation_id", "summary", "saved"}。
+        """
+        summary, _ = self._summarizer.summarize(conversation, domain="")
+        self._store.save_conversation(conversation, summary=summary)
+        return {
+            "conversation_id": conversation.id,
+            "summary": summary,
+            "saved": True,
         }
 
     # ------------------------------------------------------------------

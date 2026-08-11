@@ -84,12 +84,12 @@ def test_agent_multiturn_followup(person):
     sid = "mt_test"
 
     first = agent.handle_message(
-        sid, "我想换工作，换行业去做AI产品经理，今年合适吗？", person, PersonaType.ZIRCON
+        sid, "我想换工作，换行业去做AI产品经理，今年合适吗？", person, PersonaType.MOON
     )
     ctx = agent.context_builder._sessions[sid]
     assert ctx.latest_intent.subdomain == "ChangeJob"
 
-    follow = agent.handle_message(sid, "那明年呢？", person, PersonaType.ZIRCON)
+    follow = agent.handle_message(sid, "那明年呢？", person, PersonaType.MOON)
     # 不再掉进澄清
     assert "不确定你想问哪方面" not in follow
     # 窗口应包含明年（2027）
