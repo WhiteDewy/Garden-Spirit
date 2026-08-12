@@ -12,6 +12,7 @@ from domain.timeline.lunar_return import LunarReturn, LunarReturnCalculator
 from domain.timeline.progressed import ProgressedMoon, ProgressedMoonCalculator
 from domain.timeline.scanner import WindowScanner
 from domain.timeline.solar_return import SolarReturn, SolarReturnCalculator
+from domain.timeline.spirit_recommender import PlanetActivationScore, score_spirits
 from domain.timeline.timing_stack import TimingStack, build_timing_stack
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "FirdariaReading",
     "LunarReturn",
     "LunarReturnCalculator",
+    "PlanetActivationScore",
     "ProgressedMoon",
     "ProgressedMoonCalculator",
     "SolarReturn",
@@ -29,5 +31,6 @@ __all__ = [
     "build_timing_stack",
     "compute_firdaria",
     "firdaria_reading",
+    "score_spirits",
     "time_lord_character",
 ]

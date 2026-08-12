@@ -406,6 +406,12 @@ class FragmentService:
             })
         return out
 
+    @staticmethod
+    def name_for(subtype_id: str) -> str:
+        """子类 id → 中文名（记忆召回/文案用）。未知 id → 原样返回，不炸。"""
+        frag = _FRAGMENT_BY_ID.get(subtype_id)
+        return frag.name if frag is not None else subtype_id
+
 
 __all__ = [
     "Fragment",

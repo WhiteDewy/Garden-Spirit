@@ -24,9 +24,9 @@ from pydantic import BaseModel, Field
 from foundation.astronomy.geocoding import geocode, manual_location
 from foundation.config import AppConfig
 from foundation.database import PersonRepository
-from foundation.database.store import GardenStore
+from foundation.database.store import GardenStore, _birth_from_json, _birth_to_json
 from foundation.utils import birth_data_fallback, new_id, utc_now_aware
-from shared.enums import ConsultMode, HouseSystem, IntentDomain, PersonaType
+from shared.enums import ConsultMode, HouseSystem, IntentDomain, PersonaType, Planet
 from shared.models import ChartProfile, GeoLocation, Letter, Person
 
 from application.action import ActionService
@@ -38,6 +38,7 @@ from application.memory.service import MemoryService
 from application.relationship import RelationshipService, naturalize_recall
 from application.conversation.action import ActionDetector
 from application.conversation.confirmation import ConfirmationDetector
+from application.conversation.persona import get_persona
 from application.push import PushService
 from application.conversation.fragments import (
     DEPTH_ACTION,
@@ -46,6 +47,7 @@ from application.conversation.fragments import (
     DEPTH_SEEN,
     FragmentService,
 )
+from domain.timeline.spirit_recommender import score_spirits
 
 APP_NAME = "星灵花园 Garden-Spirit"
 APP_VERSION = "0.1.0"
@@ -100,6 +102,7 @@ class ChatIn(BaseModel):
     message: str
     persona: str | None = None     # 星灵人格名（小写，如 "zircon"）
     mode: str | None = None        # 咨询模式：quick/deep/annual/chart/free（默认 deep）
+    related_person_id: str | None = None  # 本次合盘使用的对象（先 POST /related 保存）
 
 
 class ChatOut(BaseModel):
@@ -277,6 +280,93 @@ class JournalOut(BaseModel):
     updated_at: str | None = None
 
 
+class RelatedPersonIn(BaseModel):
+    """保存一个合盘对象（对方出生数据）。birth 复用建档的 BirthIn 格式。"""
+
+    name: str
+    birth: BirthIn
+    gender: str | None = None
+    notes: str = ""
+
+
+class RelatedPersonOut(BaseModel):
+    """合盘对象出参。列表视图省略出生数据（隐私：列表只要名字）。"""
+
+    id: str
+    person_id: str
+    name: str
+    created_at: str | None = None
+
+
+class SpiritRecommendationOut(BaseModel):
+    """今日一位星灵的推荐出参（可解释：为什么今天见 ta）。
+
+    planet=行星值，name/healing_name/style 由人格映射（Application 层）；
+    is_default=月亮兜底星（永远在列表里）；reason 为可追溯理由。
+    """
+
+    planet: str
+    name: str
+    healing_name: str
+    style: str = ""
+    score: float
+    reason: str = ""
+    is_default: bool = False
+    is_firdaria_major_lord: bool = False
+    is_firdaria_sub_lord: bool = False
+
+
+class RecommendedSpiritsOut(BaseModel):
+    """今日推荐（按综合分降序，含兜底月亮）。"""
+
+    spirits: list[SpiritRecommendationOut]
+    generated_at: str
+
+
+class PersonExportOut(BaseModel):
+    """合规数据导出：该用户全量数据明文聚合（下载 / 迁移 / 删除前存档）。
+
+    PRD §8「可随时删除数据」的配套：删除前先导出留档。
+    出生数据在 person（PersonOut），其余各表解密成明文 dict 列表。
+    """
+
+    person: PersonOut
+    profile: dict | None = None
+    conversations: list[dict] = []
+    memory_items: list[dict] = []
+    journal_entries: list[dict] = []
+    life_events: list[dict] = []
+    letters: list[dict] = []
+    fragment_lights: list[dict] = []
+    push_subscriptions: list[dict] = []
+    related_persons: list[dict] = []
+    exported_at: str
+
+
+class RecallItem(BaseModel):
+    """一条"我记得你"的记忆豆荚（确定性聚合，无 LLM）。
+
+    kind 标识来源：
+    - key_date         画像关键日期（"2025年夏天你考虑换工作"）
+    - confirmed_finding  用户确认过的沉淀判断（"上次你确认过…"）
+    - domain_summary   领域摘要（"关于感情我记得你说过…"）
+    - top_fragment     点亮账本 top（"这格越走越亮"）
+    - recent_topic     最近会话话题（"上次我们聊到…"）
+    """
+
+    kind: str
+    label: str
+    detail: str = ""
+    at: str | None = None
+
+
+class RecallOut(BaseModel):
+    """记忆召回：确定性素材豆荚列表（无 LLM，硬线：LLM 只管"怎么疗愈"）。"""
+
+    items: list[RecallItem]
+    has_memory: bool
+
+
 class LetterOut(BaseModel):
     id: str
     person_id: str
@@ -313,6 +403,8 @@ class GardenState(BaseModel):
     letter_unread: bool = False
     # 站内"回家看看"兜底（推送后置）：今天（本地日）点亮的 top3 灵魂碎片
     soul_fragments: list[SoulFragmentOut] = []
+    # 记忆召回豆荚（"我记得你"素材；有内容才有，空用户为 None）
+    recall: RecallOut | None = None
 
 
 def _local_day_utc(person: Person) -> tuple[datetime, str]:
@@ -426,6 +518,156 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     def get_person(person_id: str) -> PersonOut:
         return _to_person_out(_get_person(person_id))
 
+    @app.get("/person/{person_id}/export", response_model=PersonExportOut)
+    def export_person(person_id: str) -> PersonExportOut:
+        """合规数据导出：全量明文聚合（删除前存档 / 迁移备份 / 用户自取）。
+
+        出生数据 + 画像 + 会话正文 + 原始消息 + 日记 + 人生事件 + 来信
+        + 点亮账本 + 推送订阅 + 合盘对象（含出生数据）。
+        """
+        person = _get_person(person_id)
+        data = store.export_person(person_id)
+        return PersonExportOut(
+            person=_to_person_out(person),
+            profile=data.get("profile"),
+            conversations=data.get("conversations", []),
+            memory_items=data.get("memory_items", []),
+            journal_entries=data.get("journal_entries", []),
+            life_events=data.get("life_events", []),
+            letters=data.get("letters", []),
+            fragment_lights=data.get("fragment_lights", []),
+            push_subscriptions=data.get("push_subscriptions", []),
+            related_persons=data.get("related_persons", []),
+            exported_at=_iso_str(datetime.now(timezone.utc)),
+        )
+
+    @app.delete("/person/{person_id}")
+    def delete_person(person_id: str) -> dict:
+        """合规全量删除（PRD §8「可随时删除数据」）。
+
+        先清空 9 张业务表（store.purge_person 级联），再删 persons 表。
+        不可逆操作：前端应先走 GET /export 存档并二次确认。
+        """
+        _get_person(person_id)  # 存在性校验（缺失 → 404）
+        store.purge_person(person_id)
+        person_repo.delete(person_id)
+        return {"deleted": person_id}
+
+    @app.get("/person/{person_id}/recall", response_model=RecallOut)
+    def get_recall(person_id: str, persona: str | None = Query(None)) -> RecallOut:
+        """记忆召回："我记得你"素材豆荚（确定性聚合，无 LLM）。
+
+        画像关键日期 + 用户确认的判断 + 领域摘要 + 点亮账本 top + 最近话题。
+        前端可做"记忆卡片"；开场白也从这里取一句（见 /opening）。
+        persona：记忆镜头（同一份记忆，十种读法）——土星先讲事业摘要、月亮先讲
+        情绪关键日期…；缺省 → 默认顺序。
+        """
+        _get_person(person_id)
+        items = _build_recall_items(store.get_recall_data(person_id), persona=_resolve_persona(persona))
+        return RecallOut(items=items, has_memory=bool(items))
+
+    # ------------------------------------------------------------------
+    # 合盘对象（related_person）：对方出生数据持久化，多轮合盘不再断链
+    # ------------------------------------------------------------------
+
+    @app.post("/person/{person_id}/related", response_model=RelatedPersonOut)
+    def save_related_person(person_id: str, body: RelatedPersonIn) -> RelatedPersonOut:
+        """保存一个合盘对象（对方出生数据，Fernet 加密落库）。
+
+        前端流程：用户在聊天收到 needs_related_person=True → 弹出对方出生表单 →
+        本端点保存 → 返回 id → 下次 /chat 带 related_person_id 走合盘。
+        """
+        _get_person(person_id)  # 校验所有者存在
+        location = _resolve_location(body.birth.location)
+        birth = _to_birth_data(body.birth, location)
+        related_id = new_id("rel")
+        store.save_related_person(
+            related_id,
+            person_id,
+            body.name,
+            _birth_to_json(birth),
+            gender=body.gender or "",
+            notes=body.notes,
+        )
+        return RelatedPersonOut(
+            id=related_id,
+            person_id=person_id,
+            name=body.name,
+            created_at=_iso_str(datetime.now(timezone.utc)),
+        )
+
+    @app.get("/person/{person_id}/related", response_model=list[RelatedPersonOut])
+    def list_related_persons(person_id: str) -> list[RelatedPersonOut]:
+        """列出该用户保存的合盘对象（只含名字——列表视图不暴露出生数据）。"""
+        _get_person(person_id)
+        return [
+            RelatedPersonOut(
+                id=d["id"],
+                person_id=d["person_id"],
+                name=d["name"],
+                created_at=d.get("created_at"),
+            )
+            for d in store.list_related_persons(person_id)
+        ]
+
+    @app.delete("/person/{person_id}/related/{related_id}")
+    def delete_related_person(person_id: str, related_id: str) -> dict:
+        """删除一个合盘对象（合规：用户可随时删除自己的数据）。
+
+        校验归属：只能删属于自己的对象，删除不存在/他人对象 → 404。
+        """
+        data = store.get_related_person(related_id)
+        if data is None or data["person_id"] != person_id:
+            raise HTTPException(status_code=404, detail="合盘对象不存在")
+        store.delete_related_person(related_id)
+        return {"deleted": related_id}
+
+    # ------------------------------------------------------------------
+    # 星灵推荐引擎：今天该见哪颗星（三轴评分，Domain 无 LLM）
+    # ------------------------------------------------------------------
+
+    @app.get(
+        "/person/{person_id}/recommended-spirits",
+        response_model=RecommendedSpiritsOut,
+    )
+    def recommended_spirits(person_id: str) -> RecommendedSpiritsOut:
+        """今日星灵推荐：行运活跃 0.5 + 近期共振 0.3 + 长期课题 0.2（未实现并入前两轴）。
+
+        首页素材：按综合分降序出 10 颗，前端取 top3；月亮永远兜底（is_default）。
+        理由可解释（"行运土星合你本命太阳"）——硬线：结论全由 Domain 出。
+        """
+        person = _get_person(person_id)
+        profile = _get_or_init_profile(store, person_id)  # 无画像 → 空碎片，纯行运分
+        natal = agent._calculator.compute(person)
+        target = datetime.now(timezone.utc)
+        lat = person.birth.location.latitude
+        lon = person.birth.location.longitude
+        hs = person.house_system or HouseSystem.PLACIDUS
+        scores = score_spirits(
+            natal, target, lat, lon, hs,
+            fragment_depths=dict(profile.fragments or {}),
+        )
+        spirits = []
+        for s in scores:
+            persona = get_persona(s.planet.value)  # 人格映射（疗愈名/口吻在 Application 层）
+            spirits.append(
+                SpiritRecommendationOut(
+                    planet=s.planet.value,
+                    name=persona.name,
+                    healing_name=persona.healing_name,
+                    style=persona.style,
+                    score=s.score,
+                    reason="；".join(s.reason_parts) if s.reason_parts else "今日暂无明显行运触动",
+                    is_default=(s.planet == Planet.MOON),
+                    is_firdaria_major_lord=s.is_firdaria_major_lord,
+                    is_firdaria_sub_lord=s.is_firdaria_sub_lord,
+                )
+            )
+        return RecommendedSpiritsOut(
+            spirits=spirits,
+            generated_at=_iso_str(target),
+        )
+
     @app.get("/person/{person_id}/profile", response_model=ProfileOut)
     def get_profile(person_id: str) -> ProfileOut:
         profile = store.get_profile(person_id)
@@ -527,7 +769,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         return {"ok": True, "marked": marked}
 
     @app.get("/garden", response_model=GardenState)
-    def garden(person_id: str = Query(...)) -> GardenState:
+    def garden(person_id: str = Query(...), persona: str | None = Query(None)) -> GardenState:
         """花园首页聚合（站内"回家看看"）：今日来信 + 今日灵魂碎片 + 继续昨天 + 领域 + 待验证。"""
         person = _get_person(person_id)
         today_letter = letter.get_or_create_daily(person)
@@ -539,6 +781,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         # 继续昨天：摘要在读出口统一自然化（首页卡片与开场白同源，旧转写数据也可读）
         if recent:
             recent[0]["summary"] = naturalize_recall(recent[0].get("summary"))
+        # 记忆召回豆荚（"我记得你"；空用户不吐空壳，前端少一个空态判断）
+        recall_items = _build_recall_items(store.get_recall_data(person_id), persona=_resolve_persona(persona))
+        recall = (
+            RecallOut(items=recall_items, has_memory=True)
+            if recall_items else None
+        )
         return GardenState(
             person_id=person_id,
             today=today_letter.letter_date,
@@ -549,16 +797,24 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             pending_verifications=action.pending_count(profile),
             letter_unread=today_letter.read_at is None,  # 今日来信未读 → 信箱 nav 红点
             soul_fragments=FragmentService.top_soul_fragments(lights, limit=3),
+            recall=recall,
         )
 
     @app.get("/person/{person_id}/opening", response_model=OpeningOut)
-    def get_opening(person_id: str) -> OpeningOut:
-        """进入花园的开场白：首次见面自我介绍 / 老用户欢迎回来。"""
+    def get_opening(person_id: str, persona: str | None = Query(None)) -> OpeningOut:
+        """进入花园的开场白：首次见面自我介绍 / 老用户欢迎回来。
+
+        persona：记忆镜头——同一份记忆，土星用"你扛着的…还守得住吗"开场、
+        月亮用"现在心里还沉吗"开场…；缺省 → 默认话术。
+        """
         person = _get_person(person_id)
         profile = store.get_profile(person_id)
         recent = store.list_conversation_summaries(person_id, limit=1)
+        p = _resolve_persona(persona)
+        recall = _recall_for_opening(store.get_recall_data(person_id), persona=p)
         opening = relationship.opening_message(
             profile, person_name=person.name, continue_from=recent[0] if recent else None,
+            recall=recall, persona=p,
         )
         return OpeningOut(
             opening=opening,
@@ -741,8 +997,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 persona = None
         mode = _parse_mode(body.mode)
 
-        # 已有会话且该用户请求过合盘对象 → 登记（单会话内生效）
-        _restore_related_person(agent, session_id, body.person_id, person)
+        # 用户指定合盘对象 → 从 DB 恢复到会话上下文（多轮持久化）
+        _restore_related_person(store, agent, session_id, body.person_id, body.related_person_id, person)
 
         answer = agent.handle_message(session_id, body.message, person, persona, mode=mode)
 
@@ -960,16 +1216,7 @@ def _to_person(body: PersonIn) -> Person:
     时间：接收出生地墙钟时间，按解析出的时区换算成 UTC；时间未知走正午降级。
     """
     location = _resolve_location(body.birth.location)
-
-    try:
-        dt_local = datetime.fromisoformat(body.birth.datetime_local)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"出生时间格式错误: {body.birth.datetime_local}") from exc
-
-    if dt_local.tzinfo is None:
-        dt_local = dt_local.replace(tzinfo=ZoneInfo(location.timezone_name))
-    dt_utc = dt_local.astimezone(timezone.utc)
-    birth = birth_data_fallback(dt_utc, location, body.birth.time_known)
+    birth = _to_birth_data(body.birth, location)
 
     return Person(
         id=body.id or new_id("person"),
@@ -979,6 +1226,24 @@ def _to_person(body: PersonIn) -> Person:
         notes=body.notes,
         house_system=HouseSystem(body.house_system) if body.house_system else None,
     )
+
+
+def _to_birth_data(birth_in: BirthIn, location: GeoLocation):
+    """BirthIn + 已解析 GeoLocation → BirthData（墙钟→UTC + 正午降级）。
+
+    建档与保存合盘对象共用同一套出生时间换算逻辑（避免两处漂移）。
+    """
+    try:
+        dt_local = datetime.fromisoformat(birth_in.datetime_local)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"出生时间格式错误: {birth_in.datetime_local}"
+        ) from exc
+
+    if dt_local.tzinfo is None:
+        dt_local = dt_local.replace(tzinfo=ZoneInfo(location.timezone_name))
+    dt_utc = dt_local.astimezone(timezone.utc)
+    return birth_data_fallback(dt_utc, location, birth_in.time_known)
 
 
 def _resolve_location(loc: GeoIn) -> GeoLocation:
@@ -1033,9 +1298,34 @@ def _to_person_out(p: Person) -> PersonOut:
     )
 
 
-def _restore_related_person(agent, session_id: str, person_id: str, person: Person) -> None:
-    """单会话合盘对象目前只活在内存里；跨会话恢复留到 V2（持久化会话）。"""
-    return None
+def _restore_related_person(
+    store: GardenStore,
+    agent,
+    session_id: str,
+    person_id: str,
+    related_person_id: str | None,
+    person: Person,
+) -> None:
+    """每次 /chat 开头调用：把用户指定的合盘对象从 DB 恢复到会话上下文。
+
+    related_person_id 为空 → 跳过（无合盘意图）。不存在 / 不属于该用户 → 静默跳过
+    （不 500；对话走普通路径）。恢复成功 → agent.set_related_person() 注入内存会话。
+    会话上下文可能还没建（handle_message 里才建），用盘主 person 预建。
+    """
+    if not related_person_id:
+        return
+    data = store.get_related_person(related_person_id)
+    if data is None or data["person_id"] != person_id:
+        return  # 安全：不允许跨用户访问他人合盘对象
+    birth = data["birth_data"]
+    partner = Person(
+        id=data["id"],
+        name=data["name"],
+        birth=birth,
+        gender=None,
+        notes="",
+    )
+    agent.set_related_person(session_id, partner, person=person)
 
 
 def _to_finding_out(item: dict) -> FindingOut:
@@ -1082,6 +1372,109 @@ def _get_or_init_profile(store: GardenStore, person_id: str) -> ChartProfile:
         now = utc_now_aware()
         profile = ChartProfile(person_id=person_id, created_at=now, updated_at=now)
     return profile
+
+
+def _resolve_persona(raw: str | None):
+    """查询参数 → PersonaProfile。None/空 → None（默认镜头）；未知字符串 → 月亮兜底。"""
+    if not raw:
+        return None
+    return get_persona(raw)
+
+
+def _build_recall_items(data: dict, persona=None) -> list[RecallItem]:
+    """store.get_recall_data 的明文豆荚 → RecallItem 列表（确定性，无 LLM）。
+
+    persona 提供"记忆镜头"（recall_priority/recall_domains）：同一份记忆，每颗星
+    按自己擅长的读法重排（如土星先讲事业领域摘要、月亮先讲情绪关键日期）。
+    None → 默认顺序（key_date 起），行为与旧版完全一致。
+    """
+    key_dates = [
+        RecallItem(kind="key_date", label=(k.get("label") or "")[:80], at=k.get("at"))
+        for k in data.get("key_dates", [])[:5]
+        if (k.get("label") or "").strip()
+    ]
+    findings = [
+        RecallItem(kind="confirmed_finding", label=(f.get("statement") or "")[:120], at=f.get("at"))
+        for f in data.get("confirmed_findings", [])[:3]
+        if (f.get("statement") or "").strip()
+    ]
+    # domain_summaries 已按 confidence 降序排好；镜头把擅长领域提前（组内保序）
+    preferred = set(getattr(persona, "recall_domains", ()) or ())
+    summaries = list(data.get("domain_summaries", []))[:3]
+    if preferred:
+        summaries = (
+            [s for s in summaries if s.get("domain") in preferred]
+            + [s for s in summaries if s.get("domain") not in preferred]
+        )
+    domain_items = [
+        RecallItem(kind="domain_summary", label=(s.get("summary") or "")[:120], detail=s.get("domain", ""))
+        for s in summaries
+        if (s.get("summary") or "").strip()
+    ]
+    top_items = []
+    for frag in data.get("top_fragments", [])[:3]:
+        name = FragmentService.name_for(frag.get("subtype_id", ""))
+        depth = int(frag.get("depth", 0) or 0)
+        if name and depth > 0:
+            top_items.append(RecallItem(
+                kind="top_fragment",
+                label=f"「{name}」这格越走越亮",
+                detail=f"深度 {depth}",
+            ))
+    topic_items = []
+    for t in data.get("recent_topics", [])[:3]:
+        topic = naturalize_recall(t.get("summary"))
+        if topic:
+            topic_items.append(RecallItem(kind="recent_topic", label=topic, at=t.get("started_at")))
+
+    groups = {
+        "key_date": key_dates,
+        "confirmed_finding": findings,
+        "domain_summary": domain_items,
+        "top_fragment": top_items,
+        "recent_topic": topic_items,
+    }
+    default_order = ("key_date", "confirmed_finding", "domain_summary", "top_fragment", "recent_topic")
+    priority = tuple(getattr(persona, "recall_priority", ()) or ())
+    order = list(priority) + [k for k in default_order if k not in priority]
+
+    items: list[RecallItem] = []
+    for kind in order:
+        items.extend(groups.get(kind, []))
+    return items
+
+
+def _recall_for_opening(data: dict, persona=None) -> dict | None:
+    """开场白用精简记忆豆荚。默认优先级 confirmed > key_date > domain_summary。
+
+    persona 的 recall_priority 可重排（如土星先讲领域摘要）；recall_domains 把
+    擅长领域摘要提前。不含 recent_topic——它已由 continue_from 的"上次我们聊到"
+    承担，避免重复。全空 → None（完全兼容无召回行为）。
+    """
+    items = data or {}
+    preferred = set(getattr(persona, "recall_domains", ()) or ())
+    summaries = list(items.get("domain_summaries", []))
+    if preferred:
+        summaries = (
+            [s for s in summaries if s.get("domain") in preferred]
+            + [s for s in summaries if s.get("domain") not in preferred]
+        )
+    recall = {
+        "confirmed_findings": [
+            {"statement": (f.get("statement") or "")[:120]}
+            for f in items.get("confirmed_findings", [])
+        ],
+        "key_dates": [
+            {"label": (k.get("label") or "")[:80]} for k in items.get("key_dates", [])
+        ],
+        "domain_summaries": [
+            {"domain": s.get("domain", ""), "summary": (s.get("summary") or "")[:120]}
+            for s in summaries
+        ],
+    }
+    if not any(v for v in recall.values()):
+        return None
+    return recall
 
 
 def _maybe_writeback(agent, memory, session_id: str, person_id: str) -> bool:

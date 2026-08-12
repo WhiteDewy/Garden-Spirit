@@ -79,6 +79,9 @@ class PersonRepository:
         # 单连接跨线程访问依赖 SQLite 自身锁 + 即时 commit 保证一致性。
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # 生产并发：WAL + busy_timeout（与 store.py 同款，两连接共享同一库文件须同模式）。
+        self._conn.execute("PRAGMA journal_mode=WAL").fetchone()  # 消费返回行，避免残留游标
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.execute(_SCHEMA)
         self._conn.commit()
 

@@ -339,11 +339,19 @@ class GardenSpiritAgent:
         """取会话上下文（含 conversation/intent/conclusion），供记忆写回。"""
         return self.context_builder.get(session_id)
 
-    def set_related_person(self, session_id: str, partner: Person) -> None:
-        """登记合盘对象（含其出生数据）。"""
+    def set_related_person(self, session_id: str, partner: Person, person: Person | None = None) -> None:
+        """登记合盘对象（含其出生数据）。
+
+        会话不存在时用盘主 person 预建（合盘对象跨请求恢复：/chat 开头恢复时
+        本会话上下文还没被 handle_message 创建）。person=None 且会话不存在 → 报错。
+        """
         ctx = self.context_builder._sessions.get(session_id)
         if ctx is None:
-            raise ValueError(f"会话不存在: {session_id}")
+            if person is None:
+                raise ValueError(f"会话不存在: {session_id}")
+            ctx = self.context_builder.get_or_create(
+                session_id, person, self.config.default_persona
+            )
         ctx.related_person = partner
         ctx.pending_related_person = False
 

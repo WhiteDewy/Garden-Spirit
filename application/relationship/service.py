@@ -149,6 +149,45 @@ def _gap_hook(days: int | None) -> str | None:
     return "已经好久了——你那边一定发生了不少事吧。"
 
 
+def _recall_hook(recall: dict | None, *, persona=None) -> str | None:
+    """记忆豆荚 → 一句回访钩子（"我记得你"）。
+
+    优先级默认 confirmed_finding > key_date > domain_summary；persona 的
+    recall_priority 可重排（如土星先讲领域摘要），recall_frames 可换话术——
+    同一份记忆，十种读法（十颗星都是 TA 自己，只擅长角度不同）。
+    刻意**不含** recent_topic——它已由 continue_from 的"上次我们聊到"承担，
+    同源重复会让开场白念两遍同一件事。
+    """
+    if not recall:
+        return None
+    priority = tuple(getattr(persona, "recall_priority", ()) or ())
+    order = list(priority) or ["confirmed_finding", "key_date", "domain_summary"]
+    frames = dict(getattr(persona, "recall_frames", {}) or {})
+    defaults = {
+        "confirmed_finding": "说起来，上次你确认过——「{statement}」。",
+        "key_date": "你以前提过「{label}」，现在有变化吗？",
+        "domain_summary": "关于{domain}，我记得你说过「{summary}」。",
+    }
+    for kind in order:
+        if kind == "confirmed_finding" and recall.get("confirmed_findings"):
+            statement = recall["confirmed_findings"][0].get("statement", "")
+            if statement:
+                tpl = frames.get(kind, defaults[kind])
+                return tpl.format(statement=statement)
+        if kind == "key_date" and recall.get("key_dates"):
+            label = recall["key_dates"][0].get("label", "")
+            if label:
+                tpl = frames.get(kind, defaults[kind])
+                return tpl.format(label=label)
+        if kind == "domain_summary" and recall.get("domain_summaries"):
+            s = recall["domain_summaries"][0]
+            domain, summary = s.get("domain", ""), s.get("summary", "")
+            if summary:
+                tpl = frames.get(kind, defaults[kind])
+                return tpl.format(domain=domain or "这件事", summary=summary)
+    return None
+
+
 class RelationshipService:
     """信任分与关系行为的纯逻辑服务。"""
 
@@ -218,11 +257,16 @@ class RelationshipService:
     # 关系行为
     # ------------------------------------------------------------------
 
-    def opening_message(self, profile, *, person_name: str = "", continue_from: dict | None = None) -> str:
+    def opening_message(self, profile, *, person_name: str = "", continue_from: dict | None = None, recall: dict | None = None, persona=None) -> str:
         """进入花园的开场白（林间"周末好呀·你已经15天没找我"式回访记忆）。
 
         首次见面（尚无任何信任信号）→ 时段问候 + 自我介绍；
-        老用户 → 时段问候 + 等级前缀 + 天数缺口钩子 + "上次聊到…"。
+        老用户 → 时段问候 + 等级前缀 + 天数缺口钩子 + "上次聊到…" + 记忆豆荚钩子。
+
+        recall：精简记忆豆荚（confirmed_finding/key_date/domain_summary），
+        由调用方从 store.get_recall_data 组装；None → 完全兼容旧行为。
+        persona：记忆镜头（recall_priority/recall_frames）——同一份记忆，十种读法；
+        None → 默认顺序与话术（完全兼容旧行为）。
         """
         greeting = _time_of_day_greeting()
         if profile is None or sum(profile.trust_signals.values()) == 0:
@@ -246,6 +290,10 @@ class RelationshipService:
             topic = naturalize_recall(continue_from["summary"])
             if topic:
                 parts.append(f"上次我们聊到「{topic}」。")
+        # 记忆豆荚钩子（"我记得你"：你确认过的事 / 提过的日子 / 聊过的领域）
+        hook = _recall_hook(recall, persona=persona)
+        if hook:
+            parts.append(hook)
         parts.append("今天想接着聊，还是换个方向？")
         return "\n".join(parts)
 

@@ -128,7 +128,16 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
     created_at TEXT NOT NULL,
     PRIMARY KEY (person_id, endpoint)
 );
+CREATE TABLE IF NOT EXISTS related_persons (
+    id TEXT PRIMARY KEY,
+    person_id TEXT NOT NULL,
+    name_enc TEXT NOT NULL,
+    birth_data_enc TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_letters_person_date ON letters(person_id, letter_date);
+CREATE INDEX IF NOT EXISTS idx_related_persons_owner ON related_persons(person_id);
 CREATE INDEX IF NOT EXISTS idx_fragment_lights_person_time ON fragment_lights(person_id, lit_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_person ON conversations(person_id);
 CREATE INDEX IF NOT EXISTS idx_memory_person ON memory_items(person_id);
@@ -164,6 +173,35 @@ def _dump(obj: Any) -> str:
 
 def _load(raw: str | None) -> Any:
     return json.loads(raw) if raw else {}
+
+
+def _birth_to_json(birth) -> str:
+    """BirthData → JSON 字符串（datetime → ISO8601）。与 repository.py 同格式。"""
+    from dataclasses import asdict
+
+    data = asdict(birth)
+    data["datetime_utc"] = birth.datetime_utc.isoformat()
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _birth_from_json(raw: str) -> Any:
+    """JSON 字符串 → BirthData（ISO8601 → datetime）。"""
+    from shared.models.person import BirthData, GeoLocation
+
+    data: dict[str, Any] = json.loads(raw)
+    loc_data = data["location"]
+    location = GeoLocation(
+        latitude=loc_data["latitude"],
+        longitude=loc_data["longitude"],
+        altitude=loc_data.get("altitude", 0.0),
+        timezone_name=loc_data.get("timezone_name", "UTC"),
+        place_name=loc_data.get("place_name", ""),
+    )
+    return BirthData(
+        datetime_utc=datetime.fromisoformat(data["datetime_utc"]),
+        location=location,
+        time_known=bool(data.get("time_known", True)),
+    )
 
 
 # ----------------------------------------------------------------------
@@ -299,6 +337,99 @@ def _keydate_from_dict(d: dict) -> KeyDate:
     )
 
 
+# ----------------------------------------------------------------------
+# 合规导出：各表 → 明文 dict（datetime 转 ISO，可直接 JSON 序列化）
+# ----------------------------------------------------------------------
+
+
+def _memory_item_to_dict(m: MemoryItem) -> dict:
+    return {
+        "id": m.id,
+        "session_id": m.session_id,
+        "person_id": m.person_id,
+        "role": m.role.value,
+        "content": m.content,
+        "timestamp": _iso(m.timestamp),
+        "metadata": m.metadata,
+    }
+
+
+def _journal_to_dict(j: JournalEntry) -> dict:
+    return {
+        "id": j.id,
+        "person_id": j.person_id,
+        "content": j.content,
+        "mood": j.mood,
+        "ai_summary": j.ai_summary,
+        "related_intent_id": j.related_intent_id,
+        "related_conclusion_id": j.related_conclusion_id,
+        "created_at": _iso(j.created_at),
+        "updated_at": _iso(j.updated_at),
+    }
+
+
+def _life_event_to_dict(e: LifeEvent) -> dict:
+    return {
+        "id": e.id,
+        "person_id": e.person_id,
+        "occurred_at": _iso(e.occurred_at),
+        "label": e.label,
+        "kind": e.kind,
+        "detail": e.detail,
+        "related_journal_id": e.related_journal_id,
+        "related_intent_id": e.related_intent_id,
+        "related_conclusion_id": e.related_conclusion_id,
+        "domain": e.domain,
+        "need": e.need,
+        "created_at": _iso(e.created_at),
+    }
+
+
+def _letter_to_dict(l: Letter) -> dict:
+    return {
+        "id": l.id,
+        "person_id": l.person_id,
+        "letter_date": l.letter_date,
+        "sender": l.sender,
+        "title": l.title,
+        "body": l.body,
+        "kind": l.kind,
+        "created_at": _iso(l.created_at),
+        "read_at": _iso(l.read_at) if l.read_at else None,
+        "metadata": l.metadata,
+    }
+
+
+def _fragment_light_to_dict(f: FragmentLight) -> dict:
+    return {
+        "subtype_id": f.subtype_id,
+        "delta": f.delta,
+        "kind": f.kind,
+        "source": f.source,
+        "lit_at": _iso(f.lit_at),
+        "session_id": f.session_id,
+    }
+
+
+def _push_subscription_to_dict(s: PushSubscription) -> dict:
+    return {
+        "person_id": s.person_id,
+        "endpoint": s.endpoint,
+        "p256dh": s.p256dh,
+        "auth": s.auth,
+        "created_at": _iso(s.created_at),
+    }
+
+
+def _birth_to_dict(birth) -> dict:
+    """BirthData → 明文 dict（datetime → ISO，导出 JSON 友好）。"""
+    from dataclasses import asdict
+
+    data = asdict(birth)
+    data["datetime_utc"] = birth.datetime_utc.isoformat()
+    return data
+
+
 #: profiles 表的增量迁移：CREATE TABLE IF NOT EXISTS 不会改已有表，
 #: 这里对已存在的旧库用 ALTER TABLE 补齐新列（A2 trust / B2 preferences）。
 _PROFILE_MIGRATIONS = (
@@ -387,6 +518,10 @@ class GardenStore:
         # check_same_thread=False：见 repository.py 同款说明（FastAPI 工作线程）。
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # 生产并发：WAL（多读一写 + 崩溃恢复稳）+ busy_timeout（锁时等待，不立刻报错）。
+        # 推送 cron（scripts/push_daily.py 外部进程）与用户请求可能同时写——WAL 是关键。
+        self._conn.execute("PRAGMA journal_mode=WAL").fetchone()  # 消费返回行，避免残留游标
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         _ensure_profile_columns(self._conn)   # 旧库补齐 A2 新增列
         _ensure_life_event_columns(self._conn)  # 旧库补齐 life_events 新增列
@@ -964,6 +1099,220 @@ class GardenStore:
             auth=self._encryptor.decrypt(row["auth_enc"]) if row["auth_enc"] else "",
             created_at=_from_iso(row["created_at"]),
         )
+
+    # --- Related persons（合盘对象，多轮持久化）---
+
+    def save_related_person(
+        self,
+        related_id: str,
+        person_id: str,
+        name: str,
+        birth_data_json: str,
+        gender: str = "",
+        notes: str = "",
+    ) -> str:
+        """Upsert 保存一个合盘对象（出生数据 Fernet 加密）。
+
+        birth_data_json = `_birth_to_json(birth)` 的输出（与 persons 表同格式）。
+        返回 related_id（调用方生成，跨层复用同一 id）。
+        """
+        now = _iso(None)
+        with self._conn:
+            self._conn.execute(
+                """
+                INSERT INTO related_persons
+                    (id, person_id, name_enc, birth_data_enc, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    person_id = excluded.person_id,
+                    name_enc = excluded.name_enc,
+                    birth_data_enc = excluded.birth_data_enc,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    related_id,
+                    person_id,
+                    self._encryptor.encrypt(name),
+                    self._encryptor.encrypt(birth_data_json),
+                    now,
+                    now,
+                ),
+            )
+        return related_id
+
+    def list_related_persons(self, person_id: str) -> list[dict]:
+        """列某用户保存的合盘对象（只解密 name，不碰出生数据——列表视图够用）。"""
+        with self._conn:
+            rows = self._conn.execute(
+                "SELECT * FROM related_persons WHERE person_id = ? ORDER BY created_at DESC",
+                (person_id,),
+            ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            data = self._related_person_to_dict(row, include_birth=False)
+            if data is not None:
+                out.append(data)
+        return out
+
+    def get_related_person(self, related_id: str) -> dict | None:
+        """按 id 取完整合盘对象（含解密出生数据）。不存在 → None。"""
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT * FROM related_persons WHERE id = ?", (related_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return self._related_person_to_dict(row, include_birth=True)
+
+    def delete_related_person(self, related_id: str) -> bool:
+        """删合盘对象（合规：用户可随时删除数据）。真的删了 → True。"""
+        with self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM related_persons WHERE id = ?", (related_id,)
+            )
+        return cur.rowcount > 0
+
+    def _related_person_to_dict(
+        self, row: sqlite3.Row, include_birth: bool
+    ) -> dict | None:
+        """SQLite 行 → 解密 dict。birth 字段按需解析（列表视图不碰加密出生数据）。"""
+        try:
+            d: dict = {
+                "id": row["id"],
+                "person_id": row["person_id"],
+                "name": self._encryptor.decrypt(row["name_enc"]),
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+            if include_birth:
+                birth_json = self._encryptor.decrypt(row["birth_data_enc"])
+                d["birth_data"] = _birth_from_json(birth_json)
+            return d
+        except Exception:  # noqa: BLE001 - 解密失败不炸整列表，跳过该行
+            logger.warning("合盘对象解密失败，跳过: %s", row["id"])
+            return None
+
+    # ------------------------------------------------------------------
+    # 合规：全量删除 + 数据导出（PRD §8「可随时删除数据」）
+    # ------------------------------------------------------------------
+
+    def purge_person(self, person_id: str) -> dict[str, int]:
+        """合规全量删除：清空该人所有业务表数据（级联）。返回各表删除行数。
+
+        幂等：无数据 → 全 0，不炸。persons 表不在本类职责
+        （属 PersonRepository，由 API 层调 repo.delete 一并删）。
+        """
+        tables = (
+            "conversations", "memory_items", "profiles", "journal_entries",
+            "life_events", "letters", "fragment_lights", "push_subscriptions",
+            "related_persons",
+        )
+        counts: dict[str, int] = {}
+        with self._conn:
+            for table in tables:
+                cur = self._conn.execute(
+                    f"DELETE FROM {table} WHERE person_id = ?", (person_id,)
+                )
+                counts[table] = cur.rowcount
+        return counts
+
+    def export_person(self, person_id: str) -> dict:
+        """合规全量导出：聚合该人所有表的解密数据（供下载/迁移/删除前存档）。
+
+        所有 datetime 已转 ISO 字符串（可直接 JSON 序列化）；PII 全部解密。
+        出生数据（persons 表）在 PersonRepository，由 API 层合并进 PersonOut。
+        """
+        profile = self.get_profile(person_id)
+        out: dict[str, Any] = {
+            "profile": None,
+            "conversations": [
+                _conversation_to_dict(c) for c in self.list_conversations(person_id)
+            ],
+            "memory_items": [
+                _memory_item_to_dict(m) for m in self.list_memory_items(person_id=person_id)
+            ],
+            "journal_entries": [_journal_to_dict(j) for j in self.list_journals(person_id)],
+            "life_events": [_life_event_to_dict(e) for e in self.list_life_events(person_id)],
+            "letters": [_letter_to_dict(l) for l in self.list_letters(person_id)],
+            "fragment_lights": [
+                _fragment_light_to_dict(f) for f in self.list_fragment_lights(person_id)
+            ],
+            "push_subscriptions": [
+                _push_subscription_to_dict(s)
+                for s in self.list_push_subscriptions(person_id)
+            ],
+            "related_persons": [],
+        }
+        if profile is not None:
+            out["profile"] = {
+                "person_id": profile.person_id,
+                "lord_states": profile.lord_states,
+                "verified_findings": [_finding_to_dict(f) for f in profile.verified_findings],
+                "key_dates": [_keydate_to_dict(k) for k in profile.key_dates],
+                "domain_summaries": {
+                    d: _summary_to_dict(s) for d, s in profile.domain_summaries.items()
+                },
+                "trust_score": profile.trust_score,
+                "trust_signals": profile.trust_signals,
+                "preferences": profile.preferences,
+                "fragments": profile.fragments,
+                "created_at": _iso(profile.created_at),
+                "updated_at": _iso(profile.updated_at),
+            }
+        # 合盘对象：列表只含名字，导出需补出生数据（明文 dict）
+        for d in self.list_related_persons(person_id):
+            full = self.get_related_person(d["id"])
+            if full is None:
+                continue
+            full["birth_data"] = _birth_to_dict(full["birth_data"])
+            out["related_persons"].append(full)
+        return out
+
+    def get_recall_data(self, person_id: str) -> dict:
+        """记忆召回素材豆荚：聚合画像 + 点亮账本 + 会话摘要（"我记得你"）。
+
+        返回全是明文 dict（PII 已解密）。API 层据此组装 RecallItem：
+        - key_dates: 画像关键日期，≤5
+        - confirmed_findings: 用户确认过的沉淀判断，≤3
+        - domain_summaries: 有摘要的领域，≤3（confidence 降序）
+        - top_fragments: 账本聚合累计深度 top 3
+        - recent_topics: 最近 3 次会话摘要（naturalize 由 API 层做，store 保持纯净）
+        """
+        out: dict[str, Any] = {
+            "key_dates": [],
+            "confirmed_findings": [],
+            "domain_summaries": [],
+            "top_fragments": [],
+            "recent_topics": [],
+        }
+        profile = self.get_profile(person_id)
+        if profile is not None:
+            out["key_dates"] = [
+                {"label": k.label, "at": _iso(k.date)} for k in profile.key_dates[:5]
+            ]
+            out["confirmed_findings"] = [
+                {"statement": f.statement, "at": _iso(f.confirmed_at)}
+                for f in profile.verified_findings
+                if f.user_feedback == "confirmed"
+            ][:3]
+            summaries = [
+                {"domain": d, "summary": s.summary, "confidence": s.confidence}
+                for d, s in profile.domain_summaries.items()
+                if s.summary
+            ]
+            out["domain_summaries"] = sorted(
+                summaries, key=lambda x: x.get("confidence", 0.0), reverse=True
+            )[:3]
+        # 账本聚合：子类 → 累计深度（跨天全量，供"越走越亮"的长期共振叙事）
+        agg: dict[str, int] = {}
+        for light in self.list_fragment_lights(person_id):
+            agg[light.subtype_id] = agg.get(light.subtype_id, 0) + int(light.delta)
+        out["top_fragments"] = [
+            {"subtype_id": fid, "depth": depth}
+            for fid, depth in sorted(agg.items(), key=lambda kv: kv[1], reverse=True)[:3]
+        ]
+        out["recent_topics"] = self.list_conversation_summaries(person_id, limit=3)
+        return out
 
     def close(self) -> None:
         self._conn.close()
