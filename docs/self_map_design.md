@@ -376,8 +376,9 @@
 
 - `docs/PRD.md` —— 产品 PRD（定位 v2、八大领域、哲学链）
 - `shared/enums.py` —— `IntentDomain`（8 领域）、`ConsultMode`（5 模式）
-- `domain/reasoning/intent/intent_profiles.yaml` —— 8 领域 `core_houses` / `core_planets`
-- `domain/astrology/knowledge/house_nature.yaml` —— 12 宫完整语义场
+- `domain/reasoning/intent/intent_profiles.yaml` —— 11 领域结构配方（`core_houses` / `house_lords`；领域行星角色由 `planet_nature.domain_signals` 派生）
+- `domain/astrology/knowledge/house_significations.yaml` —— 12 宫语义场 + 路由词
+- `domain/astrology/knowledge/house_derived.yaml` —— 转宫关系表
 - `domain/astrology/knowledge/planet_nature.yaml` —— 10 星人格/话题角色
 - `application/agent/intent_parser.py` + `application/agent/runtime.py` —— 当前意图与闲聊处理（待改造）
 - `application/relationship/service.py` —— 信任层（软牵引门槛）
