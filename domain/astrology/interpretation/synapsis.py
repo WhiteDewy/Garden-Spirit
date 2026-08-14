@@ -100,7 +100,7 @@ class ConnectionClassifier:
         if mutual:
             conns.append(ConnectionFact(
                 f"{house_a}宫主", f"{house_b}宫主", "reception_mutual", 4.0,
-                f"{la.value}↔{lb.value}互溶",
+                f"{self._kb.planet(la).name_zh}↔{self._kb.planet(lb).name_zh}互溶",
             ))
 
         # 激活接纳（单向尊严 + 相位）
@@ -114,7 +114,7 @@ class ConnectionClassifier:
             a = active[0]
             conns.append(ConnectionFact(
                 f"{house_a}宫主", f"{house_b}宫主", "reception_active", 3.0,
-                f"{a.acceptor.value}接纳{a.accepted.value}",
+                f"{self._kb.planet(a.acceptor).name_zh}接纳{self._kb.planet(a.accepted).name_zh}",
             ))
 
         # 主相位
@@ -129,10 +129,10 @@ class ConnectionClassifier:
         # 飞宫（宫主落对方宫位，含宫头末度）
         if effective_house(chart, la) == house_b:
             conns.append(ConnectionFact(f"{house_a}宫主", f"{house_b}宫主", "flight", 2.0,
-                                        f"{la.value}飞{house_b}宫"))
+                                        f"{self._kb.planet(la).name_zh}飞{house_b}宫"))
         if effective_house(chart, lb) == house_a:
             conns.append(ConnectionFact(f"{house_a}宫主", f"{house_b}宫主", "flight", 2.0,
-                                        f"{lb.value}飞{house_a}宫"))
+                                        f"{self._kb.planet(lb).name_zh}飞{house_a}宫"))
 
         # 同宫 / 同座（弱）
         if chart.planets[la].house.house == chart.planets[lb].house.house:
@@ -143,10 +143,10 @@ class ConnectionClassifier:
         # 潜在接纳（单向尊严，无激活相位）—— 最弱
         if self._latent(chart, la, lb):
             conns.append(ConnectionFact(f"{house_a}宫主", f"{house_b}宫主", "reception_latent", 0.5,
-                                        f"{lb.value}对{la.value}有单向尊严（未激活）"))
+                                        f"{self._kb.planet(lb).name_zh}对{self._kb.planet(la).name_zh}有单向尊严（未激活）"))
         if self._latent(chart, lb, la):
             conns.append(ConnectionFact(f"{house_a}宫主", f"{house_b}宫主", "reception_latent", 0.5,
-                                        f"{la.value}对{lb.value}有单向尊严（未激活）"))
+                                        f"{self._kb.planet(la).name_zh}对{self._kb.planet(lb).name_zh}有单向尊严（未激活）"))
 
         return conns
 
@@ -172,6 +172,23 @@ class ConnectionClassifier:
             if {x.acceptor, x.accepted} == {a, b}
         ]
         return bool(active)
+
+    def helpers_of(self, chart: Chart, planet: Planet) -> list[tuple[Planet, str]]:
+        """谁帮这颗星（互溶/接纳帮手星）。返回 [(帮手星, "mutual"|"acceptance")]。
+
+        被接纳/互溶 = 有帮手，是 assess_planet 关系轴的正向分量。
+        三王星/虚点不参与（reception 引擎已排除）；互溶对不再重复计接纳。
+        """
+        positions = self._positions(chart)
+        helpers: list[tuple[Planet, str]] = []
+        for r in self._reception.detect(positions, sect=chart.sect):
+            if planet in (r.planet_a, r.planet_b):
+                other = r.planet_b if r.planet_a == planet else r.planet_a
+                helpers.append((other, "mutual"))
+        for acc in self._reception.detect_acceptance(positions, chart.aspects, sect=chart.sect):
+            if acc.accepted == planet:
+                helpers.append((acc.acceptor, "acceptance"))
+        return helpers
 
     def strong_count(self, chart: Chart, house_a: int, targets: list[int]) -> int:
         """house_a 与 targets 各宫的强连接数（用于事件条目收敛）。"""

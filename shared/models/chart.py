@@ -176,6 +176,9 @@ class Chart:
     sect: Sect | None = None
     moon_phase: float | None = None    # 0=新月, 0.5=满月
 
+    # 计算层缓存（运行时 memo，非序列化数据）
+    planet_assessments: dict = field(default_factory=dict, repr=False, compare=False)
+
     # 合盘 / 行运：引用其他图表
     reference_chart_id: EntityId | None = None
     reference_chart_type: ChartType | None = None
