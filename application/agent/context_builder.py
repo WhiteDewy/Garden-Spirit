@@ -62,6 +62,13 @@ class SessionContext:
         self.planet_activation = None    # PlanetActivation | None
         self.related_person: Person | None = None      # 合盘对象（含出生数据）
         self.pending_related_person: bool = False      # 已问过对方数据，等待提供
+        #: 宫位追问暂存：上轮反问"3宫涵盖哪块"，本轮回答切片时经
+        #: context.active_house 消解为 3 宫 + 切片域（领域引擎 v2）。
+        self.pending_focus_house: int | None = None
+        #: 宫位深挖待验证（证据链深挖）：上轮深挖后保留 (宫位, 域, 切片词)。
+        #: 本轮用户确认/否认（intent_type=confirmation）时，用它收敛机制结论；
+        #: 用户转问其他话题则自然失效（新路由覆盖）。
+        self.pending_house_verify: tuple[int, str, str] | None = None
         #: A2 关系层：本条消息是否命中纯问候/闲聊快路径（_detect_chat）。
         #: 该路径在意图解析之前返回，没有 Intent 可查，故用标志位识别 casual 信号。
         self.last_was_chat: bool = False
@@ -73,10 +80,30 @@ class SessionContext:
         """
         active_domain = self.latest_intent.domain.value if self.latest_intent else None
         active_subdomain = self.latest_intent.subdomain if self.latest_intent else None
+        turns = self.conversation.turns[-3:] if self.conversation.turns else []
+        n = len(turns)
+        # 最近 3 轮对话（LLM 意图层理解"深挖/澄清回应/切换话题/确认"用；
+        # assistant 截断控制 prompt 长度）。最后一条助手回复取**尾部**——
+        # 验证问句/反问都写在回复末尾，用户本轮就是在回应它（头部是正文铺垫）。
+        recent_turns = [
+            {
+                "user": t.user_message,
+                "assistant": (
+                    (t.assistant_response or "")[-160:]
+                    if i == n - 1
+                    else (t.assistant_response or "")[:120]
+                ),
+            }
+            for i, t in enumerate(turns)
+        ]
         return {
             "active_domain": active_domain,
             "active_subdomain": active_subdomain,
             "pending_related_person": self.pending_related_person,
+            "active_house": self.pending_focus_house,
+            # 宫位深挖待验证（规则层确认检测用；LLM 走 intent_type=confirmation）
+            "pending_house_verify": self.pending_house_verify,
+            "recent_turns": recent_turns,
         }
 
     def record_user_message(self, message: str) -> None:

@@ -16,9 +16,12 @@ import random
 
 from foundation.config import AppConfig
 from foundation.logger import get_logger
+from foundation.utils import new_id
 from shared.constants import HOUSE_SYSTEM_ZH
 from shared.enums import ConsultMode, IntentDomain, PersonaType, Planet, Priority, Verdict
-from shared.models import Conclusion, ExecutionStatus, Intent, Person, Strategy, StrategyStep
+from shared.models import (
+    Conclusion, ExecutionStatus, Finding, Intent, IntentSlot, Person, Strategy, StrategyStep,
+)
 
 from application.agent.context_builder import ContextBuilder
 from application.agent.intent_parser import IntentParser
@@ -62,6 +65,9 @@ _DOMAIN_ZH = {
     "emotion": "情绪",
     "family": "家庭",
     "learning": "学习",
+    "growth": "远方·信念",
+    "network": "人际·社群",
+    "self": "自我",
     "daily": "今日",
 }
 
@@ -102,6 +108,32 @@ _CAPABILITY_REPLY = (
     "· 陪你成长——写日记、收每日来信，越聊越懂你\n"
     "想先从哪块开始？"
 )
+
+#: 证据链深挖 → 机制验证问句（按切片词命中；没命中给通用问法）。
+#: 引导用户确认/否认机制（下一轮 intent_type=confirmation → 收敛结论），
+#: 对应 consult_method §3「对话验证，不讲独白」：结论要用户自己认领。
+_VERIFY_QUESTION_MAP: list[tuple[str, str]] = [
+    ("暗财", "你最近有没有靠不公开的渠道进账——副业、投资、资源置换这类？"),
+    ("玄学", "你最近是不是在学或做玄学、灵性、幕后专业相关的事？"),
+    ("沟通", "你最近有没有在写东西、做内容，或需要公开表达的场合？"),
+    ("恋爱", "你最近身边有没有在靠近、或让你心动的人？"),
+    ("事业", "你最近在事业上有没有具体动向——跳槽、升职、还是转方向？"),
+]
+
+_VERIFY_GENERIC = (
+    "想验证一下：这个「{slice}」的线索，你最近在实际生活里有没有对应的行动或经历？"
+    "你确认或否认，我都能据此把结论收紧。"
+)
+
+
+def _verification_question(slice_word: str) -> str | None:
+    """切片词 → 机制验证问句（确定性，硬线：不产出占星结论）。"""
+    if not slice_word:
+        return None
+    for needle, question in _VERIFY_QUESTION_MAP:
+        if needle in slice_word:
+            return question
+    return _VERIFY_GENERIC.format(slice=slice_word)
 
 
 class GardenSpiritAgent:
@@ -211,7 +243,9 @@ class GardenSpiritAgent:
         ctx.emotion_result = self._emotion.perceive(message)
 
         # 1. Intent 解析（LLM 深度拆解：领域路由 + 占星结构映射 + 任务富化）
-        decomposed = self.intent_parser.parse_deep(message, context=ctx.to_intent_context())
+        decomposed = self.intent_parser.parse_deep(
+            message, context=ctx.to_intent_context(), mode=mode,
+        )
         intent = decomposed.intent
 
         # 1.5 随聊轨道（陪伴协议 §7.2）：分享/倾诉/迷茫 → 接住+镜映，绝不处方化。
@@ -234,6 +268,10 @@ class GardenSpiritAgent:
             return reply
 
         if intent.requires_clarification:
+            # 裸宫反问：暂存宫位，等本轮回答切片时经 context.active_house 消解
+            house_slot = intent.get_slot("focus_house")
+            if house_slot is not None:
+                ctx.pending_focus_house = int(house_slot.normalized_value)
             return intent.clarification_question
 
         # 问星灵自己/产品能力（LLM 分类 meta / 离线规则兜底）→ 能力介绍，不进占星管线
@@ -242,6 +280,72 @@ class GardenSpiritAgent:
             ctx.record_assistant_response(_CAPABILITY_REPLY)
             ctx.add_turn(message, _CAPABILITY_REPLY)
             return _CAPABILITY_REPLY
+
+        # 深挖确认：用户对上轮证据链问句确认/否认（intent_type=confirmation）
+        # → 收敛机制结论（"坐实"或"倾向"），不复述整段证据。
+        # 宫位优先取 focus_house 槽；缺省则继承上轮深挖暂存 ctx.pending_house_verify。
+        if intent.intent_type == "confirmation":
+            house_slot = intent.get_slot("focus_house")
+            verify = ctx.pending_house_verify
+            if house_slot is None and verify is not None:
+                house, v_domain, v_slice = verify
+                intent.slots["focus_house"] = IntentSlot(
+                    name="focus_house", raw_value=f"{house}宫",
+                    normalized_value=str(house), confidence=1.0,
+                )
+                intent.slots["focus_domain"] = IntentSlot(
+                    name="focus_domain", raw_value=v_slice,
+                    normalized_value=v_domain, confidence=0.9,
+                )
+                house_slot = intent.get_slot("focus_house")
+            if house_slot is not None:
+                chart = self._calculator.compute(person)
+                conclusion = self._house_conclusion(
+                    chart, intent, house_slot, deep=True, confirmed=intent.confirmed,
+                )
+                house = int(house_slot.normalized_value)
+                ctx.pending_house_verify = None
+                ctx.pending_focus_house = None
+                answer = self._format_response(
+                    conclusion, intent, persona, chart=chart, mode=mode,
+                    house_focus=house, confirmed=intent.confirmed,
+                )
+                ctx.latest_intent = intent
+                ctx.latest_conclusion = conclusion
+                ctx.record_assistant_response(answer)
+                ctx.add_turn(message, answer)
+                return answer
+            # 无宫位可收敛 → 落回常规路由（本轮当作新话题处理）
+
+        # 宫位咨询路径：用户锁定"3宫表达"/"12宫财运" → 宫位语义场直接出解读。
+        # 不走领域策略管线（那是 generic 领域结论，与宫位无关）；硬线不变——
+        # 占星结论仍全由 Domain 的 HouseSignificationEngine 出，LLM 只叙事。
+        house_slot = intent.get_slot("focus_house")
+        if house_slot is not None:
+            chart = self._calculator.compute(person)
+            deep = intent.deep_dive or intent.intent_type == "follow_up_deep_dive"
+            conclusion = self._house_conclusion(chart, intent, house_slot, deep=deep)
+            house = int(house_slot.normalized_value)
+            ctx.pending_focus_house = None
+            answer = self._format_response(
+                conclusion, intent, persona, chart=chart, mode=mode, house_focus=house,
+            )
+            if deep:
+                # 证据链深挖：暂存待验证 + 追加机制问句（引导用户确认，进入收敛轮）
+                domain = (
+                    intent.get_slot("focus_domain").normalized_value
+                    if intent.get_slot("focus_domain") else intent.domain.value
+                )
+                slice_word = intent.focus_slice or conclusion.metadata.get("focus_slice", "")
+                ctx.pending_house_verify = (house, domain, slice_word or "")
+                vq = conclusion.metadata.get("verification_question")
+                if vq:
+                    answer = f"{answer}\n\n{vq}"
+            ctx.latest_intent = intent
+            ctx.latest_conclusion = conclusion
+            ctx.record_assistant_response(answer)
+            ctx.add_turn(message, answer)
+            return answer
 
         # 合盘入口：提到具体对象（男朋友/女友…）→ 需要对方出生数据
         related_slot = intent.get_slot("related_person")
@@ -304,6 +408,7 @@ class GardenSpiritAgent:
         # 4. 记录会话
         ctx.latest_intent = intent
         ctx.latest_conclusion = conclusion
+        ctx.pending_focus_house = None  # 宫位追问已闭环（含用户转问其他话题的情况）
         ctx.record_assistant_response(answer)
         ctx.add_turn(message, answer)
         return answer
@@ -417,6 +522,8 @@ class GardenSpiritAgent:
         persona: PersonaType,
         chart=None,
         mode: ConsultMode | str = ConsultMode.DEEP,
+        house_focus: int | None = None,
+        confirmed: bool | None = None,
     ) -> str:
         """组织回答文本。
 
@@ -425,6 +532,8 @@ class GardenSpiritAgent:
         无论哪条路，结论内容都来自 Domain，LLM 只换语气。
 
         chart: 本命盘。用于生成飞星证据卡 + 本命概要（LLM 转述的素材）。
+        house_focus: 宫位咨询（"3宫表达"）时注入，LLM 叙事围绕该宫收束。
+        confirmed: 证据链收敛轮——LLM 叙事先承接确认/否认，再收敛不展开。
         """
         answer = ""
         if self._llm.available:
@@ -439,9 +548,9 @@ class GardenSpiritAgent:
                 cards = dispositor_cards(chart, self._kb) if chart is not None else None
                 natal = natal_reading(chart, self._kb) if chart is not None else None
 
-                # 咨询模板：从用户问题 → 话题结构，注入 LLM 叙事指导
+                # 咨询模板：Intent → ConsultCallPlan，注入 LLM 叙事指导
                 resolver = get_resolver()
-                topic_plan = resolver.resolve_topic(intent.raw_query)
+                call_plan = resolver.resolve_call_plan(intent)
 
                 answer = paraphrase(
                     conclusion=conclusion,
@@ -451,8 +560,10 @@ class GardenSpiritAgent:
                     natal=natal,
                     question=intent.raw_query,
                     llm_client=self._llm,
-                    topic_plan=topic_plan,
+                    call_plan=call_plan,
                     mode=mode,
+                    house_focus=house_focus,
+                    confirmed=confirmed,
                 )
             except Exception as exc:  # pragma: no cover - LLM 降级
                 logger.warning("LLM 转述失败，降级 v1 模板: %s", exc)
@@ -483,6 +594,13 @@ class GardenSpiritAgent:
         # ① 共情 + ② 本命基调：温暖开场接住情绪 + 总体判断
         if conclusion.metadata.get("descriptive"):
             lines = [conclusion.summary or f"关于{domain_zh}，我看了你的星盘。"]
+            # 描述性解读（宫位语义场/倾向解读）也展示人文观察——不丢细节，
+            # 评分项仍过滤（评分是 LLM 叙事的素材，不是给用户的直出文本）
+            human = [f for f in conclusion.findings if not _is_scoring_text(f.text)]
+            if human:
+                lines.append("\n想先和你分享几个观察：")
+                for f in human[:4]:
+                    lines.append(f"  · {f.text}")
         else:
             lines = [
                 _VERDICT_OPENERS.get(verdict, f"关于{domain_zh}，我看了你的星盘。"),
@@ -570,3 +688,112 @@ class GardenSpiritAgent:
                 Planet.JUPITER, Planet.SATURN, Planet.VENUS, Planet.MERCURY,
             ))
         return profiles
+
+    def _house_conclusion(
+        self, chart, intent: Intent, house_slot, *, deep: bool = False,
+        confirmed: bool | None = None,
+    ) -> Conclusion:
+        """宫位语义场解读 → Conclusion（确定性，无 LLM）。
+
+        HouseSignificationEngine 按 (domain, houses=[N]) 激活该宫切片，
+        条目 word/evidence 即领域结论（硬线：占星结论全由 Domain 出）；
+        标记 descriptive（倾向解读）——LLM 只转述语气，不发明占星事实。
+
+        deep=True（深挖追问）：放开采上限、evidence 全链展开（来源/通道/托底/风险），
+        summary 改为机制视角，并生成机制验证问句（供下一轮 confirmation 收敛）。
+        confirmed 非空（收敛轮）：summary 落"坐实/倾向"收束，不再问。
+        """
+        from datetime import datetime, timezone
+
+        from domain.astrology.interpretation import HouseSignificationEngine
+        from shared.enums import ConclusionCategory, EvidencePolarity
+
+        house = int(house_slot.normalized_value)
+        fd = intent.get_slot("focus_domain")
+        domain = fd.normalized_value if fd is not None else intent.domain.value
+
+        items = HouseSignificationEngine(self._kb).interpret(
+            chart, domain, houses=[house], max_items=10 if deep else 6,
+        )
+
+        findings: list[Finding] = []
+        for it in items:
+            pol = {
+                "positive": EvidencePolarity.POSITIVE,
+                "negative": EvidencePolarity.NEGATIVE,
+            }.get(it.polarity, EvidencePolarity.NEUTRAL)
+            # 深挖：evidence 全链展开（机制逐环可见）；浅读：收敛 top-3 证据
+            ev = "；".join(it.evidence) if deep else "；".join(it.evidence[:3])
+            text = it.word + (f"——{ev}" if ev else "")
+            findings.append(Finding(
+                id=new_id("finding"),
+                category=(
+                    ConclusionCategory.FINDING if pol is EvidencePolarity.POSITIVE
+                    else ConclusionCategory.WARNING if pol is EvidencePolarity.NEGATIVE
+                    else ConclusionCategory.SUMMARY
+                ),
+                text=text,
+                polarity=pol,
+                confidence=min(it.strength / 5.0, 0.95),
+                weight=it.strength,
+            ))
+
+        domain_zh = _DOMAIN_ZH.get(domain, domain)
+        slice_zh = intent.focus_slice or (items[0].word if items else "")
+        if items:
+            if confirmed is True:
+                summary = (
+                    f"你确认了——「{slice_zh}」不是停在盘面上的结构，来路是坐实的，"
+                    f"顺着 {domain_zh} 这条线落袋的可能性就具体多了。"
+                )
+            elif confirmed is False:
+                summary = (
+                    f"你否了这条路径——那「{slice_zh}」更多是潜在倾向，"
+                    f"得看你实际的选择才会被激活。"
+                )
+            elif deep:
+                summary = f"往下钻「{slice_zh}」的来路——机制是这样一环环扣起来的："
+            else:
+                top = items[0]
+                summary = f"你{house}宫（{domain_zh}视角）最醒目的是「{top.word}」——先顺着这条看你的模式。"
+        else:
+            summary = f"你{house}宫在{domain_zh}这个面上暂时没有明显的结构信号，可以结合具体问题再细问。"
+
+        overall_pol = EvidencePolarity.NEUTRAL
+        if findings:
+            net = sum(
+                f.weight * (
+                    1 if f.polarity == EvidencePolarity.POSITIVE
+                    else -1 if f.polarity == EvidencePolarity.NEGATIVE else 0
+                )
+                for f in findings
+            )
+            overall_pol = (
+                EvidencePolarity.POSITIVE if net > 0
+                else EvidencePolarity.NEGATIVE if net < 0
+                else EvidencePolarity.NEUTRAL
+            )
+
+        metadata = {
+            "descriptive": True,
+            "house_system": chart.house_system.name.lower(),
+        }
+        if deep:
+            metadata["deep_dive"] = True
+            metadata["focus_slice"] = slice_zh or ""
+            if confirmed is None:
+                vq = _verification_question(slice_zh)
+                if vq:
+                    metadata["verification_question"] = vq
+
+        return Conclusion(
+            id=new_id("conclusion"),
+            intent_id=intent.id,
+            evidence_set_id=new_id("evset"),
+            domain=domain,
+            summary=summary,
+            findings=findings,
+            overall_polarity=overall_pol,
+            generated_at=datetime.now(timezone.utc),
+            metadata=metadata,
+        )

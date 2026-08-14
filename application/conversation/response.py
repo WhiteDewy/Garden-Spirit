@@ -6,16 +6,16 @@
 - LLM 可以加比喻、加生活场景、调句子长短，但不能发明占星事实。
 
 咨询模板注入：
-- 当 build_prompt 收到 topic_plan 时，注入话题专属的叙事结构、交叉判断、场景映射和护栏。
-- topic_plan 来自 ConsultResolver，由 GardenSpiritAgent 在运行时根据用户问题自动生成。
-- 话题模板不改变 Domain 结论——只改变 LLM 怎么组织叙事。
+- 当 build_prompt 收到 call_plan 时，注入咨询调用主干里的叙事结构、交叉判断、场景映射和护栏。
+- call_plan 来自 ConsultResolver，由 GardenSpiritAgent 在运行时根据 Intent 自动生成。
+- 咨询调用主干不改变 Domain 结论——只改变 LLM 怎么组织叙事。
 
 System prompt 编译进：
 - interpretation_voice.md 五条说话标准
 - 梦老师解盘方法论（掌宫优于落宫 / 链式追踪 / 给出路 / 吉凶两论）
 - 人格（persona.py）
 - 三条铁律 + 输出格式约束
-- 话题专属咨询模板（topic_plan）
+- 咨询调用主干（call_plan）
 """
 
 from __future__ import annotations
@@ -214,7 +214,8 @@ def _format_natal(natal: object | None) -> str:
         zh = {
             "career": "职业", "wealth": "财富", "relationship": "感情",
             "emotion": "情绪", "health": "健康", "family": "家庭",
-            "learning": "学习", "self": "自我",
+            "learning": "学习", "growth": "远方·信念", "network": "人际·社群",
+            "self": "自我",
         }.get(domain, domain)
         top = items[:2]
         bits = []
@@ -239,8 +240,11 @@ def build_prompt(
     natal: object | None = None,
     planet_profiles: list | None = None,
     question: str | None = None,
+    call_plan: object | None = None,
     topic_plan: object | None = None,
     mode: ConsultMode | str = ConsultMode.DEEP,
+    house_focus: int | None = None,
+    confirmed: bool | None = None,
 ) -> list[dict]:
     """构建 LLM messages（system + user）。
 
@@ -249,8 +253,12 @@ def build_prompt(
     natal: 可选——NatalReading（跨8域本命解读）。
     planet_profiles: 可选——PlanetProfile 列表（行星单点档案，按主题抓取）。
     question: 可选——用户原始问题（让转述贴合语境）。
-    topic_plan: 可选——TopicPlan（来自 ConsultResolver），注入话题专属叙事结构。
+    call_plan: 可选——ConsultCallPlan（来自 ConsultResolver），注入咨询调用主干。
+    topic_plan: 兼容别名——旧 TopicPlan / 旧调用方传入时仍按同一协议处理。
     mode: 咨询模式——quick 覆盖为精简回答；其余默认深度。
+    house_focus: 宫位咨询（"3宫表达"）注入——LLM 叙事围绕该宫收束，不发散。
+    confirmed: 证据链收敛轮——盘主刚确认/否认了机制验证。True=先承接确认再收敛；
+               False=承接否认改判倾向；None=普通轮。
     """
     profile = get_persona(persona)
     persona_block = profile.system_prompt()
@@ -264,14 +272,15 @@ def build_prompt(
         system_parts.append(mode_instruction)
 
     # 注入疗愈叙事协议（A3）：5 步情绪弧线 + 输出护栏。
-    # 放在 topic_plan 之前——通用情绪弧线在底，话题专属内容结构在顶（更近、更具体）。
+    # 放在 call_plan 之前——通用情绪弧线在底，咨询主干内容结构在顶（更近、更具体）。
     system_parts.append(build_healing_instruction())
 
-    # 注入话题专属咨询模板
-    if topic_plan is not None and hasattr(topic_plan, 'to_dict'):
-        topic_prompt = _build_topic_injection(topic_plan)
-        if topic_prompt:
-            system_parts.append(topic_prompt)
+    # 注入咨询调用主干；topic_plan 是迁移期兼容别名。
+    plan_for_prompt = call_plan if call_plan is not None else topic_plan
+    if plan_for_prompt is not None and hasattr(plan_for_prompt, 'to_dict'):
+        plan_prompt = _build_call_plan_injection(plan_for_prompt)
+        if plan_prompt:
+            system_parts.append(plan_prompt)
 
     system = "\n\n".join(system_parts)
 
@@ -279,6 +288,24 @@ def build_prompt(
     sections: list[str] = []
     if question:
         sections.append(f"## 盘主问的是\n{question}")
+
+    if house_focus is not None:
+        sections.append(
+            f"## 本次聚焦\n盘主想细看的是第{house_focus}宫的语义场——"
+            f"围绕这个宫位来组织解读，讲结构、请 TA 验证，别发散到其他宫位。"
+        )
+
+    if confirmed is True:
+        sections.append(
+            "## 收敛轮\n盘主刚刚确认了上一轮的机制验证。先承接这份确认（让 TA 感到被听见），"
+            "然后**收敛**到该机制的结论——不要再重复展开全部证据链。"
+            "结论已由结论摘要给出，你只需把它讲得有温度、落到 TA 的实际行动上。"
+        )
+    elif confirmed is False:
+        sections.append(
+            "## 收敛轮\n盘主刚刚否认了上一轮的机制验证。承接这份否认（不评判），"
+            "把判断改为**潜在倾向**——它不是坐实的路径，是否激活取决于 TA 的实际选择。"
+        )
 
     profiles_txt = _format_planet_profiles(planet_profiles)
     if profiles_txt:
@@ -315,12 +342,12 @@ def build_prompt(
 
 
 # ---------------------------------------------------------------------------
-# 话题模板注入
+# 咨询调用主干注入
 # ---------------------------------------------------------------------------
 
-def _build_topic_injection(topic_plan) -> str:
-    """将 TopicPlan 转为可注入 system prompt 的话题专属指令。"""
-    d = topic_plan.to_dict()
+def _build_call_plan_injection(call_plan) -> str:
+    """将 ConsultCallPlan/TopicPlan 协议对象转为 system prompt 咨询主干指令。"""
+    d = call_plan.to_dict()
     lines: list[str] = []
 
     # 输出结构
@@ -364,6 +391,11 @@ def _build_topic_injection(topic_plan) -> str:
     return "\n".join(lines)
 
 
+def _build_topic_injection(topic_plan) -> str:
+    """兼容旧名称：TopicPlan 与 ConsultCallPlan 都走同一 prompt 注入协议。"""
+    return _build_call_plan_injection(topic_plan)
+
+
 # ---------------------------------------------------------------------------
 # 转述入口
 # ---------------------------------------------------------------------------
@@ -376,14 +408,20 @@ def paraphrase(
     planet_profiles: list | None = None,
     question: str | None = None,
     llm_client=None,
+    call_plan: object | None = None,
     topic_plan: object | None = None,
     mode: ConsultMode | str = ConsultMode.DEEP,
+    house_focus: int | None = None,
+    confirmed: bool | None = None,
 ) -> str:
     """把 Conclusion + 卡片 + 行星档案转述成人格化回答。
 
     llm_client: 实现了 .chat(messages)->str 的对象；None 则报错（调用方处理降级）。
-    topic_plan: 可选——TopicPlan（来自 ConsultResolver），注入话题专属叙事结构。
+    call_plan: 可选——ConsultCallPlan（来自 ConsultResolver），注入咨询调用主干。
+    topic_plan: 兼容别名——旧 TopicPlan / 旧调用方传入时仍按同一协议处理。
     mode: 咨询模式——quick 覆盖为精简回答；其余默认深度。
+    house_focus: 宫位咨询（"3宫表达"）注入——LLM 叙事围绕该宫收束。
+    confirmed: 证据链收敛轮（True=确认坐实 / False=否认改倾向）。
     """
     messages = build_prompt(
         conclusion=conclusion,
@@ -392,8 +430,11 @@ def paraphrase(
         planet_profiles=planet_profiles,
         natal=natal,
         question=question,
+        call_plan=call_plan,
         topic_plan=topic_plan,
         mode=mode,
+        house_focus=house_focus,
+        confirmed=confirmed,
     )
     if llm_client is None:
         raise ValueError("paraphrase 需要 llm_client（实现了 .chat(messages)->str）")

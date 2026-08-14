@@ -196,6 +196,16 @@ def should_use_companion(intent, emotion_result) -> bool:
     - emotion/daily 领域无细分 subdomain（分享/迷茫，未点名"运势"）→ 陪伴。
     - 其余（career/relationship/…、运势/情绪模式等点名咨询）→ 咨询管线。
     """
+    # 宫位咨询（"我的3宫怎么样"）：明确占星引用（focus_house 槽位）→ 走澄清/咨询，
+    # 不吞进陪伴兜底（语义场反问会列该宫涵盖的方面，由用户自选哪块）。
+    if intent is not None and intent.get_slot("focus_house") is not None:
+        return False
+    # 咨询管线意图类型（LLM 富化）：深挖追问/澄清回应/确认收敛都必须在咨询管线里跑，
+    # 不落陪伴兜底（否则"怎么个暗财""对，就是这样"会被吞成闲聊）。
+    if intent is not None and intent.intent_type in (
+        "follow_up_deep_dive", "clarification_response", "confirmation",
+    ):
+        return False
     if intent.subdomain == "Chat":
         return True
     # 情绪性倾诉：负面情绪且想被听见/被安慰 → 陪伴（§8：情绪疗愈合并进随心聊）

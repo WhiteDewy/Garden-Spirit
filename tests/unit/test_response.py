@@ -14,7 +14,7 @@ import pytest
 from shared.enums import EvidencePolarity, IntentDomain, PersonaType
 from shared.models import BirthData, Conclusion, Finding, GeoLocation, Person
 
-from application.conversation.response import build_prompt, _format_conclusion
+from application.conversation.response import build_prompt, _format_conclusion, _build_call_plan_injection
 from domain.astrology.calculation import NatalChartCalculator
 from domain.astrology.interpretation import dispositor_cards, natal_reading
 from domain.astrology.interpretation.planet_profile import read_all_planets
@@ -170,6 +170,47 @@ def test_format_conclusion_includes_data_gaps():
     txt = _format_conclusion(c)
     assert "数据缺失提示" in txt
     assert "出生时间未精确到分钟" in txt
+
+
+def test_call_plan_injection_uses_canonical_parameter():
+    """build_prompt 优先消费 canonical call_plan，并注入咨询主干节奏。"""
+
+    class Plan:
+        def to_dict(self):
+            return {
+                "topic_label": "事业",
+                "output_structure": {
+                    "label": "事业",
+                    "sections": [{"title": "结构", "focus": "10宫主状态"}],
+                },
+                "cross_readings": [],
+                "guardrails": ["不要脱离 Domain 结论"],
+            }
+
+    system = build_prompt(_make_conclusion(), call_plan=Plan())[0]["content"]
+    assert "当前话题：事业" in system
+    assert "结构（聚焦：10宫主状态）" in system
+    assert "不要脱离 Domain 结论" in system
+
+
+def test_topic_plan_remains_legacy_alias():
+    """迁移期旧 topic_plan 调用仍走同一注入协议。"""
+
+    class Plan:
+        def to_dict(self):
+            return {
+                "topic_label": "感情",
+                "output_structure": {
+                    "label": "感情",
+                    "sections": [{"title": "关系结构", "focus": "7宫"}],
+                },
+                "cross_readings": [],
+                "guardrails": [],
+            }
+
+    assert _build_call_plan_injection(Plan()) in build_prompt(
+        _make_conclusion(), topic_plan=Plan()
+    )[0]["content"]
 
 
 # --- 能力总纲 system prompt（master prompt） ---
