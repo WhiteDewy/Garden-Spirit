@@ -48,8 +48,9 @@ def decomposer_no_llm():
 
 
 def test_all_domains_have_profiles(profiles):
-    """8 个 IntentDomain 都有配置。"""
-    required = {"career", "relationship", "wealth", "health", "emotion", "family", "learning", "daily"}
+    """11 个 IntentDomain 都有配置（v2 领域引擎：八域 + growth/network/self + daily）。"""
+    required = {"career", "relationship", "wealth", "health", "emotion", "family",
+                "learning", "growth", "network", "self", "daily"}
     assert set(profiles) == required
 
 
@@ -141,6 +142,16 @@ def test_decomposed_intent_delegates_to_intent():
     di = DecomposedIntent.wrap(intent)
     assert di.domain == intent.domain
     assert di.raw_query == intent.raw_query
+
+
+def test_decomposer_theme_prompt_uses_domain_signals_not_theme_core_planets():
+    """R9：theme_map.core_planets 即使残留，也不能进入 LLM 参考素材。"""
+    dec = IntentDecomposer(llm_client=None)
+    dec._theme_map["career_psychology"]["core_planets"] = ["moon"]
+    text = dec._fmt_themes(IntentDomain.CAREER)
+    assert "planets(core)=['sun', 'mars', 'jupiter', 'saturn']" in text
+    assert "planets(supporting)=" in text
+    assert "planets(core)=['moon']" not in text
 
 
 # ---------------------------------------------------------------------------

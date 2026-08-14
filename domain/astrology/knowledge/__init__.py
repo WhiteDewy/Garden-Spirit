@@ -10,6 +10,7 @@ from domain.astrology.knowledge.loader import (
     ReceptionTable,
     SignInfo,
     TermTable,
+    domain_planet_roles,
     load_from_dir,
     load_knowledge,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "ReceptionTable",
     "TermTable",
     "FaceTable",
+    "domain_planet_roles",
     "DignityEngine",
     "ReceptionEngine",
     "Reception",

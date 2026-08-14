@@ -11,7 +11,6 @@ partner_traits:
 
   # ② 指征清单（查什么）
   core_houses: [5, 7, 8]
-  core_planets: [venus, mars, moon, sun]
   house_lords: [5, 7]
   aspect_pairs:
     - [mars, moon]
@@ -44,7 +43,6 @@ wealth:
   strategy_ref: wealth.default
 
   core_houses: [2, 8, 11]
-  core_planets: [jupiter, saturn, venus, mercury]
   house_lords: [2, 8]
   aspect_pairs:
     - [jupiter, saturn]
@@ -67,7 +65,6 @@ relationship_status:
   strategy_ref: relationship.status
 
   core_houses: [5, 7]
-  core_planets: [venus, moon, mars]
   house_lords: [7]
   aspect_pairs:
     - [venus, saturn, 1.5]   # 爱与责任：承诺质量
@@ -90,7 +87,6 @@ marriage_potential:
   strategy_ref: relationship.commitment
 
   core_houses: [7]
-  core_planets: [venus, saturn, jupiter]
   house_lords: [7]
   aspect_pairs:
     - [venus, saturn, 1.5]   # 承诺能力
@@ -114,7 +110,6 @@ health:
   strategy_ref: health.default
 
   core_houses: [1, 6, 12]
-  core_planets: [sun, moon, mars, saturn]
   house_lords: [6]
   house_filter: true          # 落宫解读只看核心宫位，避免无关宫噪音
   aspect_pairs:
@@ -138,7 +133,6 @@ emotion:
   descriptive: true          # 气质/模式主题：不判吉凶，只描述
 
   core_houses: [4, 8, 12]
-  core_planets: [moon, venus, mercury, sun]
   house_lords: [12]
   house_filter: true
   aspect_pairs:
@@ -162,7 +156,6 @@ family:
   descriptive: true
 
   core_houses: [4, 8, 10]
-  core_planets: [moon, sun, saturn]
   house_lords: [4]
   house_filter: true
   aspect_pairs:
@@ -184,7 +177,6 @@ learning:
   descriptive: true
 
   core_houses: [3, 9, 10]
-  core_planets: [mercury, jupiter, sun, moon]
   house_lords: [3, 9]
   house_filter: true
   aspect_pairs:
@@ -209,7 +201,6 @@ career_psychology:
   strategy_ref: career.default
 
   core_houses: [6, 12]
-  core_planets: [moon, sun, mercury, saturn]
   house_lords: [6, 12]
   # aspect_pairs 第三元素 = 主题专属权重（倦怠核心信号加倍）
   aspect_pairs:

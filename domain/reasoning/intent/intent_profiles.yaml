@@ -67,7 +67,6 @@ career:
     - "心理与情绪压力（月亮/12宫/6宫 + 月土相位）"
     - "核心竞争力与变现能力（2宫/11宫 + 木星/水星触达）"
   core_houses: [10, 6, 2, 1]
-  core_planets: [sun, saturn, jupiter, mars, mercury, moon]
   house_lords: [10, 6, 2]
   aspect_pairs:
     - [sun, saturn]
@@ -122,7 +121,6 @@ relationship:
     - "感情时机窗口（法达金/火/月子限 + 行运）"
     - "感情中的心理模式（月亮 + 金土相位揭示的不安全感）"
   core_houses: [5, 7, 8]
-  core_planets: [venus, mars, moon, sun, saturn, jupiter]
   house_lords: [5, 7]
   aspect_pairs:
     - [venus, mars]
@@ -176,7 +174,6 @@ wealth:
     - "财富时机（法达2/8/11子限 + 行运木星）"
     - "自我价值感与赚钱能力（2宫 + 金星/水星状态）"
   core_houses: [2, 8, 11]
-  core_planets: [jupiter, saturn, venus, mercury]
   house_lords: [2, 8]
   aspect_pairs:
     - [jupiter, saturn]
@@ -211,7 +208,6 @@ health:
     - "健康风险与负荷（6宫/12宫 + 土星/火星相位）"
     - "身心连接（月亮 + 情绪对健康的影响）"
   core_houses: [1, 6, 12]
-  core_planets: [sun, moon, mars, saturn]
   house_lords: [1, 6]
   aspect_pairs:
     - [sun, saturn]
@@ -243,7 +239,6 @@ emotion:
     - "情绪压抑与释放（月土/月火相位）"
     - "当前情绪周期（法达月亮子限 + 行运）"
   core_houses: [4, 8, 12]
-  core_planets: [moon, venus, mercury, sun]
   house_lords: [4, 12]
   aspect_pairs:
     - [moon, saturn]
@@ -271,7 +266,6 @@ family:
     - "权威关系与父亲影响（10宫 + 太阳/土星）"
     - "原生家庭的模式延续（4R + 月土相位）"
   core_houses: [4, 8, 10]
-  core_planets: [moon, sun, saturn]
   house_lords: [4, 10]
   aspect_pairs:
     - [sun, saturn]
@@ -300,13 +294,126 @@ learning:
     - "学业时机（法达水/木子限 + 行运）"
     - "专注力与压力（水土相位 + 6宫）"
   core_houses: [3, 9, 10]
-  core_planets: [mercury, jupiter, sun, moon]
   house_lords: [3, 9]
   aspect_pairs:
     - [mercury, jupiter]
     - [mercury, mars]
     - [mercury, venus]
     - [mercury, saturn]
+
+growth:
+  domain: growth
+  label_zh: "远方·信念"
+  description: "深造、留学、远行、人生意义、信仰、自我成长"
+  base_tasks:
+    - module: Learning
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  conditional_tasks:
+    - triggers: ["留学", "出国", "海外", "移民", "去国外", "读博", "读研"]
+      add_modules:
+        - module: Opportunity
+          priority: medium
+          params: {}
+        - module: Risk
+          priority: low
+          params: {}
+    - triggers: ["迷茫", "没方向", "人生意义", "活着的意义", "该往哪走", "找不到意义"]
+      add_modules:
+        - module: Psychology
+          priority: high
+          params: {}
+        - module: Emotion
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "远方与深造格局（9宫/9R + 木星状态）"
+    - "信念与人生意义（木星 + 9宫/12宫语义场）"
+    - "深造时机（法达木/水子限 + 行运木星触达）"
+    - "心理与内在成长（月亮 + 12宫潜抑）"
+  core_houses: [9, 12]
+  house_lords: [9]
+  aspect_pairs:
+    - [jupiter, saturn]
+    - [jupiter, neptune]
+    - [mercury, jupiter]
+    - [moon, neptune]
+  known_subdomains: {}
+
+network:
+  domain: network
+  label_zh: "人际·社群"
+  description: "朋友、人脉、圈子、社交、团队、合伙人"
+  base_tasks:
+    - module: Psychology
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  conditional_tasks:
+    - triggers: ["人脉", "圈子", "社交", "交朋友", "处不好", "没朋友", "社恐", "不合群"]
+      add_modules:
+        - module: RelationshipStatus
+          priority: medium
+          params: {}
+    - triggers: ["合伙人", "团队", "同事", "合作", "一起干"]
+      add_modules:
+        - module: Opportunity
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "人脉与社群格局（11宫/11R + 木星/天王触达）"
+    - "社交心理模式（7宫/3宫 + 月亮状态）"
+    - "圈子时机（法达木/水子限 + 行运）"
+    - "朋友质量与边界（11宫语义场 + 土星/天王）"
+  core_houses: [11, 3, 7]
+  house_lords: [11, 7]
+  aspect_pairs:
+    - [jupiter, saturn]
+    - [mercury, uranus]
+    - [moon, saturn]
+    - [venus, saturn]
+  known_subdomains: {}
+
+self:
+  domain: self
+  label_zh: "自我"
+  description: "我是谁、自我认知、人格、内在成长、人生方向"
+  base_tasks:
+    - module: Psychology
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  conditional_tasks:
+    - triggers: ["我是谁", "不了解自己", "自我", "人格", "性格", "想不通自己"]
+      add_modules:
+        - module: Emotion
+          priority: medium
+          params: {}
+    - triggers: ["独处", "一个人", "孤独", "静下来", "内耗"]
+      add_modules:
+        - module: Emotion
+          priority: medium
+          params: {}
+  focus_dimensions:
+    - "自我形象与存在感（1宫/1R + 太阳状态）"
+    - "人格底色与行为风格（太阳/月亮 + 星座元素调制）"
+    - "内在成长与潜能（9宫/12宫语义场）"
+    - "当下自我阶段（法达 + 行运过 1宫）"
+  core_houses: [1, 9, 12]
+  house_lords: [1, 9]
+  aspect_pairs:
+    - [sun, moon]
+    - [sun, saturn]
+    - [moon, pluto]
+    - [sun, pluto]
+  known_subdomains: {}
 
 daily:
   domain: daily
@@ -321,6 +428,5 @@ daily:
     - "当日行运扫描（行运行星与本命盘的相位）"
     - "月亮当天落宫与情绪基调"
   core_houses: [1]
-  core_planets: [moon, sun]
   house_lords: []
   aspect_pairs: []

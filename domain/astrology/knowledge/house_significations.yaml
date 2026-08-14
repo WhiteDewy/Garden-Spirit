@@ -5,271 +5,362 @@
 #
 # 字段说明：
 #   word        : 该含义（精确描述）
-#   domains     : 该含义激活的问题域（career/relationship/wealth/health/emotion/family/learning/self）
+#   domains     : 该含义激活的问题域（领域引擎 v2：career/relationship/wealth/health/emotion/
+#                 family/learning/growth/network/self；每词 2-3 主域上限，daily 是跨域行运视图不在此表）
+#   governors   : 该含义听谁的主星（v2 per-signification 调制）——具体行星（mercury）
+#                 或宫主引用（3rd_lord，运行时展开为传统守卫星）。天海冥只能做次级关联，
+#                 不掌宫、不做结构判断。governors 至少 1 颗主星。
 #   polarity    : positive / negative / neutral（本身极性，结构调制后会倾斜）
 #   intensity   : 语义场基础强度 1-5
 #   resonance   : 通俗共鸣词（LLM 转述时锚点，确定性数据，不发明）
 #   gated       : tendency（倾向，默认）/ event（事件预言，高门槛）
-#   requires_corroboration + corroborate_houses : event 条目需要的强连接收敛数
+#   route_keywords : 路由关键词（体系二定位层使用，只决定看哪个宫/切片，不生成结论）
+#   route_secondary: 弱路由词（只作低权重定位兜底）。
 #
 # 解读优先级：P1 倾向切片默认；P2 事件切片需收敛数达标 + 域激活 + 非预言护栏。
 
 house_significations:
   1:
     - word: "自我/个性/存在感"
+      route_keywords: ["我是谁", "性格", "气质", "自我认知", "命主星"]
       domains: [self]
+      governors: [sun]
       polarity: neutral
       intensity: 3
       resonance: ["做自己", "存在感"]
     - word: "生命力/精力"
+      route_secondary: ["身体", "健康状态"]
       domains: [health, self]
+      governors: [sun, mars]
       polarity: neutral
       intensity: 2
       resonance: ["元气", "活力"]
     - word: "外观/第一印象/气场"
+      route_keywords: ["长相", "给人的感觉", "第一印象"]
       domains: [career, relationship]
+      governors: [1st_lord]
       polarity: neutral
       intensity: 2
       resonance: ["气场", "第一印象"]
   2:
     - word: "正财/收入/积累"
+      route_keywords: ["赚钱", "收入", "工资", "正财", "财运", "钱", "财富", "理财", "存钱"]
       domains: [wealth]
+      governors: [2nd_lord, venus]
       polarity: positive
       intensity: 3
       resonance: ["正财", "稳定收入"]
     - word: "价值观/物质安全感"
+      route_keywords: ["值钱", "价值观", "花钱", "消费", "自我价值"]
       domains: [self, wealth]
+      governors: [2nd_lord, moon]
       polarity: neutral
       intensity: 2
       resonance: ["安全感", "务实"]
     - word: "技能变现/副业收入"
       domains: [career, wealth]
+      governors: [2nd_lord, mercury]
       polarity: positive
       intensity: 2
       resonance: ["副业", "技能变现"]
     - word: "收入波动/漏财/积蓄难"
       domains: [wealth]
+      governors: [2nd_lord, neptune]
       polarity: negative
       intensity: 2
       resonance: ["存不住", "收入波动"]
   3:
     - word: "沟通/表达/写作"
+      route_keywords: ["说话", "沟通", "写作", "表达", "考试"]
       domains: [career, learning, self]
+      governors: [mercury]          # 自己表达看水星（+3宫主作结构贡献）
       polarity: positive
       intensity: 3
       resonance: ["会表达", "能写"]
     - word: "学习/短途/走动"
+      route_keywords: ["学习", "短途", "信息", "思维"]
       domains: [learning]
+      governors: [mercury, 3rd_lord]
       polarity: neutral
       intensity: 2
       resonance: ["爱学习", "闲不住"]
     - word: "内容/传播/表达影响力"
       domains: [career]
+      governors: [mercury, jupiter]
       polarity: positive
       intensity: 2
       resonance: ["内容", "影响力"]
     - word: "兄弟姐妹/邻里/熟人群"
+      route_keywords: ["兄弟姐妹", "同学", "邻居"]
       domains: [family]
+      governors: [3rd_lord]         # 手足看3宫结构+宫主，不看水星
       polarity: neutral
       intensity: 2
       resonance: ["家人朋友", "邻里"]
   4:
     - word: "家庭/根基/原生家庭"
+      route_keywords: ["家庭", "父母", "爸爸", "父亲", "家", "根基", "原生家庭"]
       domains: [family, self]
+      governors: [4th_lord, moon]
       polarity: neutral
       intensity: 3
       resonance: ["原生家庭", "根"]
     - word: "房产/置业/安家"
+      route_keywords: ["房产", "买房", "搬家"]
       domains: [wealth, family]
+      governors: [4th_lord, saturn]
       polarity: positive
       intensity: 2
       resonance: ["买房", "安家"]
     - word: "内心/安全感"
+      route_keywords: ["内心安全感"]
       domains: [emotion, self]
+      governors: [moon]
       polarity: neutral
       intensity: 2
       resonance: ["内心戏", "安全感"]
     - word: "家业/不动产/祖荫"
+      route_keywords: ["祖宗", "继承", "晚年"]
       domains: [wealth]
+      governors: [4th_lord, saturn]
       polarity: neutral
       intensity: 2
       resonance: ["家业", "房产"]
   5:
     - word: "恋爱/浪漫/心动"
+      route_keywords: ["谈恋爱", "桃花", "心动", "暧昧", "脱单", "约会", "对象", "恋爱运", "恋爱观", "怎么追人", "浪漫"]
       domains: [relationship]
+      governors: [venus]
       polarity: positive
       intensity: 3
       resonance: ["心动", "恋爱脑"]
     - word: "创造力/才华/兴趣"
+      route_keywords: ["创造力", "才华", "兴趣", "天赋", "玩", "娱乐", "快乐"]
       domains: [career, self]
+      governors: [sun]
       polarity: positive
       intensity: 2
       resonance: ["才华", "天赋"]
     - word: "子女/亲子"
+      route_keywords: ["孩子", "怀孕"]
       domains: [family]
+      governors: [5th_lord]
       polarity: positive
       intensity: 2
       resonance: ["孩子", "亲子"]
     - word: "投机/博弈/风险投入"
+      route_keywords: ["赌博", "投机"]
       domains: [wealth]
+      governors: [5th_lord, mars]
       polarity: negative
       intensity: 2
       resonance: ["梭哈", "上头"]
   6:
     - word: "日常工作/服务/责任"
+      route_keywords: ["工作", "日常", "同事", "工作内容", "职场日常", "打工", "服务", "下属", "劳碌"]
       domains: [career]
+      governors: [6th_lord, mercury]
       polarity: neutral
       intensity: 3
       resonance: ["打工人", "责任"]
     - word: "技艺/精细/专业打磨"
+      route_keywords: ["技能", "习惯"]
       domains: [career, self]
+      governors: [6th_lord, mercury]
       polarity: positive
       intensity: 2
       resonance: ["匠人", "专业"]
     - word: "健康/劳损/作息"
+      route_keywords: ["健康", "生病", "身体", "体检", "宠物"]
       domains: [health]
+      governors: [6th_lord, mars]
       polarity: neutral
       intensity: 2
       resonance: ["劳损", "养生"]
     - word: "过度劳损/积劳成疾"
       domains: [health]
+      governors: [6th_lord, saturn]
       polarity: negative
       intensity: 2
       resonance: ["积劳", "透支"]
   7:
     - word: "伴侣/婚姻/一对一"
+      route_keywords: ["结婚", "嫁", "娶", "老公", "老婆", "伴侣", "婚姻", "对象", "另一半", "配偶运", "对方特质", "一对一"]
       domains: [relationship]
+      governors: [7th_lord, venus]
       polarity: positive
       intensity: 3
       resonance: ["正缘", "伴侣"]
     - word: "合作/合伙/签约/客户"
+      route_keywords: ["合作", "合伙人", "合伙", "签合同", "契约"]
       domains: [career, wealth]
+      governors: [7th_lord, jupiter]
       polarity: positive
       intensity: 2
       resonance: ["合伙人", "甲方"]
     - word: "公开对手/竞争/诉讼"
+      route_keywords: ["打官司", "对手"]
       domains: [relationship, career]
+      governors: [7th_lord, mars]
       polarity: negative
       intensity: 2
       resonance: ["对手", "对家"]
   8:
     - word: "亲密/深层占有/性"
+      route_keywords: ["性", "深度关系"]
       domains: [relationship]
+      governors: [8th_lord, pluto]
       polarity: neutral
       intensity: 2
       resonance: ["亲密关系", "占有"]
     - word: "他人资源/遗产/保险/共同财产"
+      route_keywords: ["偏财", "遗产", "别人钱", "共同财产", "保险", "税务"]
       domains: [wealth]
+      governors: [8th_lord, pluto]
       polarity: neutral
       intensity: 2
       resonance: ["偏财", "共同财产"]
     - word: "投资/杠杆/风险资本"
+      route_keywords: ["投资", "债务", "贷款"]
       domains: [wealth]
+      governors: [8th_lord, mars]
       polarity: neutral
       intensity: 2
       resonance: ["杠杆", "投资"]
     - word: "危机/转化/重生"
+      route_keywords: ["危机", "转化", "心理学", "生死", "秘密"]
       domains: [emotion, health, self]
+      governors: [8th_lord, pluto]
       polarity: neutral
       intensity: 2
       resonance: ["蜕变", "重生"]
     - word: "遗产/继承/赡养"
       domains: [family, wealth]
+      governors: [8th_lord, saturn]
       polarity: neutral
       intensity: 2
       resonance: ["继承", "赡养"]
   9:
     - word: "高等学问/深造/专业体系"
-      domains: [learning, career]
+      route_keywords: ["深造", "考研", "留学", "大学", "进修", "学历"]
+      domains: [learning, career, growth]
+      governors: [9th_lord, jupiter]
       polarity: positive
       intensity: 3
       resonance: ["肯钻研", "专业积累"]
     - word: "哲学/信仰/玄学/灵性"
-      domains: [self, learning]
+      route_keywords: ["信仰", "哲学", "宗教", "玄学", "灵性", "意义", "智慧"]
+      domains: [self, learning, growth]
+      governors: [jupiter, neptune]
       polarity: positive
       intensity: 3
       resonance: ["玄学", "灵性"]
     - word: "远行/国际/跨文化"
-      domains: [career, learning]
+      route_keywords: ["出国", "远方", "旅行"]
+      domains: [growth, career, learning]
+      governors: [9th_lord, jupiter]
       polarity: neutral
       intensity: 2
       resonance: ["远方", "国际"]
     - word: "导师/贵人/权威"
-      domains: [career, learning]
+      route_keywords: ["法律", "出版", "理想", "导师"]
+      domains: [career, learning, growth]
+      governors: [jupiter, saturn]
       polarity: positive
       intensity: 2
       resonance: ["贵人", "导师"]
     - word: "考试运/升学运一般"
-      domains: [learning, career]
+      domains: [learning, career, growth]
+      governors: [9th_lord, mercury]
       polarity: negative
       intensity: 2
       resonance: ["考运一般", "升学波折"]
     - word: "深造过程费力/硬啃"
-      domains: [learning]
+      domains: [learning, growth]
+      governors: [9th_lord, saturn]
       polarity: negative
       intensity: 2
       resonance: ["硬啃", "费劲"]
   10:
     - word: "事业/名声/公众形象"
+      route_keywords: ["事业", "工作方向", "升职", "名望", "职业", "天职", "公众形象"]
       domains: [career]
+      governors: [10th_lord, sun]
       polarity: positive
       intensity: 3
       resonance: ["事业", "口碑"]
     - word: "地位/权威/成就"
+      route_keywords: ["成就", "社会地位", "人生目标", "权威", "领导", "出名", "社会角色"]
       domains: [career, self]
+      governors: [10th_lord, saturn]
       polarity: positive
       intensity: 2
       resonance: ["地位", "成就"]
     - word: "上司/雇主/权力关系"
+      route_keywords: ["老板", "上级"]
       domains: [career]
+      governors: [10th_lord, saturn]
       polarity: neutral
       intensity: 2
       resonance: ["上司", "老板"]
     - word: "事业受阻/晋升波折/名誉争议"
       domains: [career]
+      governors: [10th_lord, saturn]
       polarity: negative
       intensity: 2
       resonance: ["受阻", "波折"]
   11:
     - word: "社群/朋友/人脉"
-      domains: [relationship, career]
+      route_keywords: ["朋友", "社交", "人脉", "社群", "团队", "粉丝", "平台", "圈子", "组织", "受众", "互联网"]
+      domains: [network, relationship, career]
+      governors: [11th_lord, jupiter]
       polarity: positive
       intensity: 3
       resonance: ["人脉", "圈子"]
     - word: "理想/愿景/未来"
-      domains: [self, career]
+      route_keywords: ["理想", "希望", "未来"]
+      domains: [self, growth, network]
+      governors: [11th_lord, jupiter]
       polarity: positive
       intensity: 2
       resonance: ["愿景", "梦想"]
     - word: "科技/创新/新事物"
-      domains: [career]
+      domains: [career, network, growth]
+      governors: [11th_lord, uranus]
       polarity: positive
       intensity: 2
       resonance: ["科技", "新潮"]
   12:
     - word: "玄学/灵性/幕后专业"
+      route_keywords: ["灵性", "修行", "玄学", "秘法", "闭关", "幕后"]
       domains: [career, self, wealth]
+      governors: [12th_lord, neptune]
       polarity: positive
       intensity: 3
       resonance: ["灵性工作者", "幕后专业"]
     - word: "暗财/偏财/隐性收入"
       domains: [wealth]
+      governors: [12th_lord, neptune]
       polarity: neutral
       intensity: 2
       resonance: ["暗财", "偏财"]
     - word: "小人/暗中敌人/背叛"
+      route_keywords: ["小人", "暗算", "犯小人", "背叛"]
       domains: [relationship]
+      governors: [12th_lord, neptune]
       polarity: negative
       intensity: 3
       resonance: ["小人", "暗中使绊"]
     - word: "恋爱脑/地下恋/隐秘情缘"
       domains: [relationship]
+      governors: [12th_lord, venus]
       polarity: neutral
       intensity: 2
       resonance: ["恋爱脑", "地下恋"]
       gated: tendency
     - word: "三方关系/暗情介入"
       domains: [relationship]
+      governors: [12th_lord, venus]
       polarity: negative
       intensity: 2
       resonance: ["三角", "暗情"]
@@ -277,12 +368,16 @@ house_significations:
       requires_corroboration: 2
       corroborate_houses: [5, 7, 8]
     - word: "医院/失眠/潜抑/自我消耗"
+      route_keywords: ["医院", "监狱", "抑郁症", "孤独"]
       domains: [health, emotion]
+      governors: [12th_lord, moon]
       polarity: negative
       intensity: 2
       resonance: ["失眠", "身心透支"]
     - word: "潜意识/梦境/灵感"
+      route_keywords: ["业力", "梦境", "潜意识", "牺牲", "放不下"]
       domains: [emotion, self]
+      governors: [moon, neptune]
       polarity: neutral
       intensity: 2
       resonance: ["灵感", "直觉"]

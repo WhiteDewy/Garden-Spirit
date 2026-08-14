@@ -18,7 +18,7 @@ from shared.enums import EvidencePolarity, FactCategory, Planet
 from shared.models import Aspect, Chart, Fact
 
 from domain.astrology.common import aspects_to, house_lord
-from domain.astrology.knowledge.loader import KnowledgeBase, load_knowledge
+from domain.astrology.knowledge.loader import KnowledgeBase, domain_planet_roles, load_knowledge
 from domain.astrology.evidence.confidence import ConfidenceEngine
 
 logger = get_logger("astrology.evidence.rules")
@@ -258,7 +258,12 @@ class RuleEngine:
 
         facts: list[Fact] = []
         rules_cfg = recipe.get("rules", [])
-        core_planets = recipe.get("core_planets", [])
+        domain = recipe.get("domain")
+        core_planets, _supporting_planets = domain_planet_roles(self._kb.planet_nature, domain)
+        planet_filter = recipe.get("planet_filter")
+        if isinstance(planet_filter, list):
+            allowed = {str(p) for p in planet_filter}
+            core_planets = [p for p in core_planets if p in allowed]
         core_houses = recipe.get("core_houses", [])
         # 落宫解读过滤：只保留行星落在核心宫位的解读（避免无关宫性格描述噪音）
         house_filter = bool(recipe.get("house_filter", False))

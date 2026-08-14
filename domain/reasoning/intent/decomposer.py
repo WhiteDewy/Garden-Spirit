@@ -26,6 +26,8 @@ from foundation.logger import get_logger
 from shared.enums import IntentDomain, Priority
 from shared.models import Intent
 
+from domain.astrology.knowledge.loader import domain_planet_roles
+
 from .intent_profiles import (
     ConditionalTask,
     IntentProfile,
@@ -66,16 +68,20 @@ _MODULE_DESCRIPTIONS: dict[str, str] = {
     "Learning": "学习分析：水星+3/9宫学习天赋",
 }
 
-# domain → planet_nature domain key
-_DOMAIN_PLANET_KEY: dict[IntentDomain, str] = {
+# domain → planet_nature domain_signals key
+# （v2 领域引擎：词汇已合一，星性信号键即领域名；daily 是跨域行运视图，无星性列）
+_DOMAIN_PLANET_KEY: dict[IntentDomain, str | None] = {
     IntentDomain.CAREER: "career",
-    IntentDomain.RELATIONSHIP: "dating",
+    IntentDomain.RELATIONSHIP: "relationship",
     IntentDomain.WEALTH: "wealth",
     IntentDomain.HEALTH: "health",
-    IntentDomain.EMOTION: "health",
+    IntentDomain.EMOTION: "emotion",
     IntentDomain.FAMILY: "family",
-    IntentDomain.LEARNING: "study",
-    IntentDomain.DAILY: "career",
+    IntentDomain.LEARNING: "learning",
+    IntentDomain.GROWTH: "growth",
+    IntentDomain.NETWORK: "network",
+    IntentDomain.SELF: "self",
+    IntentDomain.DAILY: None,  # 跨域行运视图，无独立星性信号
 }
 
 # domain → theme_map 相关主题
@@ -203,7 +209,7 @@ class IntentDecomposer:
         self._llm = llm_client
         self._registered_modules = registered_modules or set(_MODULE_DESCRIPTIONS)
         self._profiles = load_profiles(profiles_path)
-        self._house_nature = self._load_yaml("house_nature.yaml", is_kb=True)
+        self._house_significations = self._load_yaml("house_significations.yaml", is_kb=True)
         self._planet_nature = self._load_yaml("planet_nature.yaml", is_kb=True)
         self._theme_map = self._load_yaml("rules/theme_map.yaml", is_kb=True)
 
@@ -314,20 +320,32 @@ class IntentDecomposer:
     def _fmt_houses(self, domain: IntentDomain) -> str:
         profile = self._profiles.get(domain.value)
         relevant = profile.core_houses if profile else [1, 10]
-        houses = self._house_nature.get("houses", {})
+        significations = self._house_significations.get("house_significations", {})
         lines: list[str] = []
         for h in relevant:
-            hd = houses.get(h) or houses.get(str(h))
-            if not hd:
+            entries = significations.get(h) or significations.get(str(h)) or []
+            if entries:
+                snippets: list[str] = []
+                route_terms: list[str] = []
+                for entry in entries[:4]:
+                    if not isinstance(entry, dict):
+                        continue
+                    word = entry.get("word", "")
+                    domains = "/".join(entry.get("domains", [])[:3])
+                    governors = "/".join(str(g) for g in entry.get("governors", [])[:3])
+                    if word:
+                        snippets.append(f"{word} [{domains}] governors={governors}")
+                    for kw in entry.get("route_keywords", []) or []:
+                        if kw and kw not in route_terms:
+                            route_terms.append(str(kw))
+                lines.append(f"H{h}: {'; '.join(snippets)}. 路由词: {', '.join(route_terms[:8])}")
                 continue
-            label = hd.get("label", f"H{h}")
-            themes = hd.get("themes", [])[:4]
-            kw = hd.get("topic_keywords", {}).get("primary", [])[:6]
-            lines.append(f"H{h} ({label}): {'; '.join(themes)}. 关键词: {', '.join(kw)}")
         return "\n".join(lines)
 
     def _fmt_planets(self, domain: IntentDomain) -> str:
-        dk = _DOMAIN_PLANET_KEY.get(domain, "career")
+        dk = _DOMAIN_PLANET_KEY.get(domain)
+        if dk is None:
+            return "（daily 为跨域行运视图，无独立星性信号——直接看行运即可）"
         planets = self._planet_nature.get("planets", {})
         lines: list[str] = []
         for pk, pd in planets.items():
@@ -346,9 +364,13 @@ class IntentDecomposer:
             if tk in keys:
                 label = td.get("label_zh", tk)
                 houses = td.get("core_houses", [])
-                planets = td.get("core_planets", [])
+                domain_key = td.get("domain") or _DOMAIN_PLANET_KEY.get(domain)
+                core, supporting = domain_planet_roles(self._planet_nature, domain_key)
                 lords = td.get("house_lords", [])
-                lines.append(f"{label}: houses={houses}, planets={planets}, lords={lords}")
+                lines.append(
+                    f"{label}: houses={houses}, domain={domain_key}, "
+                    f"planets(core)={core}, planets(supporting)={supporting}, lords={lords}"
+                )
         return "\n".join(lines) if lines else "No specific theme recipe for this domain."
 
     def _fmt_modules(self) -> str:

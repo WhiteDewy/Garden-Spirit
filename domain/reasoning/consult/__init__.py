@@ -6,12 +6,27 @@
 3. 推运时间窗口（法达 × 本命宫主状态 + 行运）
 
 三层规则体系（YAML 数据驱动）：
-- house_nature.yaml   宫性规则
-- planet_nature.yaml  星性规则
-- natal_composition.yaml  本命组合规则
-- timing_rules.yaml   推运规则
+- house_significations.yaml  宫位语义场 + 路由词
+- house_derived.yaml         转宫关系表
+- planet_nature.yaml         星性规则
+- natal_composition.yaml     本命组合规则
+- timing_rules.yaml          推运规则
 """
 
-from domain.reasoning.consult.resolver import ConsultResolver, TopicPlan, resolve_question, get_resolver
+from domain.reasoning.consult.resolver import (
+    ConsultCallPlan,
+    ConsultResolver,
+    TopicPlan,
+    get_resolver,
+    resolve_call_plan,
+    resolve_question,
+)
 
-__all__ = ["ConsultResolver", "TopicPlan", "resolve_question", "get_resolver"]
+__all__ = [
+    "ConsultCallPlan",
+    "ConsultResolver",
+    "TopicPlan",
+    "resolve_call_plan",
+    "resolve_question",
+    "get_resolver",
+]

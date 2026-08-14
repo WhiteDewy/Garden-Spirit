@@ -94,9 +94,21 @@ def test_partner_traits_module(chart):
     assert all(f.payload.get("rule_id") for f in facts)
 
 
-def test_unknown_theme_returns_empty(chart):
-    engine = RuleEngine()
-    assert engine.run_theme(chart, "nonexistent_theme") == []
+def test_run_theme_uses_domain_signals_not_theme_core_planets(chart):
+    """R9：theme_map.core_planets 即使残留，也不能作为第二真相源驱动主题编排。"""
+    kb = load_knowledge()
+    recipe = dict(kb.theme_map["wealth"])
+    recipe["core_planets"] = ["moon"]
+    recipe["aspect_pairs"] = []
+    recipe["house_lords"] = []
+    recipe["rules"] = ["planet_in_house"]
+    kb.theme_map["_r9_stale_core_planets"] = recipe
+
+    facts = RuleEngine(kb).run_theme(chart, "_r9_stale_core_planets")
+    rule_ids = {f.payload["rule_id"] for f in facts}
+    assert any(rule_id.startswith("planet_in_house:venus_") for rule_id in rule_ids)
+    assert any(rule_id.startswith("planet_in_house:jupiter_") for rule_id in rule_ids)
+    assert not any(rule_id.startswith("planet_in_house:moon_") for rule_id in rule_ids)
 
 
 # ---------------------------------------------------------------------------

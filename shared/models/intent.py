@@ -36,5 +36,13 @@ class Intent:
     requires_clarification: bool = False   # Domain 无法高置信度映射时需要追问
     clarification_question: str = ""       # 追问问题
 
+    # ---- 对话路由信号（Layer 1 富化产物；领域归属仍由 Domain 定） ----
+    # intent_type: new_question | follow_up_deep_dive | clarification_response
+    #              | topic_switch | confirmation | chat | meta
+    intent_type: str = "new_question"
+    focus_slice: str | None = None      # 用户点名的宫位切片（如"暗财/偏财/隐性收入"）
+    deep_dive: bool = False             # 对上一轮某条切片的深挖追问
+    confirmed: bool | None = None       # 仅 confirmation 意图：确认(True)/否认(False)
+
     def get_slot(self, name: str) -> IntentSlot | None:
         return self.slots.get(name)

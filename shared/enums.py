@@ -154,16 +154,24 @@ class Sect(str, Enum):
 
 
 class IntentDomain(str, Enum):
-    """八大意图领域。"""
+    """十一大意图领域（领域引擎 v2）。
 
-    CAREER = "career"
-    RELATIONSHIP = "relationship"
-    WEALTH = "wealth"
-    HEALTH = "health"
-    EMOTION = "emotion"
-    FAMILY = "family"
-    LEARNING = "learning"
-    DAILY = "daily"
+    在原有八域基础上：感情加宽（收 12 宫暗面）、新增 growth 远方·信念、
+    新增 network 人际·社群、新增 self 自我。daily 保留为跨域行运视图。
+    词汇与 planet_nature/house_significations 语义场标签对齐（docs/domain_engine_v2.md）。
+    """
+
+    CAREER = "career"            # 事业：10/6/2/1
+    RELATIONSHIP = "relationship"  # 感情（宽）：5/7/8/12 整条光谱
+    WEALTH = "wealth"            # 财富：2/8/11
+    HEALTH = "health"            # 健康：1/6/12
+    EMOTION = "emotion"          # 情绪：4/8/12
+    FAMILY = "family"            # 家庭：4/5(亲子)/10
+    LEARNING = "learning"        # 学习：3/6
+    GROWTH = "growth"            # 远方·信念：9/12（留学/深造/信仰/人生意义）
+    NETWORK = "network"          # 人际·社群：11/3/7（朋友/人脉/圈子/团队）
+    SELF = "self"                # 自我：1/9/12（我是谁/人格/内在成长）
+    DAILY = "daily"              # 每日运势（跨域行运视图，非语义场域）
 
 
 class EvidencePolarity(str, Enum):

@@ -7,6 +7,7 @@
 """
 
 from domain.astrology.interpretation.affliction import AfflictionReading, affliction_readings
+from domain.astrology.interpretation.compositor import CompositeReading, DomainCompositor, TrackResult
 from domain.astrology.interpretation.dispositor import DispositorReading, dispositor_interpretations
 from domain.astrology.interpretation.evidence_card import EvidenceCard, dispositor_cards
 from domain.astrology.interpretation.models import ConnectionFact, HouseSynapsis, SignificationItem
@@ -17,15 +18,18 @@ from domain.astrology.interpretation.synapsis import ConnectionClassifier, detec
 
 __all__ = [
     "AfflictionReading",
+    "CompositeReading",
     "ConnectionClassifier",
     "ConnectionFact",
     "DispositorReading",
+    "DomainCompositor",
     "EvidenceCard",
     "HouseSignificationEngine",
     "HouseSynapsis",
     "NatalReading",
     "PlanetProfile",
     "SignificationItem",
+    "TrackResult",
     "affliction_readings",
     "detect_synapsis",
     "dispositor_cards",

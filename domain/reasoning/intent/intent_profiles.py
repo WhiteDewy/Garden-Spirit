@@ -44,7 +44,6 @@ class IntentProfile:
     conditional_tasks: list[ConditionalTask] = field(default_factory=list)
     focus_dimensions: list[str] = field(default_factory=list)
     core_houses: list[int] = field(default_factory=list)
-    core_planets: list[str] = field(default_factory=list)
     house_lords: list[int] = field(default_factory=list)
     aspect_pairs: list[list] = field(default_factory=list)
     known_subdomains: dict = field(default_factory=dict)
@@ -91,7 +90,6 @@ def load_profiles(path: str | None = None) -> dict[str, IntentProfile]:
             conditional_tasks=cond,
             focus_dimensions=data.get("focus_dimensions", []),
             core_houses=data.get("core_houses", []),
-            core_planets=data.get("core_planets", []),
             house_lords=data.get("house_lords", []),
             aspect_pairs=data.get("aspect_pairs", []),
             known_subdomains=data.get("known_subdomains", {}),

@@ -133,3 +133,57 @@ daily.default:
     conflict_threshold: 0.15
   model_dependencies:
     Daily: []
+
+growth.default:
+  description: "远方·信念领域默认分析：深造/远见 + 时机（9/12宫语义场打底）"
+  required_analysis:
+    - module: Learning
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Learning: []
+    Timing: [Learning]
+
+network.default:
+  description: "人际·社群领域默认分析：人际心理 + 时机（11宫语义场打底）"
+  required_analysis:
+    - module: Psychology
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Psychology: []
+    Timing: [Psychology]
+
+self.default:
+  description: "自我领域默认分析：自我认知 + 时机（1宫语义场打底）"
+  required_analysis:
+    - module: Psychology
+      priority: high
+      params: {}
+    - module: Timing
+      priority: medium
+      params: { window_months: 6 }
+  evidence_rules:
+    positive_weight: 1.0
+    negative_weight: 0.8
+    min_confidence: 0.3
+    conflict_threshold: 0.15
+  model_dependencies:
+    Psychology: []
+    Timing: [Psychology]

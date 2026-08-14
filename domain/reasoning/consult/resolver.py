@@ -13,12 +13,16 @@ from typing import Any
 import yaml
 
 from foundation.logger import get_logger
-from shared.enums import Planet
+from shared.enums import IntentDomain
+from shared.models.intent import Intent
+
+from domain.astrology.knowledge.loader import domain_planet_roles
 
 logger = get_logger("reasoning.consult")
 
 _RULES_DIR = Path(__file__).parent.parent.parent / "astrology" / "knowledge"
 _RULES_SUBDIR = _RULES_DIR / "rules"
+_INTENT_PROFILES_PATH = Path(__file__).parent.parent / "intent" / "intent_profiles.yaml"
 
 
 # =============================================================================
@@ -28,7 +32,7 @@ _RULES_SUBDIR = _RULES_DIR / "rules"
 
 @dataclass
 class TopicPlan:
-    """一个话题的完整解析结果。"""
+    """一个话题的完整解析结果（旧兼容层）。"""
 
     topic_id: str                          # "marriage" / "dating" / "career" ...
     topic_label: str                       # "婚姻" / "桃花" / "事业" ...
@@ -55,6 +59,87 @@ class TopicPlan:
         }
 
 
+@dataclass
+class ConsultCallPlan:
+    """体系二咨询调用主干：领域/宫位/切片 → 承载者集合。
+
+    这是定位层向 Domain 证据链传递的 canonical 结构。它只描述「看哪里、读哪些
+    承载者、按什么话题节奏转述」，不生成占星结论；结论仍由 Domain 层产出，LLM 只
+    使用这里的 prompt payload 调整叙事组织。
+    """
+
+    domain: str
+    domain_label: str
+    focus_house: int
+    topic_id: str
+    topic_label: str
+    focus_slice: str | None = None
+    core_houses: list[int] = field(default_factory=list)
+    supplementary_houses: list[int] = field(default_factory=list)
+    natural_significators: list[str] = field(default_factory=list)
+    supporting_planets: list[str] = field(default_factory=list)
+    house_lords: list[int] = field(default_factory=list)
+    house_occupants: list[str] = field(default_factory=list)
+    aspect_pairs: list[list] = field(default_factory=list)
+    cross_readings: list[dict] = field(default_factory=list)
+    scenarios: list[dict] = field(default_factory=list)
+    output_structure: dict | None = None
+    guardrails: list[str] = field(default_factory=list)
+    source: str = "consult_resolver_v2"
+
+    @property
+    def primary_house(self) -> int:
+        """旧 TopicPlan 字段别名，供迁移期间兼容。"""
+        return self.focus_house
+
+    @property
+    def primary_planets(self) -> list[str]:
+        """旧 TopicPlan 字段别名：先天征象星作为当前 natural carriers。"""
+        return self.natural_significators
+
+    def to_topic_plan(self) -> TopicPlan:
+        """降级为旧 TopicPlan，供 response.py 与存量测试迁移期继续使用。"""
+        return TopicPlan(
+            topic_id=self.topic_id,
+            topic_label=self.topic_label,
+            primary_house=self.focus_house,
+            supplementary_houses=self.supplementary_houses,
+            primary_planets=self.natural_significators,
+            supporting_planets=self.supporting_planets,
+            cross_readings=self.cross_readings,
+            scenarios=self.scenarios,
+            output_structure=self.output_structure,
+            guardrails=self.guardrails,
+        )
+
+    def to_dict(self) -> dict:
+        """序列化为 canonical 字段，并保留旧 prompt 注入需要的键。"""
+        return {
+            # canonical trunk
+            "domain": self.domain,
+            "domain_label": self.domain_label,
+            "focus_house": self.focus_house,
+            "focus_slice": self.focus_slice,
+            "core_houses": self.core_houses,
+            "natural_significators": self.natural_significators,
+            "supporting_planets": self.supporting_planets,
+            "house_lords": self.house_lords,
+            "house_occupants": self.house_occupants,
+            "aspect_pairs": self.aspect_pairs,
+            "source": self.source,
+            # legacy-compatible prompt payload
+            "topic_id": self.topic_id,
+            "topic_label": self.topic_label,
+            "primary_house": self.focus_house,
+            "supplementary_houses": self.supplementary_houses,
+            "primary_planets": self.natural_significators,
+            "cross_readings": self.cross_readings,
+            "scenarios": self.scenarios,
+            "output_structure": self.output_structure,
+            "guardrails": self.guardrails,
+        }
+
+
 # =============================================================================
 # Resolver
 # =============================================================================
@@ -64,8 +149,11 @@ class ConsultResolver:
     """从用户问题 + 星盘数据 → 咨询结构。"""
 
     def __init__(self, kb=None):
-        self._house_nature = self._load_yaml("house_nature.yaml")
+        self._houses = self._load_yaml("houses.yaml")
+        self._house_significations = self._load_yaml("house_significations.yaml")
+        self._house_derived = self._load_yaml("house_derived.yaml")
         self._planet_nature = self._load_yaml("planet_nature.yaml")
+        self._intent_profiles = self._load_intent_profiles()
         self._natal_comp = self._load_rules("natal_composition.yaml")
         self._timing_rules = self._load_rules("timing_rules.yaml")
         self._kb = kb  # KnowledgeBase reference（可选，用于查 lordship 等）
@@ -75,75 +163,182 @@ class ConsultResolver:
     # -----------------------------------------------------------------
 
     def resolve_topic(self, question: str) -> TopicPlan:
-        """从用户问题文字 → TopicPlan。"""
+        """从用户问题文字 → TopicPlan（兼容包装）。"""
+        return self.resolve_call_plan(question).to_topic_plan()
 
-        # 1. 关键词匹配 → 主宫
-        primary_house = self._match_primary_house(question)
-        primary_info = self._house_nature["houses"][primary_house]
+    def resolve_call_plan(self, question: str | Intent, intent: Intent | None = None) -> ConsultCallPlan:
+        """从用户问题 / Intent → ConsultCallPlan 主干。
 
-        # 2. 从主宫的 as_derived + 话题语境 → 辅宫
-        supplementary = self._resolve_supplementary(primary_house, question)
+        Wave 1 先保持旧关键词资产作为命中层，同时把结果提升为体系二形态：
+        domain + focus_house/focus_slice + 宫主/先天征象星/相位对。后续迁移只需替换
+        这里的定位来源，不再让外部调用旧 TopicPlan。
+        """
+        if isinstance(question, Intent):
+            intent = question
+            raw_question = intent.raw_query
+        else:
+            raw_question = question
 
-        # 3. 从 topic_id → 确定核心星和辅助星
-        topic_id = self._infer_topic_id(primary_house, question)
-        primary_planets, supporting_planets = self._resolve_planets(topic_id, primary_house)
+        # 1. 关键词匹配 → 聚焦宫位（体系二语义场为唯一定位来源）
+        focus_house = self._focus_house_from_intent(intent) or self._match_primary_house(raw_question)
+        house_label = self._house_label(focus_house)
 
-        # 4. 匹配交叉判断模板
-        cross_readings = self._match_cross_readings(topic_id, primary_house, supplementary)
+        # 2. 话题与领域：Intent 优先，旧 topic_id 兜底
+        topic_id = self._infer_topic_id(focus_house, raw_question)
+        domain = self._domain_for_topic(topic_id, intent)
+        profile = self._intent_profile(domain)
 
-        # 5. 匹配场景映射
+        # 3. 体系二承载者集合（宫位/宫主/先天征象星/相位对）
+        core_houses = self._as_int_list(profile.get("core_houses")) or [focus_house]
+        supplementary = self._resolve_supplementary(focus_house, raw_question)
+        house_lords = self._as_int_list(profile.get("house_lords")) or [focus_house]
+        natural_significators, supporting_planets = self._resolve_planets(domain)
+        aspect_pairs = profile.get("aspect_pairs", []) or []
+
+        # 4. 旧 prompt payload 保持原样，确保 LLM 只拿叙事结构不改结论
+        cross_readings = self._match_cross_readings(topic_id, focus_house, supplementary)
         scenarios = self._match_scenarios(topic_id)
-
-        # 6. 获取输出结构
         output_structure = self._natal_comp.get("output_structures", {}).get(topic_id)
+        guardrails = self._format_guardrails(self._natal_comp.get("guardrails", []))
 
-        # 7. 加载护栏
-        guardrails = self._natal_comp.get("guardrails", [])
-
-        return TopicPlan(
+        return ConsultCallPlan(
+            domain=domain,
+            domain_label=profile.get("label_zh", house_label or domain),
+            focus_house=focus_house,
+            focus_slice=intent.focus_slice if intent else None,
             topic_id=topic_id,
-            topic_label=primary_info.get("label", str(primary_house)),
-            primary_house=primary_house,
+            topic_label=house_label or str(focus_house),
+            core_houses=core_houses,
             supplementary_houses=supplementary,
-            primary_planets=primary_planets,
+            natural_significators=natural_significators,
             supporting_planets=supporting_planets,
+            house_lords=house_lords,
+            aspect_pairs=aspect_pairs,
             cross_readings=cross_readings,
             scenarios=scenarios,
             output_structure=output_structure,
-            guardrails=self._format_guardrails(guardrails),
+            guardrails=guardrails,
         )
 
+    def _focus_house_from_intent(self, intent: Intent | None) -> int | None:
+        """Intent 槽位中的 focus_house 是规则层确定性结果，优先于关键词。"""
+        if intent is None:
+            return None
+        slot = intent.get_slot("focus_house")
+        if slot is None:
+            return None
+        try:
+            house = int(slot.normalized_value)
+        except (TypeError, ValueError):
+            return None
+        return house if 1 <= house <= 12 else None
+
+    def _house_label(self, house: int) -> str:
+        """宫位展示名：体系二语义场优先，基础宫位定义兜底。"""
+        entries = self._house_significations.get("house_significations", {})
+        house_entries = entries.get(house) or entries.get(str(house)) or []
+        for entry in house_entries:
+            if isinstance(entry, dict) and entry.get("word"):
+                return str(entry["word"])
+
+        house_info = self._houses.get(house) or self._houses.get(str(house)) or {}
+        name = house_info.get("name", {}) if isinstance(house_info, dict) else {}
+        if isinstance(name, dict) and name.get("zh"):
+            return str(name["zh"])
+        return f"H{house}"
+
+    def _domain_for_topic(self, topic_id: str, intent: Intent | None = None) -> str:
+        """话题 → 11 域。Intent 的 Domain 判定优先，旧 topic_id 仅兜底。"""
+        if intent is not None and intent.domain != IntentDomain.DAILY:
+            return intent.domain.value
+
+        topic_to_domain = {
+            "marriage": "relationship",
+            "dating": "relationship",
+            "career": "career",
+            "career_change": "career",
+            "job_skill": "career",
+            "boss_colleague": "career",
+            "wealth": "wealth",
+            "health": "health",
+            "study": "learning",
+            "advanced_study": "learning",
+            "family": "family",
+            "villain": "relationship",
+            "talent": "self",
+        }
+        return topic_to_domain.get(topic_id, "career")
+
+    def _intent_profile(self, domain: str) -> dict:
+        """读取 intent_profiles.yaml 中的体系二领域配方。"""
+        return self._intent_profiles.get(domain, {}) or {}
+
+    @staticmethod
+    def _as_int_list(value: Any) -> list[int]:
+        result: list[int] = []
+        if not isinstance(value, list):
+            return result
+        for item in value:
+            try:
+                result.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    @staticmethod
+    def _as_str_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value]
+
     def _match_primary_house(self, question: str) -> int:
-        """关键词匹配 → 主宫编号。"""
-        houses = self._house_nature.get("houses", {})
+        """关键词匹配 → 主宫编号（体系二语义场唯一来源，无命中默认 H1）。"""
+        best_house, best_score = self._score_house_significations(question)
+        if best_score > 0:
+            return best_house
+        return 1
+
+    def _score_house_significations(self, question: str) -> tuple[int, int]:
+        """从 house_significations.yaml 的 route_keywords / word / resonance 匹配宫位。"""
+        table = self._house_significations.get("house_significations", {})
         best_house = 1
         best_score = 0
 
-        for h_num_str, info in houses.items():
-            h_num = int(h_num_str)
-            keywords = info.get("topic_keywords", {})
-            primary_kw = keywords.get("primary", [])
-            secondary_kw = keywords.get("secondary", [])
+        for h_key, entries in table.items():
+            try:
+                h_num = int(h_key)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(entries, list):
+                continue
 
             score = 0
-            for kw in primary_kw:
-                if kw in question:
-                    score += 3
-            for kw in secondary_kw:
-                if kw in question:
-                    score += 1
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                for kw in entry.get("route_keywords", []) or []:
+                    if kw and kw in question:
+                        score += 3
+                for kw in entry.get("route_secondary", []) or []:
+                    if kw and kw in question:
+                        score += 1
+                word = entry.get("word", "")
+                if word:
+                    for term in str(word).replace("/", " ").split():
+                        if term and term in question:
+                            score += 2
+                for kw in entry.get("resonance", []) or []:
+                    if kw and kw in question:
+                        score += 1
 
             if score > best_score:
                 best_score = score
                 best_house = h_num
 
-        return best_house
+        return best_house, best_score
 
     def _resolve_supplementary(self, primary_house: int, question: str) -> list[int]:
-        """从主宫的 as_derived 和问题语境确定辅宫。"""
-        primary_info = self._house_nature["houses"][primary_house]
-        derived = primary_info.get("as_derived", {})
-
+        """从主宫与问题语境确定辅宫。"""
         supplementary: list[int] = []
 
         # 固定辅宫映射（可以根据话题扩展）
@@ -217,44 +412,9 @@ class ConsultResolver:
         }
         return house_to_topic.get(primary_house, "career")
 
-    def _resolve_planets(self, topic_id: str, primary_house: int) -> tuple[list[str], list[str]]:
-        """从 topic_id → 核心星 + 辅助星。"""
-        planets_data = self._planet_nature.get("planets", {})
-
-        # topic_id → domain key 映射
-        topic_to_domain = {
-            "marriage": "marriage",
-            "dating": "dating",
-            "career": "career",
-            "career_change": "career",
-            "job_skill": "career",
-            "boss_colleague": "career",
-            "wealth": "wealth",
-            "health": "health",
-            "study": "study",
-            "advanced_study": "study",
-            "family": "family",
-            "villain": "villain",
-            "talent": "dating",  # 兴趣/才华复用dating的星性
-        }
-
-        # health 的 domain_signals 需要确保 planet_nature.yaml 里有对应条目
-        # sun/mars/saturn/moon 在 health domain 应标记为 core
-
-        domain = topic_to_domain.get(topic_id, "career")
-
-        primary: list[str] = []
-        supporting: list[str] = []
-
-        for p_key, p_info in planets_data.items():
-            signals = p_info.get("domain_signals", {})
-            signal = signals.get(domain, "neutral")
-            if signal == "core":
-                primary.append(p_key)
-            elif signal == "supporting":
-                supporting.append(p_key)
-
-        return primary, supporting
+    def _resolve_planets(self, domain: str) -> tuple[list[str], list[str]]:
+        """从 canonical domain_signals 派生核心星 + 辅助星。"""
+        return domain_planet_roles(self._planet_nature, domain)
 
     # -----------------------------------------------------------------
     # 交叉判断匹配
@@ -376,11 +536,9 @@ class ConsultResolver:
                 if entry:
                     return entry
 
-        # fallback：转宫公式推导
+        # fallback：转宫公式推导（体系二 house_derived）
         derived = self.derived_house(lord_of_house, placed_in_house)
-        house_nature = self._house_nature.get("houses", {}).get(lord_of_house, {})
-        as_derived = house_nature.get("as_derived", {})
-        meaning = as_derived.get(derived, f"{lord_of_house}之{derived}")
+        meaning = self._derived_house_meaning(lord_of_house, derived)
 
         return {
             "derived": f"{lord_of_house}之{derived}",
@@ -388,12 +546,21 @@ class ConsultResolver:
             "tell_user": [f"你的{lord_of_house}宫主落在第{placed_in_house}宫——{meaning}"],
         }
 
+    def _derived_house_meaning(self, lord_of_house: int, derived: int) -> str:
+        """读取转宫含义：house_derived.yaml 是唯一来源。"""
+        derived_table = self._house_derived.get("derived_houses", {})
+        by_lord = derived_table.get(lord_of_house) or derived_table.get(str(lord_of_house)) or {}
+        meaning = by_lord.get(derived) or by_lord.get(str(derived))
+        if meaning:
+            return str(meaning)
+        return f"{lord_of_house}之{derived}"
+
     # -----------------------------------------------------------------
     # Prompt 生成
     # -----------------------------------------------------------------
 
-    def build_topic_prompt(self, plan: TopicPlan) -> str:
-        """根据 TopicPlan 生成话题专属的 system prompt 注入。"""
+    def build_call_plan_prompt(self, plan: ConsultCallPlan | TopicPlan) -> str:
+        """根据 ConsultCallPlan 生成咨询调用主干的 system prompt 注入。"""
 
         sections: list[str] = []
 
@@ -415,7 +582,11 @@ class ConsultResolver:
 
         return "\n\n".join(sections)
 
-    def _render_output_structure(self, plan: TopicPlan) -> str:
+    def build_topic_prompt(self, plan: TopicPlan) -> str:
+        """兼容旧名称：TopicPlan / ConsultCallPlan 都走同一 prompt 注入协议。"""
+        return self.build_call_plan_prompt(plan)
+
+    def _render_output_structure(self, plan: ConsultCallPlan | TopicPlan) -> str:
         struct = plan.output_structure
         label = struct.get("label", plan.topic_label)
         sections = struct.get("sections", [])
@@ -435,7 +606,7 @@ class ConsultResolver:
 
         return "\n".join(lines)
 
-    def _render_cross_readings(self, plan: TopicPlan) -> str:
+    def _render_cross_readings(self, plan: ConsultCallPlan | TopicPlan) -> str:
         lines = ["## 必须做的交叉判断", ""]
         for cr in plan.cross_readings:
             name = cr.get("name", "")
@@ -457,7 +628,7 @@ class ConsultResolver:
         lines.append("以上交叉判断必须基于下面提供的数据来做——数据里有什么就说什么，没有的不要编。")
         return "\n".join(lines)
 
-    def _render_scenarios(self, plan: TopicPlan) -> str:
+    def _render_scenarios(self, plan: ConsultCallPlan | TopicPlan) -> str:
         lines = ["## 场景映射参考", ""]
         lines.append("以下场景映射提供'怎么把星盘语言转成人话'的参考。")
         lines.append("当星盘数据匹配到对应条件时，使用对应的说法：")
@@ -475,7 +646,7 @@ class ConsultResolver:
 
         return "\n".join(lines)
 
-    def _render_guardrails(self, plan: TopicPlan) -> str:
+    def _render_guardrails(self, plan: ConsultCallPlan | TopicPlan) -> str:
         lines = ["## 不能说", ""]
         for g in plan.guardrails:
             lines.append(f"- {g}")
@@ -492,6 +663,14 @@ class ConsultResolver:
             logger.warning("规则文件不存在: %s", path)
             return {}
         with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+
+    @staticmethod
+    def _load_intent_profiles() -> dict:
+        if not _INTENT_PROFILES_PATH.exists():
+            logger.warning("意图配置不存在: %s", _INTENT_PROFILES_PATH)
+            return {}
+        with open(_INTENT_PROFILES_PATH, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     @staticmethod
@@ -515,7 +694,12 @@ def get_resolver() -> ConsultResolver:
     return ConsultResolver()
 
 
-def resolve_question(question: str) -> TopicPlan:
-    """快速解析用户问题 → TopicPlan。"""
+def resolve_call_plan(question: str | Intent, intent: Intent | None = None) -> ConsultCallPlan:
+    """快速解析用户问题 / Intent → ConsultCallPlan 主干。"""
     resolver = get_resolver()
-    return resolver.resolve_topic(question)
+    return resolver.resolve_call_plan(question, intent=intent)
+
+
+def resolve_question(question: str) -> TopicPlan:
+    """快速解析用户问题 → TopicPlan（兼容包装）。"""
+    return resolve_call_plan(question).to_topic_plan()

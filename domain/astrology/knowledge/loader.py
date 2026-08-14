@@ -148,8 +148,8 @@ class KnowledgeBase:
     synastry_partner_houses: list = field(default_factory=list)  # 合盘宫位焦点
 
     # 咨询模板规则（consult resolver 三层体系）
-    house_nature: dict = field(default_factory=dict)            # 宫性规则（扩展语义场 + 话题关键词 + 转宫关系）
-    planet_nature: dict = field(default_factory=dict)           # 星性规则（话题角色 + 特殊规则）
+    house_derived: dict = field(default_factory=dict)            # 转宫关系表（X宫主落Y宫 → X之derived）
+    planet_nature: dict = field(default_factory=dict)            # 星性规则（话题角色 + 特殊规则）
     natal_composition: dict = field(default_factory=dict)       # 本命组合规则（交叉判断 + 场景映射）
     timing_rules: dict = field(default_factory=dict)            # 推运规则（法达 × 本命 + 行运 + 窗口合成）
 
@@ -166,6 +166,29 @@ class KnowledgeBase:
 
     def aspect(self, a: AspectType) -> AspectInfo:
         return self.aspects[a]
+
+
+def domain_planet_roles(planet_nature: dict | None, domain: str | None) -> tuple[list[str], list[str]]:
+    """从 planet_nature.domain_signals 派生领域核心星与辅助星。
+
+    R9 硬线：领域行星角色只以 planet_nature.domain_signals 为唯一来源；
+    intent_profiles/theme_map 中的 core_planets 不能再作为独立真相源。
+    """
+    if not domain:
+        return [], []
+    planets_data = (planet_nature or {}).get("planets", {})
+    core: list[str] = []
+    supporting: list[str] = []
+    for planet_key, planet_info in planets_data.items():
+        if not isinstance(planet_info, dict):
+            continue
+        signals = planet_info.get("domain_signals", {}) or {}
+        role = signals.get(domain, "neutral")
+        if role == "core":
+            core.append(str(planet_key))
+        elif role == "supporting":
+            supporting.append(str(planet_key))
+    return core, supporting
 
 
 # ---------------------------------------------------------------------------
@@ -338,18 +361,18 @@ def load_knowledge(knowledge_dir: str | None = None) -> KnowledgeBase:
     kb.synastry_partner_houses = synastry_raw.get("partner_house_focus", [])
 
     # 咨询模板规则（三层体系）
-    kb.house_nature = _load_yaml("house_nature.yaml")
+    kb.house_derived = _load_yaml("house_derived.yaml").get("derived_houses", {})
     kb.planet_nature = _load_yaml("planet_nature.yaml")
     kb.natal_composition = _load_yaml("rules/natal_composition.yaml")
     kb.timing_rules = _load_yaml("rules/timing_rules.yaml")
 
     logger.info(
         "知识库加载完成: %d 行星, %d 星座, %d 宫位, %d 相位, %d 行星对, %d 落宫, %d 宫主规则, %d 主题, "
-        "咨询模板: 宫性=%d 星性=%d 组合规则=%d 推运规则=%d",
+        "咨询模板: 转宫=%d 星性=%d 组合规则=%d 推运规则=%d",
         len(kb.planets), len(kb.signs), len(kb.houses), len(kb.aspects),
         len(kb.planet_pairs), len(kb.planet_in_house_rules),
         len(kb.house_lord_rules), len(kb.theme_map),
-        len(kb.house_nature.get("houses", {})),
+        len(kb.house_derived),
         len(kb.planet_nature.get("planets", {})),
         len(kb.natal_composition),
         len(kb.timing_rules),
