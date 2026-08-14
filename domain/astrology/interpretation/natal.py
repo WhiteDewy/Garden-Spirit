@@ -15,10 +15,10 @@ from domain.astrology.interpretation.signification import HouseSignificationEngi
 from domain.astrology.interpretation.synapsis import detect_synapsis
 from domain.astrology.knowledge.loader import KnowledgeBase
 
-#: 本命解读覆盖的问题域（与 intent domains 对齐 + self 用于人格）
+#: 本命解读覆盖的问题域（领域引擎 v2：10 个语义场域；daily 是跨域行运视图，不在此表）
 NATAL_DOMAINS: tuple[str, ...] = (
     "career", "wealth", "relationship", "emotion",
-    "health", "family", "learning", "self",
+    "health", "family", "learning", "growth", "network", "self",
 )
 
 DOMAIN_ZH: dict[str, str] = {
@@ -29,6 +29,8 @@ DOMAIN_ZH: dict[str, str] = {
     "health": "健康",
     "family": "家庭",
     "learning": "学习",
+    "growth": "远方·信念",
+    "network": "人际·社群",
     "self": "自我",
 }
 

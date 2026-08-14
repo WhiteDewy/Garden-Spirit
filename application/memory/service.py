@@ -231,7 +231,8 @@ class MemoryService:
         if sub:
             return f"{domain}.{sub} 咨询"
         zh = {"career": "事业", "relationship": "感情", "wealth": "财富", "emotion": "情绪",
-              "health": "健康", "family": "家庭", "learning": "学习", "daily": "每日"}.get(domain, domain)
+              "health": "健康", "family": "家庭", "learning": "学习", "growth": "远方·信念",
+              "network": "人际·社群", "self": "自我", "daily": "每日"}.get(domain, domain)
         return f"{zh or domain}咨询"
 
 

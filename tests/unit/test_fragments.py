@@ -270,11 +270,12 @@ def test_light_ledger_does_not_change_cumulative():
 
 
 def test_fragments_for_domain_all_domains_mapped():
-    """8 个咨询领域都有映射，且只含目录内合法 id。"""
+    """11 个咨询领域都有映射，且只含目录内合法 id（v2：+growth/network/self）。"""
     from shared.enums import IntentDomain
 
     consult_domains = {d.value for d in IntentDomain if d.value in {
-        "career", "relationship", "wealth", "health", "emotion", "family", "learning", "daily"}}
+        "career", "relationship", "wealth", "health", "emotion", "family", "learning",
+        "growth", "network", "self", "daily"}}
     all_ids = {f["id"] for f in FragmentService.grid(None)}
     for domain in sorted(consult_domains):
         ids = FragmentService.fragments_for_domain(domain)

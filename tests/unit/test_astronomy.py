@@ -40,6 +40,10 @@ def test_knowledge_base_loads():
     assert len(kb.aspects) >= 10
     assert kb.dignity is not None
     assert kb.reception is not None
+    assert not hasattr(kb, "house_nature")
+    assert len(kb.house_derived) == 12
+    assert len(kb.house_derived[7]) == 12
+    assert "婚姻本身" in kb.house_derived[7][7]
 
 
 def test_golden_sun_sign(gaga_chart):

@@ -269,6 +269,9 @@ _CONSULT_DOMAIN_FRAGMENTS: dict[str, list[str]] = {
     "emotion":      ["moon_tide", "neptune_dream", "pluto_depth"],
     "family":       ["house4_home", "moon_tide", "cancer_shell"],
     "learning":     ["mercury_maze", "house3_bridge", "house9_far"],
+    "growth":       ["house9_far", "jupiter_faith", "sagittarius_arrow"],
+    "network":      ["house11_net", "libra_balance", "gemini_wind"],
+    "self":         ["house1_mask", "sun_core", "house12_secret"],
     "daily":        ["sun_core", "moon_tide"],
 }
 

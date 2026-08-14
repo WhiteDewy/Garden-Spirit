@@ -11,7 +11,7 @@
 # 宫主X落宫Y = "X之derived"的含义
 # derived = (Y - X + 1)，结果≤0则+12
 # 下面提供 7R（婚姻）、5R（恋爱）、10R（事业）、2R（财运）四个最高频宫主星的落宫推导。
-# 其他宫主星由 resolver 用转宫公式 + 目标宫as_derived 自动合成。
+# 其他宫主星由 resolver 用转宫公式 + house_derived.yaml 自动合成。
 
 lord_placement_derived:
 

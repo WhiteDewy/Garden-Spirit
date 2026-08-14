@@ -10,6 +10,8 @@ ARIES:
   polarity: yang
   keywords_zh: ["勇气", "开创", "直接", "冲动", "竞争"]
   keywords: [courage, initiation, direct, impulsive]
+  behavior_style: "先冲再说——遇到问题直接动手，反应快但可能欠考虑"
+  domains: [career]   # 弱标签：行为调制用，不做主选
 
 TAURUS:
   name: { zh: "金牛座", en: "Taurus" }
@@ -21,6 +23,8 @@ TAURUS:
   polarity: yin
   keywords_zh: ["稳定", "物质", "享受", "固执", "感官"]
   keywords: [stability, material, pleasure, stubborn]
+  behavior_style: "稳扎稳打——不轻易改变，用持续和耐心把结果堆出来"
+  domains: [wealth, health]
 
 GEMINI:
   name: { zh: "双子座", en: "Gemini" }
@@ -32,6 +36,8 @@ GEMINI:
   polarity: yang
   keywords_zh: ["沟通", "好奇", "灵活", "多变", "信息"]
   keywords: [communication, curiosity, flexible, duality]
+  behavior_style: "边说边想——靠交流和信息交换来理清思路"
+  domains: [learning, network]
 
 CANCER:
   name: { zh: "巨蟹座", en: "Cancer" }
@@ -43,6 +49,8 @@ CANCER:
   polarity: yin
   keywords_zh: ["情感", "家庭", "滋养", "敏感", "安全感"]
   keywords: [emotion, family, nurture, sensitive]
+  behavior_style: "先护住自己——以情绪安全为第一优先级，用照顾他人获得连接"
+  domains: [emotion, family]
 
 LEO:
   name: { zh: "狮子座", en: "Leo" }
@@ -54,6 +62,8 @@ LEO:
   polarity: yang
   keywords_zh: ["自信", "创造", "领导", "闪耀", "骄傲"]
   keywords: [confidence, creativity, leadership, pride]
+  behavior_style: "站出来发光——需要舞台和认可，用展现自己来确认价值"
+  domains: [career, self]
 
 VIRGO:
   name: { zh: "处女座", en: "Virgo" }
@@ -65,6 +75,8 @@ VIRGO:
   polarity: yin
   keywords_zh: ["细致", "分析", "服务", "完美主义", "健康"]
   keywords: [detail, analysis, service, perfectionism]
+  behavior_style: "把事做细——靠分析、整理和修正来追求可靠"
+  domains: [health, career]
 
 LIBRA:
   name: { zh: "天秤座", en: "Libra" }
@@ -76,6 +88,8 @@ LIBRA:
   polarity: yang
   keywords_zh: ["平衡", "关系", "公正", "犹豫", "审美"]
   keywords: [balance, relationships, justice, aesthetics]
+  behavior_style: "先权衡再决定——凡事求平衡、避免冲突，用关系视角看问题"
+  domains: [relationship, network]
 
 SCORPIO:
   name: { zh: "天蝎座", en: "Scorpio" }
@@ -87,6 +101,8 @@ SCORPIO:
   polarity: yin
   keywords_zh: ["深度", "掌控", "洞察", "重生", "强烈"]
   keywords: [depth, control, insight, intensity]
+  behavior_style: "往深处挖——不满足于表面，掌控与转化是本能"
+  domains: [emotion, wealth]
 
 SAGITTARIUS:
   name: { zh: "射手座", en: "Sagittarius" }
@@ -98,6 +114,8 @@ SAGITTARIUS:
   polarity: yang
   keywords_zh: ["探索", "理想", "自由", "乐观", "哲学"]
   keywords: [exploration, ideals, freedom, optimism]
+  behavior_style: "往前看——用远见和信念开路，讨厌被束缚"
+  domains: [growth, learning]
 
 CAPRICORN:
   name: { zh: "摩羯座", en: "Capricorn" }
@@ -109,6 +127,8 @@ CAPRICORN:
   polarity: yin
   keywords_zh: ["野心", "责任", "纪律", "成就", "务实"]
   keywords: [ambition, responsibility, discipline, achievement]
+  behavior_style: "扛下来——用纪律和长期主义把责任熬成成果"
+  domains: [career, family]
 
 AQUARIUS:
   name: { zh: "水瓶座", en: "Aquarius" }
@@ -120,6 +140,8 @@ AQUARIUS:
   polarity: yang
   keywords_zh: ["创新", "独立", "人道", "疏离", "未来"]
   keywords: [innovation, independence, humanism, detachment]
+  behavior_style: "跳出框架——用独立和理性打破常规，忠于自己的逻辑"
+  domains: [network, career]
 
 PISCES:
   name: { zh: "双鱼座", en: "Pisces" }
@@ -131,3 +153,5 @@ PISCES:
   polarity: yin
   keywords_zh: ["共情", "想象", "灵性", "边界模糊", "艺术"]
   keywords: [empathy, imagination, spirituality, artistry]
+  behavior_style: "融进去——凭直觉和共情感受，边界柔软，想象先行"
+  domains: [emotion, growth]
