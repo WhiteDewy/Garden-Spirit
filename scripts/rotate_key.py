@@ -49,13 +49,30 @@ def _collect_encrypted_columns(conn: sqlite3.Connection) -> list[tuple[str, str]
     return out
 
 
+def _normalize_key_args(argv: list[str]) -> list[str]:
+    """允许 Fernet key 以 '-' 开头时仍可作为 option 参数被 argparse 解析。"""
+    key_options = {"--current-key", "--old-keys"}
+    known_options = key_options | {"--dry-run", "-h", "--help"}
+    normalized: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in key_options and i + 1 < len(argv) and argv[i + 1] not in known_options:
+            normalized.append(f"{arg}={argv[i + 1]}")
+            i += 2
+            continue
+        normalized.append(arg)
+        i += 1
+    return normalized
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Re-encrypt all Fernet columns with the new key")
+    parser = argparse.ArgumentParser(description="Re-encrypt all Fernet columns with the new key", allow_abbrev=False)
     parser.add_argument("database_path", help="SQLite database file path")
     parser.add_argument("--dry-run", action="store_true", help="只打印计数，不写库")
     parser.add_argument("--current-key", default="", help="新密钥（默认取 GS_ENCRYPTION_KEY）")
     parser.add_argument("--old-keys", default="", help="旧密钥逗号分隔（默认取 GS_OLD_ENCRYPTION_KEYS）")
-    args = parser.parse_args()
+    args = parser.parse_args(_normalize_key_args(sys.argv[1:]))
 
     new_key = args.current_key or os.getenv(ENV_KEY_NAME, "")
     old_keys = _parse_old_keys(args.old_keys or os.getenv(OLD_KEYS_ENV_NAME, ""))
