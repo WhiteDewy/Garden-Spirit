@@ -114,7 +114,8 @@ onLoad(async () => {
 
 const DOMAIN_ZH: Record<string, string> = {
   career: "事业", relationship: "感情", wealth: "财富", health: "健康",
-  emotion: "情绪", family: "家庭", learning: "学习", daily: "今日",
+  emotion: "情绪", family: "家庭", learning: "学习",
+  growth: "远方·信念", network: "人际·社群", self: "自我", daily: "今日",
 };
 function domainZh(d: string) {
   return DOMAIN_ZH[d] || d;

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>星灵花园 · 星象信笺 V4 Demo</title>
+<style>
+/* ============================================================
+   星灵花园 · V4 Demo
+   方向：私人星象信笺 / Mature Astro Companion
+
+   修正 V3 问题：
+   - 不做具象温室、小芽、小精灵，避免幼稚
+   - 不堆功能入口，首页只保留一份今日私人星信
+   - 记忆点从“可爱角色”转成“我的星盘每天写给我的私人信笺”
+   - 风格靠编辑感、星历仪器感、纸张质感、克制光感统一
+   ============================================================ */
+
+:root{
+  --sans:"Inter","HarmonyOS Sans","MiSans","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --serif:"Noto Serif SC","Songti SC","STSong",serif;
+  --bg:#171f1d;
+  --bg2:#263631;
+  --paper:#f3ead6;
+  --paper2:#e7dbc3;
+  --ink:#25322e;
+  --ink-soft:rgba(37,50,46,.62);
+  --line:rgba(61,77,69,.18);
+  --gold:#c6a56a;
+  --gold-soft:#ead7a5;
+  --green:#647b6d;
+  --green2:#8c9b84;
+  --blue:#6d7e93;
+  --purple:#9b91ad;
+  --shadow:rgba(0,0,0,.28);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%}
+body{display:flex;align-items:center;justify-content:center;overflow:hidden;background:#101715;font-family:var(--sans);color:var(--paper)}
+button{font:inherit;color:inherit;border:0;background:transparent;cursor:pointer}
+
+.phone{position:relative;width:min(100vw,390px);height:min(100vh,844px);overflow:hidden;border-radius:38px;background:#17211e;box-shadow:0 28px 90px rgba(0,0,0,.5)}
+@media(max-height:720px){.phone{height:100vh;border-radius:0}}
+.screen{position:absolute;inset:0;display:none;overflow:hidden}.screen.active{display:block}
+.noise{position:absolute;inset:0;opacity:.075;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.72) .45px,transparent .45px);background-size:5px 5px;mix-blend-mode:soft-light}
+
+/* Common */
+.page-head{position:absolute;top:28px;left:22px;right:22px;z-index:20;display:flex;align-items:center;justify-content:space-between}
+.eyebrow{font-size:10px;letter-spacing:.22em;opacity:.52;font-weight:500}.head-title{margin-top:4px;font-family:var(--serif);font-size:18px;font-weight:500}.icon-btn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(243,234,214,.14);background:rgba(243,234,214,.07);backdrop-filter:blur(18px)}
+.bottom-nav{position:absolute;left:13px;right:13px;bottom:12px;height:70px;z-index:50;border:1px solid rgba(243,234,214,.11);border-radius:27px;background:rgba(22,31,29,.74);backdrop-filter:blur(24px);display:grid;grid-template-columns:repeat(4,1fr);padding:7px;box-shadow:0 10px 40px rgba(0,0,0,.22)}
+.nav-item{border-radius:21px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:rgba(243,234,214,.44);font-size:9px}.nav-item .ico{font-size:17px}.nav-item.active{background:rgba(243,234,214,.09);color:#f8efd9}.nav-item.active .ico{filter:drop-shadow(0 0 8px rgba(198,165,106,.72))}
+.toast{position:absolute;z-index:90;left:50%;bottom:95px;transform:translateX(-50%) translateY(18px);padding:10px 15px;border-radius:18px;background:rgba(15,22,20,.9);font-size:10px;color:#f7ecd4;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Home */
+.home{background:radial-gradient(circle at 75% 13%,rgba(224,194,125,.28),transparent 22%),radial-gradient(circle at 20% 28%,rgba(128,149,142,.22),transparent 28%),linear-gradient(180deg,#1d2b27 0%,#273833 48%,#1a2421 100%)}
+.home:before{content:"";position:absolute;left:-20%;right:-20%;bottom:-22%;height:47%;background:radial-gradient(ellipse at center,#536a5d 0%,#26382f 52%,transparent 72%);opacity:.72}
+.home-grid{position:absolute;inset:0;opacity:.14;background-image:linear-gradient(rgba(243,234,214,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(243,234,214,.16) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(180deg,transparent 0%,#000 15%,#000 78%,transparent 100%)}
+.home-content{position:absolute;inset:0;padding:92px 22px 96px;z-index:5;display:flex;flex-direction:column}
+.date-row{font-size:11px;letter-spacing:.08em;color:rgba(243,234,214,.58)}
+.main-title{margin-top:12px;font-family:var(--serif);font-weight:500;font-size:32px;line-height:1.35;color:#f4ead7;letter-spacing:.02em}.main-title small{display:block;margin-top:7px;font-family:var(--sans);font-size:11px;letter-spacing:.14em;color:rgba(244,234,215,.46);font-weight:400}
+
+.astro-stage{position:relative;height:258px;margin:14px 0 10px}
+.chart-disc{position:absolute;left:50%;top:18px;transform:translateX(-50%);width:244px;height:244px;border-radius:50%;border:1px solid rgba(234,215,165,.28);background:radial-gradient(circle at center,rgba(243,234,214,.12) 0 23%,transparent 24%),radial-gradient(circle at center,transparent 0 58%,rgba(243,234,214,.07) 59% 60%,transparent 61%);box-shadow:0 0 70px rgba(198,165,106,.12),inset 0 0 0 1px rgba(255,255,255,.05)}
+.chart-disc:before,.chart-disc:after{content:"";position:absolute;inset:27px;border-radius:50%;border:1px solid rgba(243,234,214,.12)}.chart-disc:after{inset:72px;border-color:rgba(243,234,214,.14)}
+.cross,.cross:after{position:absolute;content:"";left:50%;top:14px;bottom:14px;width:1px;background:linear-gradient(transparent,rgba(243,234,214,.22),transparent)}.cross:after{left:0;top:0;bottom:0;transform:rotate(90deg)}.cross.r1{transform:rotate(30deg)}.cross.r2{transform:rotate(60deg)}.cross.r3{transform:rotate(120deg)}
+.moon-mark{position:absolute;left:50%;top:50%;width:62px;height:62px;transform:translate(-50%,-50%);border-radius:50%;display:grid;place-items:center;color:#f5e9cf;font-family:var(--serif);font-size:29px;background:radial-gradient(circle at 35% 28%,#fff4d0,rgba(198,165,106,.78) 44%,rgba(72,89,82,.66));box-shadow:0 0 42px rgba(234,215,165,.34),0 16px 42px rgba(0,0,0,.16)}
+.point{position:absolute;width:5px;height:5px;border-radius:50%;background:#e8d5a0;box-shadow:0 0 12px rgba(232,213,160,.7)}.pt1{left:50%;top:11px}.pt2{right:35px;top:54px}.pt3{right:12px;top:50%}.pt4{right:48px;bottom:40px}.pt5{left:50%;bottom:11px}.pt6{left:36px;bottom:54px}.pt7{left:12px;top:50%}.pt8{left:48px;top:37px}
+.trigger-strip{position:absolute;left:50%;bottom:0;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(16,24,22,.62);border:1px solid rgba(243,234,214,.12);backdrop-filter:blur(16px);font-size:10px;color:rgba(244,234,215,.72);white-space:nowrap}.trigger-strip b{color:#f1db9b;font-weight:500}
+
+.letter{margin-top:auto;position:relative;border-radius:28px;padding:19px 18px 16px;background:linear-gradient(145deg,rgba(243,234,214,.94),rgba(229,217,194,.86));color:var(--ink);box-shadow:0 22px 55px rgba(0,0,0,.22);overflow:hidden}.letter:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 27px,rgba(70,82,73,.08) 28px 29px);opacity:.45}.letter>*{position:relative;z-index:2}.letter-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.letter-k{font-size:9px;letter-spacing:.18em;color:rgba(37,50,46,.48);font-weight:700}.persona{font-size:10px;color:#5f7469;background:rgba(255,255,255,.36);border-radius:999px;padding:5px 8px}.letter h2{font-family:var(--serif);font-size:22px;font-weight:500;line-height:1.45;color:#26342f;margin-bottom:9px}.letter-text{font-family:var(--serif);font-size:14px;line-height:1.92;color:#43534d}.letter-actions{display:flex;gap:9px;margin-top:15px}.primary{border-radius:20px;padding:11px 15px;background:#273c35;color:#fff2d7;font-size:12px;box-shadow:0 8px 24px rgba(39,60,53,.18)}.secondary{border-radius:20px;padding:11px 13px;background:rgba(39,60,53,.08);color:#526a60;font-size:12px}
+.explain{position:absolute;left:22px;right:22px;bottom:91px;z-index:30;border-radius:20px;padding:13px 14px;background:rgba(16,24,22,.82);border:1px solid rgba(243,234,214,.1);backdrop-filter:blur(18px);color:rgba(247,236,212,.72);font-size:10px;line-height:1.75;opacity:0;transform:translateY(12px);pointer-events:none;transition:.25s}.explain.show{opacity:1;transform:translateY(0);pointer-events:auto}.explain b{color:#f1db9b;font-weight:500}
+
+/* Diary */
+.diary{background:linear-gradient(160deg,#d8d3c3,#b8bea9 52%,#7f917b);color:#293b35}.diary:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 12%,rgba(255,247,210,.74),transparent 25%),radial-gradient(circle at 12% 75%,rgba(255,255,255,.22),transparent 30%)}.diary .page-head{color:#293b35}.diary .icon-btn{color:#35483f;border-color:rgba(40,61,53,.12);background:rgba(255,255,255,.18)}.diary-content{position:absolute;inset:0;padding:105px 22px 98px}.paper{height:580px;border-radius:28px;background:rgba(250,248,235,.74);backdrop-filter:blur(16px);padding:24px 20px;box-shadow:0 18px 55px rgba(59,76,62,.15);position:relative;overflow:hidden}.date{font-size:9px;letter-spacing:.16em;color:#7d887c}.diary-title{font-family:var(--serif);font-size:25px;margin:13px 0 21px}.entry{font-family:var(--serif);font-size:15px;line-height:2;color:#40534b}.highlight{color:#718c7c}.divider{height:1px;background:rgba(64,81,69,.12);margin:22px 0}.entry-label{font-size:9px;letter-spacing:.14em;color:#8b9587}.star-line{display:flex;align-items:center;gap:9px;margin-top:12px;font-family:var(--serif);font-size:13px}.star-line i{font-size:20px;color:#ad9154}.write-btn{position:absolute;right:24px;bottom:108px;border-radius:22px;padding:12px 17px;background:#526d60;color:#fff;font-size:11px;box-shadow:0 8px 25px rgba(51,74,62,.2)}
+
+/* Cosmos */
+.cosmos{background:radial-gradient(circle at 50% 38%,#32495e,#172331 52%,#0b111b 100%);color:#edf1e9}.constellation{position:absolute;inset:0;opacity:.75}.constellation i{position:absolute;width:3px;height:3px;border-radius:50%;background:#eee7ce;box-shadow:0 0 10px rgba(238,231,206,.7)}.cosmos-disc{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:276px;height:276px;border-radius:50%;border:1px solid rgba(226,222,198,.18);box-shadow:0 0 70px rgba(220,205,158,.08)}.cosmos-disc:before,.cosmos-disc:after{content:"";position:absolute;inset:38px;border-radius:50%;border:1px solid rgba(226,222,198,.14)}.cosmos-disc:after{inset:82px}.core{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff7dc,#bca873 58%,#576a77);box-shadow:0 0 50px rgba(220,205,158,.35);display:grid;place-items:center;font-family:var(--serif);font-size:21px}.cosmos-copy{position:absolute;left:22px;right:22px;bottom:112px}.cosmos-copy h2{font-family:var(--serif);font-size:23px;font-weight:500;margin-bottom:8px}.cosmos-copy p{font-family:var(--serif);font-size:12px;color:rgba(238,241,234,.58);line-height:1.8}.cosmos-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.cosmos-card{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);padding:12px;border-radius:18px;font-size:10px;color:rgba(238,241,234,.68);text-align:left}.cosmos-card b{display:block;font-family:var(--serif);font-size:14px;color:#f4ead0;margin-bottom:5px;font-weight:500}
+
+/* Me */
+.me{background:linear-gradient(170deg,#273c35,#162722 55%,#0f1b18);color:#edf1e9}.me-content{position:absolute;inset:0;padding:95px 22px 98px}.profile{display:flex;align-items:center;gap:15px;padding:12px 0 24px}.profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,#dfe5d8,#758d80);display:grid;place-items:center;color:#fff;font-size:25px;box-shadow:0 0 35px rgba(210,203,164,.12)}.profile h2{font-family:var(--serif);font-weight:500;font-size:20px}.profile p{font-size:10px;color:rgba(235,241,233,.5);margin-top:6px}.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{padding:15px 11px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.05);border-radius:18px}.stat b{font-family:var(--serif);font-size:19px;font-weight:500}.stat span{display:block;color:rgba(235,241,233,.43);font-size:9px;margin-top:5px}.section-label{font-size:9px;letter-spacing:.16em;color:rgba(235,241,233,.4);margin:25px 0 10px}.setting{display:flex;justify-content:space-between;padding:14px 2px;color:rgba(235,241,233,.68);font-size:11px;border-top:1px solid rgba(255,255,255,.08)}.setting span:last-child{opacity:.4}.pref{padding:15px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-family:var(--serif);font-size:14px;line-height:1.8;color:rgba(244,234,215,.72)}
+</style>
+</head>
+<body>
+<div class="phone">
+<section id="home" class="screen home active">
+  <div class="home-grid"></div><div class="noise"></div>
+  <div class="page-head"><div><div class="eyebrow">GARDEN SPIRIT</div><div class="head-title">花园</div></div><button class="icon-btn" onclick="toggleExplain()">☾</button></div>
+  <div class="home-content">
+    <div class="date-row">AUGUST 14 · FRIDAY</div>
+    <h1 class="main-title">今日星信<small>由你的本命盘与今日星象生成</small></h1>
+    <div class="astro-stage">
+      <div class="chart-disc">
+        <div class="cross"></div><div class="cross r1"></div><div class="cross r2"></div><div class="cross r3"></div>
+        <i class="point pt1"></i><i class="point pt2"></i><i class="point pt3"></i><i class="point pt4"></i><i class="point pt5"></i><i class="point pt6"></i><i class="point pt7"></i><i class="point pt8"></i>
+        <div class="moon-mark">☾</div>
+      </div>
+      <div class="trigger-strip"><b>月亮星灵</b> 被今日行运唤醒</div>
+    </div>
+    <div class="letter">
+      <div class="letter-head"><div class="letter-k">PRIVATE TRANSIT LETTER</div><button class="persona" onclick="toggleExplain()">查看依据</button></div>
+      <h2>今天，先确认自己的边界。</h2>
+      <div class="letter-text">月亮经过你的安全感主题区。你可能会更容易察觉“我其实不想再勉强”的那一刻。今天不用立刻做决定，只要把那个真实的感觉留住。</div>
+      <div class="letter-actions"><button class="primary" onclick="toast('进入今日星灵对话')">和月灵聊聊　→</button><button class="secondary" onclick="go('diary')">存入日记</button></div>
+    </div>
+  </div>
+  <div class="explain" id="explain"><b>今日星象依据</b><br>行运月亮触发你的本命第四宫主题：安全感、休息、内在归属。首页只呈现当天最相关的一封私人星信；月运、年运和完整行运解释放在「宇宙」。</div>
+</section>
+
+<section id="diary" class="screen diary">
+  <div class="page-head"><div><div class="eyebrow">INNER JOURNAL</div><div class="head-title">日记</div></div><button class="icon-btn">⋯</button></div>
+  <div class="diary-content"><div class="paper"><div class="date">AUGUST 14 · FRIDAY</div><div class="diary-title">今日星信已存入</div><div class="entry">今天，我看见自己其实需要一点边界。</div><div class="entry" style="margin-top:13px">不是所有回应都要立刻给出，也不是所有关系都要靠我一个人维持。</div><div class="divider"></div><div class="entry-label">被记住的片段</div><div class="star-line"><i>☾</i> 月亮 · 安全感与边界</div><div class="divider"></div><div class="entry-label">来自星灵的一句提醒</div><div class="entry highlight" style="margin-top:12px">“先照顾真实感，再决定要不要继续靠近。”</div></div></div>
+  <button class="write-btn" onclick="toast('开始一篇新的日记')">＋ 写下此刻</button>
+</section>
+
+<section id="cosmos" class="screen cosmos">
+  <div class="noise"></div><div class="page-head"><div><div class="eyebrow">YOUR COSMOS</div><div class="head-title">宇宙</div></div><button class="icon-btn">⌖</button></div>
+  <div class="constellation"><i style="left:14%;top:20%"></i><i style="left:28%;top:29%"></i><i style="left:44%;top:17%"></i><i style="left:65%;top:23%"></i><i style="left:84%;top:15%"></i><i style="left:75%;top:37%"></i><i style="left:18%;top:49%"></i><i style="left:34%;top:58%"></i><i style="left:87%;top:59%"></i><i style="left:53%;top:71%"></i></div>
+  <div class="cosmos-disc"></div><div class="core">你</div>
+  <div class="cosmos-copy"><h2>完整星象，在这里展开。</h2><p>首页只给今天最重要的一封信。<br>周期报告、行运解释和星盘咨询都放在宇宙里。</p><div class="cosmos-grid"><button class="cosmos-card" onclick="toast('进入自我星盘轮')"><b>自我星盘轮</b>你的内在结构</button><button class="cosmos-card" onclick="toast('打开月运模块')"><b>月运 / 年运</b>私人周期报告</button><button class="cosmos-card" onclick="toast('查看行运触发')"><b>今日行运</b>星灵为什么醒来</button><button class="cosmos-card" onclick="toast('进入星盘咨询')"><b>星盘咨询</b>一起校准判断</button></div></div>
+</section>
+
+<section id="me" class="screen me">
+  <div class="noise"></div><div class="page-head"><div><div class="eyebrow">MY JOURNEY</div><div class="head-title">我的</div></div><button class="icon-btn">⚙</button></div>
+  <div class="me-content"><div class="profile"><div class="profile-avatar">✦</div><div><h2>我的花园</h2><p>你的星信、偏好与记忆。</p></div></div><div class="stat-row"><div class="stat"><b>28</b><span>记录天数</span></div><div class="stat"><b>12</b><span>深度对话</span></div><div class="stat"><b>07</b><span>自我发现</span></div></div><div class="section-label">STAR SPIRIT PREFERENCE</div><div class="pref">默认由今日星象唤醒星灵；也可以手动选择最近更想靠近的那一个。</div><div class="section-label">SETTINGS</div><div class="setting"><span>星灵偏好</span><span>→</span></div><div class="setting"><span>推送与提醒</span><span>→</span></div><div class="setting"><span>隐私与安全</span><span>→</span></div></div>
+</section>
+
+<nav class="bottom-nav"><button class="nav-item active" data-page="home"><span class="ico">⌂</span><span>花园</span></button><button class="nav-item" data-page="diary"><span class="ico">▱</span><span>日记</span></button><button class="nav-item" data-page="cosmos"><span class="ico">☾</span><span>宇宙</span></button><button class="nav-item" data-page="me"><span class="ico">◌</span><span>我的</span></button></nav>
+<div class="toast" id="toast"></div>
+</div>
+<script>
+const screens=document.querySelectorAll('.screen');
+const navs=document.querySelectorAll('.nav-item');
+function go(id){screens.forEach(s=>s.classList.toggle('active',s.id===id));navs.forEach(n=>n.classList.toggle('active',n.dataset.page===id));document.getElementById('explain')?.classList.remove('show')}
+navs.forEach(n=>n.addEventListener('click',()=>go(n.dataset.page)));
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>el.classList.remove('show'),1800)}
+function toggleExplain(){document.getElementById('explain').classList.toggle('show')}
+</script>
+</body>
+</html>

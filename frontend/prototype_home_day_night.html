@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>星灵花园 · 首页原型 v5（白昼面 · 夜读星野双面）</title>
+<style>
+  /* ============================================================
+     v5 · 一世界，两光谱
+     白昼面（默认）：可扫的编辑感 —— 星语礼物卡 + 星灵轮播 + 回访卡
+        · 底子奶油，主色墨靛；砍掉通用淡紫；一屏只亮「主角星灵」的 accent
+        · 星灵用我们自己的 PNG 两态图标 + 语义色场光晕（不用 AI 图）
+        · 保留疗愈名（月亮 = 想被抱抱的我），不叫「月灵」
+        · 零 emoji：行星用真实占星符文，动作用细线图标
+     夜晚面（切换）：一片天 —— 呼吸的星灵 / 正在凝聚的星座 / 浮着的来信
+        · 白昼的那张深色星语卡，就是白天伸进夜晚的「窗口」
+     ============================================================ */
+
+  :root {
+    --serif: "Noto Serif SC", "Songti SC", "STSong", "Kaiti SC", serif;
+    --sans:  "HarmonyOS Sans", "MiSans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+    /* ---- 白昼 token（默认）---- */
+    --page: #ECEAE3;              /* 外层 */
+    --bg: #F5F2EA;                /* 内层奶油 */
+    --surface: #FFFDF8;
+    --soft: #F0ECE1;              /* 轻填充 */
+    --ink: #333A52;               /* 墨靛文字 */
+    --ink-soft: rgba(51, 58, 82, 0.6);
+    --line: rgba(51, 58, 82, 0.10);
+    --gold: #B59252;              /* 月亮 accent */
+    --gold-soft: rgba(181, 146, 82, 0.26);
+    --ember: #C96F4A;             /* 信号：温热余烬 */
+
+    /* 星语卡 = 夜晚窗口（永远深色） */
+    --hero-top: #232640;
+    --hero-bot: #16182B;
+    --hero-text: #F3EEE6;
+    --hero-soft: rgba(243, 238, 230, 0.62);
+  }
+
+  /* ---- 夜晚 token ---- */
+  body.night {
+    --ink: #F3EEE6;
+    --ink-soft: rgba(243, 238, 230, 0.6);
+    --gold: #E8D9A8;
+    --gold-soft: rgba(232, 217, 168, 0.30);
+    --line: rgba(243, 238, 230, 0.16);
+    --ember: #E7A67C;
+    --glyph: rgba(74, 68, 96, 0.85);
+    --dot-off: #32344C;
+    --glass: rgba(21, 23, 38, 0.5);
+    --glass-border: rgba(243, 238, 230, 0.10);
+    --paper: rgba(232, 217, 168, 0.12);
+    --paper-border: rgba(232, 217, 168, 0.24);
+    --bg-top: #151726;
+    --bg-mid: #1A1B2E;
+    --bg-bot: #1E1F35;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--page);
+    -webkit-user-select: none; user-select: none;
+  }
+  body.night { background: var(--bg-bot); }
+
+  /* ============================================================
+     昼夜切换钮：白昼在右上，夜晚移到左上
+     ============================================================ */
+  .toggle {
+    position: fixed;
+    top: 18px; right: 18px;
+    z-index: 200;
+    width: 38px; height: 38px;
+    border-radius: 14px;
+    background: var(--soft);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: top .3s ease, right .3s ease, left .3s ease;
+  }
+  body.night .toggle {
+    top: 16px; right: auto; left: 16px;
+    border-radius: 50%;
+    background: var(--glass);
+    border-color: var(--glass-border);
+    color: var(--ink-soft);
+    backdrop-filter: blur(8px);
+  }
+
+  /* ============================================================
+     ······ 白昼面 ······
+     ============================================================ */
+  .dayframe {
+    position: relative;
+    width: 393px; max-width: 100vw;
+    height: 852px; max-height: 100vh;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: 0 18px 60px rgba(40, 46, 70, 0.18);
+  }
+  body.night .dayframe { display: none; }
+
+  /* 顶栏 */
+  .df-header { padding: 20px 20px 12px; background: var(--bg); }
+  .df-eyebrow { font-size: 10px; letter-spacing: .24em; color: var(--ink-soft); font-weight: 500; }
+  .df-hello { margin-top: 2px; font-size: 22px; font-weight: 600; color: var(--ink); letter-spacing: .5px; }
+
+  .df-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 20px 16px; scrollbar-width: none; }
+  .df-scroll::-webkit-scrollbar { display: none; }
+
+  /* 星语卡 = 夜晚窗口 */
+  .df-hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 26px;
+    background: linear-gradient(160deg, var(--hero-top), var(--hero-bot));
+    color: var(--hero-text);
+    padding: 18px 18px 16px;
+    box-shadow: 0 12px 28px rgba(35, 40, 72, 0.25);
+  }
+  .df-hero .ring { position: absolute; right: -38px; top: -44px; width: 160px; height: 160px; border-radius: 50%; border: 1px solid rgba(210, 222, 240, 0.16); }
+  .df-hero .moonhalo { position: absolute; right: 16px; top: 14px; width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle, rgba(244, 231, 187, 0.85), rgba(244, 231, 187, 0) 70%); }
+  .df-hero .mini-const { position: absolute; right: 16px; bottom: 14px; opacity: 0.75; }
+  .df-hero .h-eyebrow { font-size: 11px; letter-spacing: .14em; color: var(--hero-soft); }
+  .df-hero .h-title { margin-top: 8px; font-family: var(--serif); font-size: 20px; line-height: 1.6; font-weight: 600; color: var(--hero-text); max-width: 230px; }
+  .df-hero .h-btn {
+    margin-top: 13px; border-radius: 999px; background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.18); color: #fff; font-size: 11px; letter-spacing: 2px;
+    padding: 7px 15px; cursor: pointer;
+  }
+  .df-hero .h-btn:active { background: rgba(255, 255, 255, 0.24); }
+
+  /* 轮播区头 */
+  .df-sec-head { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 20px; }
+  .df-sec-sub { font-size: 12px; color: var(--ink-soft); }
+  .df-sec-title { margin-top: 3px; font-size: 19px; font-weight: 600; color: var(--ink); }
+  .df-dots { display: flex; gap: 5px; padding-bottom: 4px; }
+  .df-dot { width: 6px; height: 6px; border-radius: 999px; background: #D8D3C6; transition: all .3s ease; }
+  .df-dot.on { width: 15px; background: var(--ink); }
+
+  /* 星灵卡组 */
+  .df-carousel { margin: 12px -20px 0; overflow: hidden; }
+  .df-track { display: flex; gap: 12px; padding-left: 20px; transition: transform .5s ease; }
+  .df-spirit { flex: 0 0 292px; border-radius: 26px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+
+  .df-scene { position: relative; height: 150px; overflow: hidden; }
+  .df-scene .halo { position: absolute; right: 14px; top: 10px; width: 76px; height: 76px; border-radius: 50%; }
+  .df-scene .chip {
+    position: absolute; left: 13px; top: 13px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #fff; font-size: 10.5px; letter-spacing: 1px; padding: 4px 10px;
+  }
+  .df-scene .tile {
+    position: absolute; left: 13px; bottom: 13px; width: 52px; height: 52px; border-radius: 18px;
+    background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.28);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  }
+  .df-scene .tile img { width: 38px; height: 38px; object-fit: contain; }
+  .df-scene .spark { position: absolute; right: 14px; bottom: 12px; font-size: 20px; color: #FBF0CA; }
+  .df-scene .sd { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); opacity: .5; }
+
+  /* 三颗星灵的语义色场 */
+  .sp-moon .df-scene     { background: linear-gradient(150deg, #4A5470, #2F3A58); }
+  .sp-moon .halo         { background: radial-gradient(circle, rgba(244, 231, 187, 0.8), rgba(244, 231, 187, 0) 70%); }
+  .sp-moon .cta          { background: #8B7446; }
+  .sp-sun .df-scene      { background: linear-gradient(150deg, #D58E3A, #B9742C); }
+  .sp-sun .halo          { background: radial-gradient(circle, rgba(255, 226, 150, 0.85), rgba(255, 226, 150, 0) 70%); }
+  .sp-sun .cta           { background: #C07A22; }
+  .sp-mercury .df-scene  { background: linear-gradient(150deg, #4E8D8A, #3A7272); }
+  .sp-mercury .halo      { background: radial-gradient(circle, rgba(185, 231, 220, 0.75), rgba(185, 231, 220, 0) 70%); }
+  .sp-mercury .cta       { background: #3E7B76; }
+
+  .df-sp-body { padding: 14px 16px 15px; }
+  .df-sp-namerow { display: flex; align-items: baseline; justify-content: space-between; }
+  .df-sp-name { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .df-sp-heal { font-family: var(--serif); font-size: 11px; letter-spacing: 1px; color: var(--gold); }
+  .df-sp-line { margin-top: 7px; font-size: 13px; line-height: 1.55; color: var(--ink); opacity: 0.82; }
+  .df-sp-cta {
+    margin-top: 12px; width: 100%; border: 0; border-radius: 13px; padding: 11px 0;
+    font-size: 14px; font-weight: 500; color: #fff; text-align: center; cursor: pointer;
+  }
+  .df-sp-cta:active { filter: brightness(1.08); }
+
+  .df-nav-btns { display: flex; justify-content: center; gap: 12px; margin-top: 12px; }
+  .df-nav-btn {
+    width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink-soft); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* 回访卡：今日来信 + 继续昨天 */
+  .df-return { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  .df-rcard { position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 18px; padding: 13px 14px 12px; }
+  .df-rcard .r-ic {
+    width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    color: var(--gold); background: var(--gold-soft);
+  }
+  .df-rcard .r-title { margin-top: 9px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .df-rcard .r-line { margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--ink-soft); }
+  .df-rcard .r-go { margin-top: 8px; font-size: 11px; letter-spacing: 1px; color: var(--gold); }
+  .df-rcard .r-ember { position: absolute; top: 12px; right: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember); }
+
+  /* 底栏 */
+  .df-nav { border-top: 1px solid var(--line); background: var(--surface); padding: 9px 42px 15px; display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-soft); }
+  .df-tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  .df-tab .t-ic { font-size: 18px; line-height: 1; }
+  .df-tab.on { color: var(--ink); }
+  .df-tab .t-ember { position: absolute; top: 0; right: -7px; width: 6px; height: 6px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember); }
+
+  /* ============================================================
+     ······ 夜晚面（星野）·····
+     ============================================================ */
+  .nightface { display: none; }
+  body.night .nightface { display: block; }
+
+  .nightface .sky {
+    position: fixed; inset: 0;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 48%, var(--bg-bot) 100%);
+    overflow: hidden;
+  }
+  .nightface .star { position: absolute; background: var(--gold); border-radius: 50%; opacity: 0; animation: twinkle 6s ease-in-out infinite; }
+  @keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(0.55); } 50% { opacity: 0.4; transform: scale(1); } }
+
+  .nightface .poem { position: absolute; top: 9%; left: 0; right: 0; text-align: center; z-index: 5; pointer-events: none; }
+  .nightface .poem .p1 { font-family: var(--serif); color: var(--ink); font-size: 15.5px; letter-spacing: 3px; font-weight: 500; }
+  .nightface .poem .p2 { margin-top: 9px; font-family: var(--serif); color: var(--ink-soft); font-size: 12px; letter-spacing: 2px; }
+
+  .nightface .constellation { position: absolute; top: 16%; left: 50%; transform: translateX(-50%); width: 112px; opacity: 0.75; z-index: 4; pointer-events: none; }
+  .nightface .cl { stroke: var(--line); stroke-width: 1; }
+  .nightface .cl.bright { stroke: var(--gold-soft); opacity: 0.5; }
+  .nightface .cl.med { stroke: var(--line); opacity: 0.22; }
+  .nightface .cn.lit { fill: var(--gold); filter: drop-shadow(0 0 4px var(--gold)); animation: cn-glint 4.5s ease-in-out infinite; }
+  .nightface .cn.wait { fill: var(--dot-off); animation: cn-wait 8s ease-in-out infinite; }
+  @keyframes cn-glint { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+  @keyframes cn-wait { 0%, 100% { opacity: 0.3; } 40% { opacity: 0.7; } 56% { opacity: 0.3; } }
+
+  .nightface .spirit { position: absolute; left: 50%; bottom: 31%; transform: translateX(-50%); z-index: 6; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+  .nightface .orb {
+    position: relative; width: 88px; height: 88px; border-radius: 50%;
+    background: radial-gradient(circle at 42% 34%, rgba(255, 250, 242, 0.98) 0%, rgba(244, 234, 214, 0.92) 36%, rgba(216, 192, 148, 0.5) 68%, rgba(216, 192, 148, 0) 100%);
+    box-shadow: 0 0 42px var(--gold-soft), 0 0 108px var(--gold-soft);
+    animation: breathe 4.6s ease-in-out infinite;
+  }
+  .nightface .orb .glyph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 36px; color: var(--glyph); }
+  @keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.03); } }
+  .nightface .s-name { margin-top: 13px; color: var(--ink); font-size: 13.5px; font-weight: 500; letter-spacing: 4px; }
+  .nightface .s-heal { margin-top: 5px; font-family: var(--serif); font-size: 11px; letter-spacing: 2px; color: var(--ink-soft); }
+  .nightface .s-line { margin-top: 12px; font-family: var(--serif); font-size: 12.5px; letter-spacing: 1px; color: var(--ink); opacity: 0.9; white-space: nowrap; }
+
+  .nightface .letter { position: absolute; right: 5%; bottom: 9%; width: 118px; z-index: 5; animation: letter-sway 7.5s ease-in-out infinite; }
+  @keyframes letter-sway { 0%, 100% { transform: translateY(0) rotate(0.5deg); } 50% { transform: translateY(-3px) rotate(-0.5deg); } }
+  .nightface .l-card { background: var(--paper); border: 1px solid var(--paper-border); border-radius: 10px; padding: 12px 13px 11px; backdrop-filter: blur(6px); box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), 0 0 48px var(--gold-soft); }
+  .nightface .l-seal { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 40% 34%, #EAD9A6, #B58F4E); color: #5A4426; font-size: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(181, 143, 78, 0.45); margin-bottom: 9px; }
+  .nightface .l-body { font-family: var(--serif); font-size: 11px; line-height: 1.9; letter-spacing: 1px; color: var(--ink); }
+  .nightface .l-sign { margin-top: 8px; font-size: 9.5px; letter-spacing: 2.5px; color: var(--gold); }
+
+  .nightface .nf-avatar {
+    position: fixed; top: 16px; right: 16px; z-index: 100; width: 36px; height: 36px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 34%, #F7F0DE, #D9BF8F 82%); color: #6A5238; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); cursor: pointer; opacity: 0.9;
+  }
+  .nightface .nf-tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 56px; display: flex; align-items: center; justify-content: space-around;
+    background: var(--glass); backdrop-filter: blur(18px); border-top: 1px solid var(--glass-border); z-index: 50;
+  }
+  .nightface .nf-tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--ink-soft); font-size: 11px; letter-spacing: 1px; cursor: pointer; padding: 4px 18px; }
+  .nightface .nf-tab .tic { font-size: 17px; line-height: 1; }
+  .nightface .nf-tab svg { display: block; }
+  .nightface .nf-tab.on { color: var(--ink); }
+  .nightface .nf-tab .t-ember { position: absolute; top: 0; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 7px var(--ember); }
+
+  /* ============================================================
+     无障碍 & 兜底
+     ============================================================ */
+  #toast {
+    position: fixed; bottom: 78px; left: 50%; transform: translateX(-50%);
+    white-space: nowrap; border-radius: 999px; background: #333A52; color: #F3EEE6;
+    font-size: 12px; padding: 9px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.2); z-index: 300;
+    opacity: 0; pointer-events: none; transition: opacity .3s ease;
+  }
+  #toast.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  @supports not (backdrop-filter: blur(8px)) {
+    .nightface .l-card, .nightface .nf-tabbar { background: rgba(21, 23, 38, 0.85); }
+  }
+</style>
+</head>
+<body>
+  <button class="toggle" id="toggle" title="昼夜切换">☾</button>
+
+  <!-- ============ 白昼面 ============ -->
+  <div class="dayframe">
+    <header class="df-header">
+      <div>
+        <div class="df-eyebrow">星灵花园 · 你的星空</div>
+        <h1 class="df-hello">早安，林夏</h1>
+      </div>
+    </header>
+
+    <section class="df-scroll">
+      <!-- 今日星语 = 夜晚窗口 -->
+      <div class="df-hero">
+        <div class="ring"></div>
+        <div class="moonhalo"></div>
+        <svg class="mini-const" width="52" height="34" viewBox="0 0 52 34" fill="none">
+          <line x1="8" y1="24" x2="30" y2="8" stroke="rgba(244,231,187,.35)"/>
+          <line x1="30" y1="8" x2="46" y2="26" stroke="rgba(244,231,187,.35)"/>
+          <circle cx="8" cy="24" r="2" fill="#F4E7BB"/>
+          <circle cx="30" cy="8" r="2.2" fill="#F4E7BB"/>
+          <circle cx="46" cy="26" r="1.6" fill="#F4E7BB" opacity=".8"/>
+        </svg>
+        <p class="h-eyebrow">今日 · 上弦月 · 月亮落射手座</p>
+        <h2 class="h-title">水星在事业宫搭了座桥，<br>适合推进那件悬着的事。</h2>
+        <button class="h-btn" onclick="toast('已收下今日星语')">收下星语</button>
+      </div>
+
+      <!-- 星灵轮播 -->
+      <div class="df-sec-head">
+        <div>
+          <div class="df-sec-sub">选择一位星灵，开始靠近自己</div>
+          <div class="df-sec-title">今天想和谁聊聊？</div>
+        </div>
+        <div class="df-dots">
+          <span class="df-dot on" id="dot0"></span>
+          <span class="df-dot" id="dot1"></span>
+          <span class="df-dot" id="dot2"></span>
+        </div>
+      </div>
+
+      <div class="df-carousel">
+        <div class="df-track" id="dfTrack">
+          <!-- 月亮：链接的星灵，用 active 态 -->
+          <article class="df-spirit sp-moon">
+            <div class="df-scene">
+              <span class="sd" style="left:64%;top:14%"></span><span class="sd" style="left:82%;top:46%"></span>
+              <div class="halo"></div>
+              <span class="chip">温柔 · 直觉 · 接纳</span>
+              <span class="spark">✦</span>
+              <div class="tile"><img src="src/static/imgs/moon_active.png" alt="月亮"></div>
+            </div>
+            <div class="df-sp-body">
+              <div class="df-sp-namerow"><span class="df-sp-name">月亮</span><span class="df-sp-heal">想被抱抱的我</span></div>
+              <p class="df-sp-line">理解你那些没说出口的情绪，也愿意陪你慢慢看见它。</p>
+              <button class="df-sp-cta cta" onclick="toast('和月亮聊聊 → 聊天页')">和月亮聊聊</button>
+            </div>
+          </article>
+
+          <!-- 太阳 -->
+          <article class="df-spirit sp-sun">
+            <div class="df-scene">
+              <span class="sd" style="left:58%;top:22%"></span><span class="sd" style="left:86%;top:60%"></span>
+              <div class="halo"></div>
+              <span class="chip">勇气 · 活力 · 真实</span>
+              <span class="spark">✦</span>
+              <div class="tile"><img src="src/static/imgs/sun_default.png" alt="太阳"></div>
+            </div>
+            <div class="df-sp-body">
+              <div class="df-sp-namerow"><span class="df-sp-name">太阳</span><span class="df-sp-heal">发光的那一面</span></div>
+              <p class="df-sp-line">提醒你：你的光并不需要谁来允许。</p>
+              <button class="df-sp-cta cta" onclick="toast('认识太阳（原型）')">认识太阳</button>
+            </div>
+          </article>
+
+          <!-- 水星 -->
+          <article class="df-spirit sp-mercury">
+            <div class="df-scene">
+              <span class="sd" style="left:70%;top:30%"></span><span class="sd" style="left:88%;top:14%"></span>
+              <div class="halo"></div>
+              <span class="chip">思考 · 表达 · 联结</span>
+              <span class="spark">✦</span>
+              <div class="tile"><img src="src/static/imgs/mercury_default.png" alt="水星"></div>
+            </div>
+            <div class="df-sp-body">
+              <div class="df-sp-namerow"><span class="df-sp-name">水星</span><span class="df-sp-heal">好奇的那一面</span></div>
+              <p class="df-sp-line">想听见你真正的想法，哪怕它还没有成形。</p>
+              <button class="df-sp-cta cta" onclick="toast('认识水星（原型）')">认识水星</button>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="df-nav-btns">
+        <button class="df-nav-btn" aria-label="上一位星灵" onclick="moveSpirit(-1)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10 3 5 8l5 5"/></svg>
+        </button>
+        <button class="df-nav-btn" aria-label="下一位星灵" onclick="moveSpirit(1)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m6 3 5 5-5 5"/></svg>
+        </button>
+      </div>
+
+      <!-- 回访卡 -->
+      <div class="df-return">
+        <div class="df-rcard">
+          <span class="r-ember"></span>
+          <div class="r-ic">
+            <svg width="16" height="13" viewBox="0 0 16 13" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1.5" width="14" height="10" rx="1.5"/><path d="M1.5 2.5 8 7.5l6.5-5"/></svg>
+          </div>
+          <div class="r-title">今日来信</div>
+          <div class="r-line">今天谢谢你，把那句话说出来。</div>
+          <div class="r-go" onclick="toast('读信 → 信箱页')">读信 →</div>
+        </div>
+        <div class="df-rcard">
+          <div class="r-ic">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7.5 3.5v4l2.6 2.6"/><circle cx="7.5" cy="7.5" r="6"/></svg>
+          </div>
+          <div class="r-title">继续昨天</div>
+          <div class="r-line">那件没敢说出口的事</div>
+          <div class="r-go" onclick="toast('回到昨天的话题')">去看看 →</div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="df-nav">
+      <div class="df-tab on"><span class="t-ic">✦</span>花园</div>
+      <div class="df-tab">
+        <span class="t-ember"></span>
+        <svg width="18" height="15" viewBox="0 0 18 15" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="16" height="11" rx="1.5"/><path d="M1.5 3.5 9 8.5l7.5-5"/></svg>
+        信箱
+      </div>
+      <div class="df-tab">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="1.8"/></svg>
+        我的宇宙
+      </div>
+    </nav>
+  </div>
+
+  <!-- ============ 夜晚面（星野） ============ -->
+  <div class="nightface">
+    <div class="sky">
+      <span class="star" style="top:10%;left:18%;width:2px;height:2px;animation-delay:0s"></span>
+      <span class="star" style="top:7%;left:60%;width:1.5px;height:1.5px;animation-delay:1.4s"></span>
+      <span class="star" style="top:20%;left:84%;width:2px;height:2px;animation-delay:2.6s"></span>
+      <span class="star" style="top:30%;left:10%;width:1.5px;height:1.5px;animation-delay:0.8s"></span>
+      <span class="star" style="top:26%;left:44%;width:1.5px;height:1.5px;animation-delay:3.4s"></span>
+      <span class="star" style="top:38%;left:72%;width:1.5px;height:1.5px;animation-delay:1.9s"></span>
+
+      <div class="poem">
+        <div class="p1">今夜 · 上弦月 · 月亮落射手座</div>
+        <div class="p2">水星在事业宫搭了座桥</div>
+      </div>
+
+      <div class="constellation">
+        <svg width="112" height="84" viewBox="0 0 200 150" fill="none">
+          <line class="cl" x1="48"  y1="158" x2="96"  y2="146"/>
+          <line class="cl med" x1="96" y1="146" x2="45" y2="120"/>
+          <line class="cl med" x1="45" y1="120" x2="90" y2="52"/>
+          <line class="cl med" x1="90" y1="52"  x2="128" y2="28"/>
+          <line class="cl med" x1="128" y1="28" x2="176" y2="70"/>
+          <line class="cl med" x1="176" y1="70" x2="150" y2="128"/>
+          <line class="cl bright" x1="150" y1="128" x2="45" y2="120"/>
+          <circle class="cn lit" cx="45"  cy="120" r="3.4"/>
+          <circle class="cn wait" cx="90" cy="52"  r="2.2" style="animation-delay:.4s"/>
+          <circle class="cn lit" cx="128" cy="28"  r="3.4"/>
+          <circle class="cn wait" cx="176" cy="70" r="2.2" style="animation-delay:1.7s"/>
+          <circle class="cn lit" cx="150" cy="128" r="3.4"/>
+          <circle class="cn wait" cx="96" cy="146" r="2.2" style="animation-delay:3.1s"/>
+          <circle class="cn wait" cx="48" cy="158" r="2.2" style="animation-delay:2.2s"/>
+        </svg>
+      </div>
+
+      <div class="spirit" onclick="toast('和「想被抱抱的我」聊聊')">
+        <div class="orb"><span class="glyph">☾</span></div>
+        <div class="s-name">月亮</div>
+        <div class="s-heal">想被抱抱的我</div>
+        <div class="s-line">你回来了，今天想靠一下吗？</div>
+      </div>
+
+      <div class="letter">
+        <div class="l-card">
+          <div class="l-seal">☽</div>
+          <div class="l-body">今天谢谢你，<br>把那句话说出来。</div>
+          <div class="l-sign">—— 月亮</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nf-avatar">☽</div>
+    <div class="nf-tabbar">
+      <div class="nf-tab on"><span class="tic">✦</span>花园</div>
+      <div class="nf-tab">
+        <span class="t-ember"></span>
+        <svg width="18" height="15" viewBox="0 0 18 15" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="16" height="11" rx="1.5"/><path d="M1.5 3.5 9 8.5l7.5-5"/></svg>
+        信箱
+      </div>
+      <div class="nf-tab">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="1.8"/></svg>
+        我的宇宙
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // 昼夜切换：同一世界，两种光谱
+    var b = document.body, t = document.getElementById('toggle');
+    t.onclick = function () {
+      b.classList.toggle('night');
+      t.textContent = b.classList.contains('night') ? '☀' : '☾';
+    };
+
+    // 星灵轮播
+    var si = 0, track = document.getElementById('dfTrack');
+    function moveSpirit(step) {
+      si = Math.max(0, Math.min(2, si + step));
+      track.style.transform = 'translateX(-' + (si * 304) + 'px)';
+      for (var i = 0; i < 3; i++) document.getElementById('dot' + i).className = i === si ? 'df-dot on' : 'df-dot';
+    }
+
+    // 轻量 toast
+    var toastEl = document.getElementById('toast'), timer;
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(timer);
+      timer = setTimeout(function () { toastEl.classList.remove('show'); }, 1700);
+    }
+  </script>
+</body>
+</html>

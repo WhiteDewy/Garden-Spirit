@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>星灵花园 · 首页氛围原型 v4.2（夜读星野 · 简约）</title>
+<style>
+  /* ============================================================
+     v4.2 · 夜读星野 · 简约
+     教训：v4 塞了 诗/星座/纸片/来信/碎片/信任 六个浮动物 + 一堆小标签 = 噪音。
+     这一版只有一个焦点，其余全部退后：
+       一个焦点   —— 星灵（唯一「实心」的光，呼吸）
+       三样陪衬   —— ① 顶部一行诗（今日行运，衬线）
+                      ② 天空里一片正在凝聚的星光（成长→看得见的星空，无标签）
+                      ③ 右下角一封浮着的来信（发光文书，小、透、无标签）
+       背景       —— 干净的一片天，6 颗远星，无布景无斜带
+     颜色 = 语义：一屏只亮月亮一颗星的光。零 emoji，零文字卡。
+     拂晓 ↔ 午夜 = 同一个世界，只换光谱。
+     ============================================================ */
+
+  :root {
+    --serif: "Noto Serif SC", "Songti SC", "STSong", "Kaiti SC", serif;
+    --sans:  "HarmonyOS Sans", "MiSans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+    /* 午夜 · 暖墨靛（刻意避开「占星紫」的俗套） */
+    --bg-top: #151726;
+    --bg-mid: #1A1B2E;
+    --bg-bot: #1E1F35;
+    --ink: #F3EEE6;
+    --ink-soft: rgba(243, 238, 230, 0.6);
+    --gold: #E8D9A8;                /* 月亮 accent：银色珠光 */
+    --gold-soft: rgba(232, 217, 168, 0.30);
+    --line: rgba(243, 238, 230, 0.16);
+    --paper: rgba(232, 217, 168, 0.12);
+    --paper-border: rgba(232, 217, 168, 0.24);
+    --glyph: rgba(74, 68, 96, 0.85);
+    --dot-off: #32344C;
+    --ember: #E7A67C;
+    --glass: rgba(21, 23, 38, 0.5);
+    --glass-border: rgba(243, 238, 230, 0.10);
+  }
+
+  /* 拂晓 · 同一片天，只换光谱 */
+  body.dawn {
+    --bg-top: #E9E7E0;
+    --bg-mid: #EFEDE6;
+    --bg-bot: #F4F1E9;
+    --ink: #26243A;
+    --ink-soft: rgba(38, 36, 58, 0.56);
+    --gold: #B59252;
+    --gold-soft: rgba(181, 146, 82, 0.28);
+    --line: rgba(38, 36, 58, 0.14);
+    --paper: rgba(255, 255, 255, 0.5);
+    --paper-border: rgba(150, 130, 80, 0.22);
+    --glyph: rgba(110, 91, 62, 0.9);
+    --dot-off: #D8D5CB;
+    --ember: #C96F4A;
+    --glass: rgba(255, 255, 255, 0.45);
+    --glass-border: rgba(38, 36, 58, 0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background: #151726;
+    color: var(--ink);
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ============================================================
+     一片天 —— 干净的苍穹，无景物
+     ============================================================ */
+  .sky {
+    position: relative;
+    height: 100vh;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 48%, var(--bg-bot) 100%);
+    overflow: hidden;
+    transition: background 1.4s ease;
+  }
+
+  /* 星：少、小、远。只在夜空里。 */
+  .star {
+    position: absolute;
+    background: var(--gold);
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle 6s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.55); }
+    50%      { opacity: 0.4; transform: scale(1); }
+  }
+  body.dawn .star { display: none; }
+
+  /* 拂晓的晨光：只有一屏柔光，无太阳本体 */
+  .sun {
+    position: absolute;
+    top: 4%; right: 12%;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 236, 190, 0.42), rgba(255, 236, 190, 0) 70%);
+    opacity: 0;
+    transition: opacity 1.4s ease;
+    pointer-events: none;
+  }
+  body.dawn .sun { opacity: 1; }
+
+  /* ============================================================
+     一行诗 —— 今日行运（衬线，轻、居中）
+     ============================================================ */
+  .poem {
+    position: absolute;
+    top: 9%;
+    left: 0; right: 0;
+    text-align: center;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .poem .p1 {
+    font-family: var(--serif);
+    color: var(--ink);
+    font-size: 15.5px;
+    letter-spacing: 3px;
+    font-weight: 500;
+  }
+  .poem .p2 {
+    margin-top: 9px;
+    font-family: var(--serif);
+    color: var(--ink-soft);
+    font-size: 12px;
+    letter-spacing: 2px;
+  }
+
+  /* ============================================================
+     正在凝聚的星座 —— 背景里的星光，不是卡片
+     三颗已亮，其余偶尔「试着亮一下」又退回去。无标签。
+     ============================================================ */
+  .constellation {
+    position: absolute;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 112px;
+    opacity: 0.75;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .constellation svg { display: block; }
+  .cl { stroke: var(--line); stroke-width: 1; }
+  .cl.bright { stroke: var(--gold-soft); opacity: 0.5; }
+  .cl.med    { stroke: var(--line); opacity: 0.22; }
+  .cn.lit {
+    fill: var(--gold);
+    filter: drop-shadow(0 0 4px var(--gold));
+    animation: cn-glint 4.5s ease-in-out infinite;
+  }
+  .cn.wait {
+    fill: var(--dot-off);
+    animation: cn-wait 8s ease-in-out infinite;
+  }
+  @keyframes cn-glint {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1; }
+  }
+  @keyframes cn-wait {
+    0%, 100% { opacity: 0.3; }
+    40%      { opacity: 0.7; }
+    56%      { opacity: 0.3; }
+  }
+
+  /* ============================================================
+     星灵 —— 唯一实心的焦点，永远在呼吸
+     ============================================================ */
+  .spirit {
+    position: absolute;
+    left: 50%;
+    bottom: 31%;
+    transform: translateX(-50%);
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+  }
+  .spirit .orb {
+    position: relative;
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 42% 34%,
+      rgba(255, 250, 242, 0.98) 0%,
+      rgba(244, 234, 214, 0.92) 36%,
+      rgba(216, 192, 148, 0.5) 68%,
+      rgba(216, 192, 148, 0) 100%);
+    box-shadow: 0 0 42px var(--gold-soft), 0 0 108px var(--gold-soft);
+    animation: breathe 4.6s ease-in-out infinite;
+  }
+  .spirit .orb .glyph {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px;
+    color: var(--glyph);
+  }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-5px) scale(1.03); }
+  }
+  .spirit .s-name {
+    margin-top: 13px;
+    color: var(--ink);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: 4px;
+  }
+  .spirit .s-heal {
+    margin-top: 5px;
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--ink-soft);
+  }
+  /* 问候：纯文字，无药丸、无框 —— 是天空的声音，不是 UI */
+  .spirit .s-line {
+    margin-top: 12px;
+    font-family: var(--serif);
+    font-size: 12.5px;
+    letter-spacing: 1px;
+    color: var(--ink);
+    opacity: 0.9;
+    white-space: nowrap;
+  }
+
+  /* ============================================================
+     今日来信 —— 右下角一封浮着的发光文书（小、透、无标签）
+     ============================================================ */
+  .letter {
+    position: absolute;
+    right: 5%;
+    bottom: 9%;
+    width: 118px;
+    z-index: 5;
+    animation: letter-sway 7.5s ease-in-out infinite;
+  }
+  @keyframes letter-sway {
+    0%, 100% { transform: translateY(0) rotate(0.5deg); }
+    50%      { transform: translateY(-3px) rotate(-0.5deg); }
+  }
+  .letter .l-card {
+    background: var(--paper);
+    border: 1px solid var(--paper-border);
+    border-radius: 10px;
+    padding: 12px 13px 11px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), 0 0 48px var(--gold-soft);
+  }
+  .letter .l-seal {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 34%, #EAD9A6, #B58F4E);
+    color: #5A4426;
+    font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(181, 143, 78, 0.45);
+    margin-bottom: 9px;
+  }
+  .letter .l-body {
+    font-family: var(--serif);
+    font-size: 11px;
+    line-height: 1.9;
+    letter-spacing: 1px;
+    color: var(--ink);
+  }
+  .letter .l-sign {
+    margin-top: 8px;
+    font-size: 9.5px;
+    letter-spacing: 2.5px;
+    color: var(--gold);
+  }
+
+  /* ============================================================
+     顶栏 / 底栏 —— 尽量退后
+     ============================================================ */
+  .toggle {
+    position: fixed;
+    top: 16px; left: 16px;
+    z-index: 100;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    color: var(--ink-soft);
+    font-size: 14px;
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .avatar {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 100;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 34%, #F7F0DE, #D9BF8F 82%);
+    color: #6A5238;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    opacity: 0.9;
+  }
+  .tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: var(--glass);
+    backdrop-filter: blur(18px);
+    border-top: 1px solid var(--glass-border);
+    z-index: 50;
+    transition: background 1.4s ease;
+  }
+  .tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--ink-soft);
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    padding: 4px 18px;
+  }
+  .tab .tic { font-size: 17px; line-height: 1; }
+  .tab svg { display: block; }
+  .tab.active { color: var(--ink); }
+  .tab .ember {
+    position: absolute;
+    top: 0; right: 6px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ember);
+    box-shadow: 0 0 7px var(--ember);
+  }
+
+  /* ============================================================
+     无障碍 & 兜底
+     ============================================================ */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  @supports not (backdrop-filter: blur(8px)) {
+    .letter .l-card, .tabbar, .toggle { background: rgba(21, 23, 38, 0.8); }
+    body.dawn .letter .l-card, body.dawn .tabbar, body.dawn .toggle { background: rgba(255, 255, 255, 0.82); }
+  }
+</style>
+</head>
+<body>
+  <button class="toggle" id="toggle" title="拂晓 / 午夜">☾</button>
+  <div class="avatar" onclick="alert('右上角 = 你的头像 → 档案 / 设置')">☽</div>
+
+  <!-- ============ 一片天 ============ -->
+  <div class="sky">
+    <div class="sun"></div>
+
+    <!-- 6 颗远星，只在夜空 -->
+    <span class="star" style="top:10%;left:18%;width:2px;height:2px;animation-delay:0s"></span>
+    <span class="star" style="top:7%;left:60%;width:1.5px;height:1.5px;animation-delay:1.4s"></span>
+    <span class="star" style="top:20%;left:84%;width:2px;height:2px;animation-delay:2.6s"></span>
+    <span class="star" style="top:30%;left:10%;width:1.5px;height:1.5px;animation-delay:0.8s"></span>
+    <span class="star" style="top:26%;left:44%;width:1.5px;height:1.5px;animation-delay:3.4s"></span>
+    <span class="star" style="top:38%;left:72%;width:1.5px;height:1.5px;animation-delay:1.9s"></span>
+
+    <!-- 今日行运：一行诗 -->
+    <div class="poem">
+      <div class="p1">今夜 · 上弦月 · 月亮落射手座</div>
+      <div class="p2">水星在事业宫搭了座桥</div>
+    </div>
+
+    <!-- 正在凝聚的星座：背景星光，无标签 -->
+    <div class="constellation">
+      <svg width="112" height="84" viewBox="0 0 200 150" fill="none">
+        <line class="cl" x1="48"  y1="158" x2="96"  y2="146"/>
+        <line class="cl med" x1="96" y1="146" x2="45" y2="120"/>
+        <line class="cl med" x1="45" y1="120" x2="90" y2="52"/>
+        <line class="cl med" x1="90" y1="52"  x2="128" y2="28"/>
+        <line class="cl med" x1="128" y1="28" x2="176" y2="70"/>
+        <line class="cl med" x1="176" y1="70" x2="150" y2="128"/>
+        <line class="cl bright" x1="150" y1="128" x2="45" y2="120"/>
+        <circle class="cn lit" cx="45"  cy="120" r="3.4"/>
+        <circle class="cn wait" cx="90" cy="52"  r="2.2" style="animation-delay:.4s"/>
+        <circle class="cn lit" cx="128" cy="28"  r="3.4"/>
+        <circle class="cn wait" cx="176" cy="70" r="2.2" style="animation-delay:1.7s"/>
+        <circle class="cn lit" cx="150" cy="128" r="3.4"/>
+        <circle class="cn wait" cx="96" cy="146" r="2.2" style="animation-delay:3.1s"/>
+        <circle class="cn wait" cx="48" cy="158" r="2.2" style="animation-delay:2.2s"/>
+      </svg>
+    </div>
+
+    <!-- 星灵：唯一实心的焦点 -->
+    <div class="spirit" onclick="alert('点星灵 → 和「想被抱抱的我」聊聊')">
+      <div class="orb"><span class="glyph">☾</span></div>
+      <div class="s-name">月亮</div>
+      <div class="s-heal">想被抱抱的我</div>
+      <div class="s-line">你回来了，今天想靠一下吗？</div>
+    </div>
+
+    <!-- 今日来信：右下角一封浮着的发光文书 -->
+    <div class="letter">
+      <div class="l-card">
+        <div class="l-seal">☽</div>
+        <div class="l-body">今天谢谢你，<br>把那句话说出来。</div>
+        <div class="l-sign">—— 月亮</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 底栏 ============ -->
+  <div class="tabbar">
+    <div class="tab active"><span class="tic">✦</span>花园</div>
+    <div class="tab">
+      <span class="ember"></span>
+      <svg width="18" height="15" viewBox="0 0 18 15" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="16" height="11" rx="1.5"/><path d="M1.5 3.5 9 8.5l7.5-5"/></svg>
+      信箱
+    </div>
+    <div class="tab">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="1.8"/></svg>
+      我的宇宙
+    </div>
+  </div>
+
+  <script>
+    // 拂晓 ↔ 午夜：同一个世界，只换光谱
+    var b = document.body, t = document.getElementById('toggle');
+    t.onclick = function () {
+      b.classList.toggle('dawn');
+      t.textContent = b.classList.contains('dawn') ? '☀' : '☾';
+    };
+  </script>
+</body>
+</html>

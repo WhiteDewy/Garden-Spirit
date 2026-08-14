@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>星灵花园 · 首页原型 v7（窗边暮色 · 一盏灯）</title>
+<style>
+  /* ============================================================
+     v7 · 窗边暮色 —— 不再有框、不再有卡片、不再有玻璃
+     构图不是「风景」，是「黄昏的房间里，一盏灯，窗外暮色」：
+       你在室内，安全；灯 = 星灵；窗外那片天，记得你。
+     治愈感的来源 = 光落在东西上（纸、桌、窗台），其余全暗。
+     规则：
+       · 没有 border、没有圆角矩形、没有 backdrop-filter
+       · 全屏只有一个亮光源 = 星灵的灯，其它全比它暗
+       · 内容不是「卡片」，是「房间里的东西」：窗台上的一封信、一张便条、一排小蜡烛
+       · 中文不拉宽字距（宽字距=散），靠行距和留白
+       · 零 emoji；符文 ☾☽✦ 是天的语言
+     ============================================================ */
+
+  :root {
+    --serif: "Noto Serif SC", "Songti SC", "STSong", "Kaiti SC", serif;
+    --sans:  "HarmonyOS Sans", "MiSans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --ink: #F6F0E2;
+    --dim: rgba(246, 240, 226, 0.55);
+    --faint: rgba(167, 158, 143, 0.72);
+    --warm: #FFE3B8;          /* 灯的暖光 */
+    --paper: #F5EBD6;         /* 纸的暖白 */
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: #131020;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ============================================================
+     窗外暮色（透过窗，这片天记得你）
+     ============================================================ */
+  .sky {
+    position: absolute; left: 0; right: 0; top: 0; height: 68%;
+    background:
+      radial-gradient(640px 250px at 50% 100%, rgba(181, 116, 79, 0.28), transparent 72%),
+      linear-gradient(180deg, #1A213E 0%, #21294C 55%, #272F56 100%);
+  }
+  .star {
+    position: absolute; border-radius: 50%;
+    background: #EBD9B8; opacity: 0;
+    animation: twinkle 7s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.6); }
+    50%      { opacity: 0.5; transform: scale(1); }
+  }
+
+  /* 窗台上的灯照在桌上 */
+  .pool {
+    position: absolute; left: 50%; bottom: 22%;
+    transform: translateX(-50%);
+    width: 360px; height: 130px;
+    background: radial-gradient(ellipse at 50% 50%, rgba(255, 195, 125, 0.30), rgba(255, 195, 125, 0) 70%);
+    filter: blur(3px);
+    animation: pool-breathe 4.6s ease-in-out infinite;
+  }
+  @keyframes pool-breathe {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1; }
+  }
+
+  /* 窗台 / 桌面 */
+  .sill {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+    background: linear-gradient(180deg, #241A2C 0%, #160F21 100%);
+  }
+
+  /* 房间的暗角 */
+  .vig {
+    position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background: radial-gradient(120% 95% at 50% 42%, transparent 52%, rgba(9, 6, 15, 0.52) 100%);
+  }
+
+  /* ============================================================
+     一盏灯 = 星灵。全屏唯一的光源。
+     ============================================================ */
+  .lamp {
+    position: absolute; left: 50%; bottom: 30%;
+    transform: translateX(-50%);
+    z-index: 5; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .orb {
+    position: relative; width: 86px; height: 86px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 34%, #FFF7E8 0%, #FFE3B8 38%, #E8A45C 72%, rgba(232, 164, 92, 0) 100%);
+    box-shadow: 0 0 42px rgba(255, 214, 150, 0.5), 0 0 130px rgba(255, 200, 140, 0.28);
+    animation: breathe 4.6s ease-in-out infinite;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .orb .glyph { font-size: 34px; color: #7A4A2A; }
+  @keyframes breathe {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-4px) scale(1.03); }
+  }
+  .lamp .l-name {
+    margin-top: 13px; color: var(--ink); font-size: 13px; letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(255, 220, 160, 0.35);
+  }
+  .lamp .l-heal {
+    margin-top: 4px; font-family: var(--serif); font-size: 11px; letter-spacing: 2px; color: var(--dim);
+  }
+
+  /* ============================================================
+     灯的这句话 —— 今日星语（衬线，舒适行距，不拉字距）
+     ============================================================ */
+  .message {
+    position: absolute; left: 0; right: 0; top: 29%; text-align: center;
+    z-index: 4; pointer-events: none;
+  }
+  .m-eyebrow { font-size: 10.5px; letter-spacing: 2px; color: var(--faint); }
+  .m-text {
+    margin-top: 13px; font-family: var(--serif); font-size: 17px; line-height: 1.9;
+    color: var(--ink); letter-spacing: 1px;
+  }
+
+  /* 顶栏：一句轻轻的问候 */
+  header { position: absolute; top: 26px; left: 24px; z-index: 6; }
+  .eyebrow { font-size: 10px; letter-spacing: 3px; color: var(--faint); }
+  .hello { margin-top: 4px; font-family: var(--serif); font-size: 18px; color: var(--ink); letter-spacing: 1px; }
+
+  /* ============================================================
+     房间里的东西（不是卡片，是纸和蜡烛）
+     ============================================================ */
+  /* 一封信，躺在窗台右侧，被灯照到 */
+  .letter {
+    position: absolute; right: 8%; bottom: 17%; width: 118px; z-index: 6;
+    transform: rotate(2deg); cursor: pointer;
+  }
+  .paper {
+    background: linear-gradient(135deg, #F5EBD6 0%, #EAD9BD 100%);
+    border-radius: 2px; padding: 14px 14px 12px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38), 0 0 34px rgba(255, 205, 150, 0.16);
+    font-family: var(--serif); font-size: 12px; line-height: 1.85; color: #5A4632;
+  }
+  .paper .sign { margin-top: 11px; font-size: 10px; color: #9A7A52; letter-spacing: 2px; }
+
+  /* 一张便条：昨天没说完的事（记忆的耳语） */
+  .note {
+    position: absolute; left: 6%; bottom: 21%; width: 96px; z-index: 6;
+    transform: rotate(-3deg);
+    font-family: var(--serif); font-size: 11px; line-height: 1.75; color: rgba(246, 240, 226, 0.45);
+  }
+
+  /* 一排小蜡烛 = 星灵选择 */
+  .candles {
+    position: absolute; left: 0; right: 0; bottom: 6.5%;
+    display: flex; justify-content: center; gap: 30px; z-index: 7;
+  }
+  .candle { display: flex; flex-direction: column; align-items: center; gap: 7px; cursor: pointer; }
+  .flame {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 45% 40%, rgba(255, 244, 214, 0.95), rgba(232, 164, 92, 0.55) 62%, rgba(232, 164, 92, 0) 78%);
+    opacity: 0.4;
+  }
+  .candle.on .flame {
+    width: 24px; height: 24px; opacity: 1;
+    box-shadow: 0 0 16px rgba(255, 214, 150, 0.5);
+    animation: flicker 3.8s ease-in-out infinite;
+  }
+  @keyframes flicker {
+    0%, 100% { transform: scale(1); opacity: 0.95; }
+    50%      { transform: scale(1.12); opacity: 1; }
+  }
+  .candle .c-label { font-size: 10px; letter-spacing: 2px; color: rgba(167, 158, 143, 0.55); }
+  .candle.on .c-label { color: #F0E7D3; }
+
+  /* 底栏：三个安静的符号，没有框 */
+  nav {
+    position: absolute; left: 0; right: 0; bottom: 1.5%;
+    display: flex; justify-content: center; gap: 52px; z-index: 8;
+    color: rgba(167, 158, 143, 0.5); font-size: 10px; letter-spacing: 1px;
+  }
+  nav .n { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  nav .n .ic { font-size: 16px; line-height: 1; }
+  nav .n.on { color: #F0E7D3; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <!-- 窗外暮色 -->
+  <div class="sky">
+    <span class="star" style="top:10%;left:18%;width:2px;height:2px;animation-delay:0s"></span>
+    <span class="star" style="top:7%;left:62%;width:1.5px;height:1.5px;animation-delay:1.6s"></span>
+    <span class="star" style="top:18%;left:84%;width:2px;height:2px;animation-delay:2.8s"></span>
+    <span class="star" style="top:26%;left:34%;width:1.5px;height:1.5px;animation-delay:0.9s"></span>
+    <span class="star" style="top:32%;left:70%;width:1.5px;height:1.5px;animation-delay:3.6s"></span>
+    <!-- 你的星座，在天上慢慢亮起（成长 = 看得见的光） -->
+    <span style="position:absolute;top:22%;left:74%;width:3px;height:3px;border-radius:50%;background:#EBD9B8;box-shadow:0 0 6px rgba(235,217,184,.8)"></span>
+    <span style="position:absolute;top:27%;left:66%;width:2px;height:2px;border-radius:50%;background:#8d86a6"></span>
+    <span style="position:absolute;top:19%;left:60%;width:2px;height:2px;border-radius:50%;background:#8d86a6"></span>
+  </div>
+
+  <!-- 房间暗角 -->
+  <div class="vig"></div>
+
+  <!-- 窗台/桌面 -->
+  <div class="sill"></div>
+  <div class="pool"></div>
+
+  <!-- 一句问候 -->
+  <header>
+    <div class="eyebrow">星灵花园</div>
+    <div class="hello">晚上好，林夏</div>
+  </header>
+
+  <!-- 灯的这句话 = 今日星语 -->
+  <div class="message">
+    <div class="m-eyebrow">今日 · 月亮落射手座</div>
+    <div class="m-text">你回来了，今天想说的话，<br>慢慢说。</div>
+  </div>
+
+  <!-- 一盏灯 = 星灵 -->
+  <div class="lamp" onclick="toast('和「想被抱抱的我」聊聊')">
+    <div class="orb"><span class="glyph">☾</span></div>
+    <div class="l-name">月亮</div>
+    <div class="l-heal">想被抱抱的我</div>
+  </div>
+
+  <!-- 一封信，躺在窗台上 -->
+  <div class="letter" onclick="toast('读信 → 信箱')">
+    <div class="paper">
+      今天谢谢你，<br>把那句话说出来。
+      <div class="sign">—— 月亮</div>
+    </div>
+  </div>
+
+  <!-- 一张便条：昨天的事 -->
+  <div class="note">昨天那件<br>没说出口的事</div>
+
+  <!-- 一排小蜡烛 = 今天想和谁聊聊 -->
+  <div class="candles">
+    <div class="candle on" onclick="toast('月亮 · 想被抱抱的我')"><div class="flame"></div><div class="c-label">月亮</div></div>
+    <div class="candle" onclick="toast('太阳 · 认识他')"><div class="flame"></div><div class="c-label">太阳</div></div>
+    <div class="candle" onclick="toast('水星 · 认识他')"><div class="flame"></div><div class="c-label">水星</div></div>
+  </div>
+
+  <!-- 底栏：三个安静的符号 -->
+  <nav>
+    <div class="n on"><span class="ic">✦</span>花园</div>
+    <div class="n"><span class="ic">✉</span>信箱</div>
+    <div class="n"><span class="ic">◌</span>我的宇宙</div>
+  </nav>
+
+  <script>
+    var el = document.createElement('div');
+    el.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);white-space:nowrap;border-radius:999px;background:rgba(20,15,30,.9);color:#F6F0E2;font-size:12px;padding:9px 16px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:300;opacity:0;transition:opacity .3s ease;pointer-events:none;';
+    document.body.appendChild(el);
+    var timer;
+    function toast(m) { el.textContent = m; el.style.opacity = '1'; clearTimeout(timer); timer = setTimeout(function(){ el.style.opacity = '0'; }, 1700); }
+  </script>
+</body>
+</html>

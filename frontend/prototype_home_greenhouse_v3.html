@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>星灵花园 · 星盘温室 V3 Demo</title>
+<style>
+/* ============================================================
+   星灵花园 · V3 Demo
+   方向：星盘温室 / 星图花园
+
+   目标：
+   - 保留 V2 的克制、清爽、主次清楚
+   - 增加 Garden-Spirit 独有抓手：出生星盘长成一座内在温室
+   - 首页只讲：今日星灵、每日主题、星灵来信、星象触发、一个行动
+   - 不展示 10 个星灵并列，不做大杂烩森林
+   ============================================================ */
+
+:root{
+  --font-sans:"HarmonyOS Sans","MiSans","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --font-serif:"Noto Serif SC","Songti SC","STSong",serif;
+
+  --bg-deep:#172421;
+  --bg-green:#243832;
+  --mist:#eef0e4;
+  --cream:#fffaf0;
+  --paper:#fbf6e8;
+  --garden:#9caf8b;
+  --garden-dark:#5f7d67;
+  --ink:#263b34;
+  --ink-soft:rgba(38,59,52,.62);
+  --white-soft:rgba(255,255,255,.62);
+  --line:rgba(78,105,88,.16);
+
+  --star:#ecd28b;
+  --moon:#d8c7f2;
+  --mercury:#8ccdc2;
+  --venus:#e6abb9;
+  --mars:#e98972;
+  --saturn:#c2a36e;
+
+  --shadow:rgba(31,52,45,.22);
+  --soft-shadow:rgba(65,91,78,.16);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%}
+body{
+  overflow:hidden;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:#15211e;
+  color:var(--ink);
+  font-family:var(--font-sans);
+}
+button{font:inherit;color:inherit;border:0;background:transparent;cursor:pointer}
+
+.phone{
+  position:relative;
+  width:min(100vw,390px);
+  height:min(100vh,844px);
+  overflow:hidden;
+  border-radius:38px;
+  background:#e9eee0;
+  box-shadow:0 28px 90px rgba(0,0,0,.42);
+}
+@media(max-height:720px){.phone{height:100vh;border-radius:0}}
+
+.screen{position:absolute;inset:0;display:none;overflow:hidden}
+.screen.active{display:block}
+.noise{position:absolute;inset:0;opacity:.055;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.8) .5px,transparent .5px);background-size:5px 5px;mix-blend-mode:soft-light}
+.glow{position:absolute;border-radius:50%;filter:blur(34px);pointer-events:none}
+
+.page-head{
+  position:absolute;top:28px;left:22px;right:22px;z-index:8;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.eyebrow{font-size:10px;letter-spacing:.22em;opacity:.58;font-weight:600}
+.head-title{margin-top:4px;font-family:var(--font-serif);font-size:18px;font-weight:500}
+.icon-btn{
+  width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.18);backdrop-filter:blur(16px);
+  box-shadow:0 8px 24px rgba(34,54,47,.1);
+}
+
+.bottom-nav{
+  position:absolute;left:13px;right:13px;bottom:12px;height:70px;z-index:40;
+  border:1px solid rgba(255,255,255,.12);border-radius:27px;
+  background:rgba(23,36,33,.72);backdrop-filter:blur(24px);
+  display:grid;grid-template-columns:repeat(4,1fr);padding:7px;
+  box-shadow:0 10px 40px rgba(0,0,0,.2);
+}
+.nav-item{border-radius:21px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:rgba(235,241,233,.48);font-size:9px}
+.nav-item .ico{font-size:18px;line-height:1}.nav-item.active{background:rgba(255,255,255,.1);color:#f6f0df}.nav-item.active .ico{filter:drop-shadow(0 0 8px rgba(236,210,139,.65))}
+
+/* ================= Garden / Home ================= */
+.garden{
+  background:
+    radial-gradient(circle at 78% 13%,rgba(255,237,181,.92) 0 3%,rgba(255,232,173,.34) 8%,transparent 21%),
+    linear-gradient(180deg,#8ab3bb 0%,#b7c8be 38%,#d8d6bd 58%,#8fa486 100%);
+}
+.garden .glow.a{width:190px;height:190px;right:-44px;top:28px;background:rgba(255,238,184,.44)}
+.garden .glow.b{width:220px;height:220px;left:-80px;bottom:80px;background:rgba(223,232,205,.32)}
+.cloud{position:absolute;background:rgba(255,255,255,.16);filter:blur(18px);border-radius:50%}
+.cloud.a{width:210px;height:55px;left:-68px;top:132px}.cloud.b{width:180px;height:46px;right:-60px;top:246px}
+.hill{position:absolute;bottom:0;width:125%;height:36%;left:-12%;border-radius:50% 50% 0 0/25% 25% 0 0;background:linear-gradient(180deg,#aab99b,#6a846d)}
+.hill.back{height:28%;bottom:15%;background:#b1bea3;opacity:.68;left:-20%}
+
+.garden-content{position:absolute;inset:0;z-index:5;padding:92px 24px 98px;display:flex;flex-direction:column;align-items:stretch}
+.date-line{font-size:12px;color:rgba(35,54,51,.68)}
+.hero-title{font-family:var(--font-serif);font-size:27px;font-weight:500;line-height:1.45;color:#253c37;margin-top:5px}
+.theme-line{margin-top:14px;font-family:var(--font-serif);font-size:18px;line-height:1.65;color:#283f39;max-width:292px}
+.theme-line span{color:#fff8db;text-shadow:0 2px 18px rgba(90,76,45,.16)}
+
+.greenhouse-stage{position:relative;height:274px;margin:8px -10px 0}
+.greenhouse{
+  position:absolute;left:50%;top:16px;transform:translateX(-50%);
+  width:250px;height:250px;border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(255,250,230,.38),transparent 47%),
+    linear-gradient(145deg,rgba(255,255,255,.24),rgba(255,255,255,.06));
+  border:1px solid rgba(255,255,255,.48);
+  box-shadow:0 24px 60px rgba(45,68,58,.18),inset 0 0 0 1px rgba(255,255,255,.16);
+  backdrop-filter:blur(10px);
+}
+.greenhouse:before,.greenhouse:after{content:"";position:absolute;inset:22px;border-radius:50%;border:1px solid rgba(255,255,255,.34)}
+.greenhouse:after{inset:54px;border-color:rgba(255,255,255,.22)}
+.axis{position:absolute;left:50%;top:20px;bottom:20px;width:1px;background:linear-gradient(transparent,rgba(255,255,255,.42),transparent)}
+.axis.two{transform:rotate(90deg)}.axis.three{transform:rotate(45deg)}.axis.four{transform:rotate(-45deg)}
+.zodiac-dot{position:absolute;width:5px;height:5px;border-radius:50%;background:#fff4c9;box-shadow:0 0 12px rgba(255,244,201,.75)}
+.d1{left:50%;top:14px}.d2{right:44px;top:44px}.d3{right:14px;top:50%}.d4{right:44px;bottom:44px}.d5{left:50%;bottom:14px}.d6{left:44px;bottom:44px}.d7{left:14px;top:50%}.d8{left:44px;top:44px}
+
+.soil{
+  position:absolute;left:50%;bottom:24px;transform:translateX(-50%);
+  width:160px;height:72px;border-radius:50%;
+  background:linear-gradient(180deg,#bfd2a6,#7fa176);
+  box-shadow:inset 0 -10px 18px rgba(60,92,74,.14),0 14px 30px rgba(57,83,72,.18);
+}
+.sprig{position:absolute;left:50%;bottom:80px;width:68px;height:90px;transform:translateX(-50%)}
+.stem{position:absolute;left:33px;bottom:4px;width:3px;height:62px;border-radius:4px;background:#6d9a78;transform-origin:bottom;transform:rotate(-3deg)}
+.leaf{position:absolute;border-radius:50% 50% 50% 0;background:#8bbb83;box-shadow:0 4px 12px rgba(60,92,74,.12)}
+.leaf.l1{width:28px;height:18px;left:8px;top:38px;transform:rotate(20deg)}
+.leaf.l2{width:30px;height:19px;right:5px;top:27px;transform:rotate(110deg);background:#aacb8a}
+.leaf.l3{width:24px;height:16px;left:16px;top:17px;transform:rotate(-12deg);background:#99bf91}
+.starbud{
+  position:absolute;left:50%;top:0;transform:translateX(-50%);
+  width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-serif);font-size:24px;color:#fff8e1;
+  background:radial-gradient(circle at 36% 30%,#fff 0 8%,transparent 9%),linear-gradient(145deg,#efe5ff,var(--moon) 60%,#9189d2);
+  box-shadow:0 0 0 1px rgba(255,255,255,.42),0 0 34px rgba(216,199,242,.58),0 16px 32px rgba(80,74,128,.2);
+  animation:breathe 4.4s ease-in-out infinite;
+}
+@keyframes breathe{0%,100%{transform:translateX(-50%) translateY(0) scale(1)}50%{transform:translateX(-50%) translateY(-5px) scale(1.035)}}
+.orbit-label{
+  position:absolute;left:50%;bottom:4px;transform:translateX(-50%);
+  padding:7px 11px;border-radius:999px;background:rgba(38,59,52,.76);color:#fff7e5;font-size:10px;
+  box-shadow:0 8px 22px rgba(35,54,51,.18);
+}
+
+.letter-card{
+  margin-top:auto;border-radius:24px;padding:16px 16px 15px;
+  background:rgba(251,246,232,.62);backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.32);box-shadow:0 18px 52px rgba(62,83,70,.15);
+  color:#314841;
+}
+.letter-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.letter-k{font-size:9px;letter-spacing:.16em;color:rgba(49,72,65,.56);font-weight:700}
+.trigger{font-size:10px;color:#62766f;background:rgba(255,255,255,.32);padding:5px 8px;border-radius:999px}
+.letter-text{font-family:var(--font-serif);font-size:14px;line-height:1.9;color:#40534b}
+.action-row{display:flex;gap:9px;margin-top:13px}
+.primary-btn{border-radius:20px;padding:11px 15px;background:rgba(49,72,63,.86);color:#fffaf0;font-size:12px;box-shadow:0 8px 25px rgba(36,56,48,.16)}
+.secondary-btn{border-radius:20px;padding:11px 13px;background:rgba(255,255,255,.36);color:#526a60;font-size:12px}
+
+.source-card{
+  position:absolute;left:24px;right:24px;bottom:90px;z-index:8;
+  border-radius:18px;padding:11px 13px;background:rgba(34,50,45,.66);backdrop-filter:blur(18px);
+  color:rgba(255,250,235,.72);font-size:10px;line-height:1.7;opacity:0;transform:translateY(12px);pointer-events:none;transition:.25s;
+}
+.source-card.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.source-card b{color:#fff4c9;font-weight:500}
+
+/* ================= Diary ================= */
+.diary{background:linear-gradient(160deg,#d9d8c7,#bdc6b0 52%,#84987f);color:#293b35}
+.diary:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 12%,rgba(255,247,210,.78),transparent 25%),radial-gradient(circle at 12% 75%,rgba(255,255,255,.22),transparent 30%)}
+.diary .page-head{color:#293b35}.diary .icon-btn{color:#35483f;border-color:rgba(40,61,53,.12);background:rgba(255,255,255,.18)}
+.diary-content{position:absolute;inset:0;padding:105px 22px 98px;overflow:hidden}
+.paper{height:580px;border-radius:28px;background:rgba(250,248,235,.73);backdrop-filter:blur(16px);padding:24px 20px;box-shadow:0 18px 55px rgba(59,76,62,.15);position:relative;overflow:hidden}
+.paper:after{content:"";position:absolute;inset:0;opacity:.14;background:repeating-linear-gradient(0deg,transparent 0 28px,rgba(92,104,85,.14) 29px 30px)}
+.paper>*{position:relative;z-index:1}.date{font-size:9px;letter-spacing:.16em;color:#7d887c}.diary-title{font-family:var(--font-serif);font-size:25px;margin:13px 0 21px}.entry{font-family:var(--font-serif);font-size:15px;line-height:2;color:#40534b}.highlight{color:#718c7c}.divider{height:1px;background:rgba(64,81,69,.12);margin:22px 0}.entry-label{font-size:9px;letter-spacing:.14em;color:#8b9587}.star-line{display:flex;align-items:center;gap:9px;margin-top:12px;font-family:var(--font-serif);font-size:13px}.star-line i{font-size:20px;color:#ad9154}.write-btn{position:absolute;right:24px;bottom:108px;border-radius:22px;padding:12px 17px;background:#526d60;color:#fff;font-size:11px;box-shadow:0 8px 25px rgba(51,74,62,.2)}
+
+/* ================= Cosmos ================= */
+.cosmos{background:radial-gradient(circle at 50% 38%,#344c64,#182638 52%,#0b111b 100%);color:#edf1e9}
+.cosmos .glow{width:300px;height:300px;background:rgba(154,177,202,.12);left:45px;top:140px}.constellation{position:absolute;inset:0;opacity:.75}.constellation i{position:absolute;width:3px;height:3px;border-radius:50%;background:#eee7ce;box-shadow:0 0 10px rgba(238,231,206,.7)}.orbit{position:absolute;left:50%;top:43%;transform:translate(-50%,-50%);border:1px solid rgba(226,222,198,.18);border-radius:50%;width:280px;height:280px;rotate:13deg}.orbit.two{width:205px;height:205px;rotate:-22deg}.orbit.three{width:125px;height:125px;rotate:32deg}.core{position:absolute;left:50%;top:43%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff7dc,#bca873 58%,#576a77);box-shadow:0 0 50px rgba(220,205,158,.35);display:grid;place-items:center;font-family:var(--font-serif);font-size:21px}.planet{position:absolute;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(8px)}.p1{left:10%;top:34%}.p2{right:9%;top:46%}.p3{left:19%;top:61%}.p4{right:19%;top:69%}
+.cosmos-copy{position:absolute;left:22px;right:22px;bottom:112px}.cosmos-copy h2{font-family:var(--font-serif);font-size:23px;font-weight:500;margin-bottom:8px}.cosmos-copy p{font-family:var(--font-serif);font-size:12px;color:rgba(238,241,234,.58);line-height:1.8}.cosmos-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:15px}.cosmos-card{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);padding:12px;border-radius:18px;font-size:10px;color:rgba(238,241,234,.68)}.cosmos-card b{display:block;font-family:var(--font-serif);font-size:14px;color:#f4ead0;margin-bottom:5px;font-weight:500}
+
+/* ================= Me ================= */
+.me{background:linear-gradient(170deg,#273c35,#162722 55%,#0f1b18);color:#edf1e9}.me .glow{width:240px;height:240px;background:rgba(183,164,113,.12);right:-100px;top:50px}.me-content{position:absolute;inset:0;padding:95px 22px 98px;overflow:hidden}.profile{display:flex;align-items:center;gap:15px;padding:12px 0 24px}.profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,#dfe5d8,#758d80);display:grid;place-items:center;color:#fff;font-size:25px;box-shadow:0 0 35px rgba(210,203,164,.12)}.profile h2{font-family:var(--font-serif);font-weight:500;font-size:20px;margin:0}.profile p{font-size:10px;color:rgba(235,241,233,.5);margin:6px 0}.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{padding:15px 11px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.05);border-radius:18px}.stat b{font-family:var(--font-serif);font-size:19px;font-weight:500}.stat span{display:block;color:rgba(235,241,233,.43);font-size:9px;margin-top:5px}.section-label{font-size:9px;letter-spacing:.16em;color:rgba(235,241,233,.4);margin:25px 0 10px}.pref-card{padding:15px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);margin-bottom:9px}.pref-card b{font-family:var(--font-serif);font-size:14px;font-weight:500}.pref-card small{display:block;margin-top:5px;color:rgba(235,241,233,.44);font-size:10px;line-height:1.6}.setting{display:flex;justify-content:space-between;padding:12px 2px;color:rgba(235,241,233,.68);font-size:11px;border-top:1px solid rgba(255,255,255,.08)}.setting span:last-child{opacity:.4}
+
+.toast{position:absolute;z-index:80;left:50%;bottom:95px;transform:translateX(-50%) translateY(20px);padding:10px 15px;border-radius:18px;background:rgba(16,27,24,.88);font-size:10px;color:#fff9e7;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="phone">
+
+<!-- 花园 / 首页 -->
+<section id="garden" class="screen garden active">
+  <div class="glow a"></div><div class="glow b"></div><div class="cloud a"></div><div class="cloud b"></div><div class="hill back"></div><div class="hill"></div><div class="noise"></div>
+
+  <div class="page-head">
+    <div><div class="eyebrow">GARDEN SPIRIT</div><div class="head-title">花园</div></div>
+    <button class="icon-btn" onclick="toggleSource()">☾</button>
+  </div>
+
+  <div class="garden-content">
+    <div class="date-line">2026 · 08 · 14　星期五</div>
+    <h1 class="hero-title">今天醒来的是，<br>月亮星灵。</h1>
+    <div class="theme-line">先把心放回自己这里，<br><span>再慢慢回应世界。</span></div>
+
+    <div class="greenhouse-stage">
+      <div class="greenhouse">
+        <div class="axis"></div><div class="axis two"></div><div class="axis three"></div><div class="axis four"></div>
+        <i class="zodiac-dot d1"></i><i class="zodiac-dot d2"></i><i class="zodiac-dot d3"></i><i class="zodiac-dot d4"></i><i class="zodiac-dot d5"></i><i class="zodiac-dot d6"></i><i class="zodiac-dot d7"></i><i class="zodiac-dot d8"></i>
+        <div class="soil"></div>
+        <div class="sprig"><div class="stem"></div><div class="leaf l1"></div><div class="leaf l2"></div><div class="leaf l3"></div><div class="starbud">☾</div></div>
+        <div class="orbit-label">行运月亮触发 · 第四宫</div>
+      </div>
+    </div>
+
+    <div class="letter-card">
+      <div class="letter-top"><div class="letter-k">TODAY'S LETTER</div><button class="trigger" onclick="toggleSource()">为什么是月灵？</button></div>
+      <div class="letter-text">月灵说：今天不用急着证明自己。你可以先确认，哪里让你觉得安全，哪里让你想躲一躲。照顾好这个小小的需要，就是今天的好运气。</div>
+      <div class="action-row"><button class="primary-btn" onclick="toast('进入和月灵的对话')">和月灵聊聊　→</button><button class="secondary-btn" onclick="go('diary')">写下此刻</button></div>
+    </div>
+  </div>
+
+  <div class="source-card" id="sourceCard"><b>今日唤醒逻辑</b><br>行运月亮经过你的家庭 / 安全感主题区域，所以今天优先唤醒月灵。月运、年运会放在「宇宙」里展开，这里只保留一封私人日信。</div>
+</section>
+
+<!-- 日记 -->
+<section id="diary" class="screen diary">
+  <div class="page-head"><div><div class="eyebrow">INNER JOURNAL</div><div class="head-title">日记</div></div><button class="icon-btn">⋯</button></div>
+  <div class="diary-content">
+    <div class="paper">
+      <div class="date">AUGUST 14 · FRIDAY</div>
+      <div class="diary-title">今天，月灵留下的话</div>
+      <div class="entry">我发现自己并不是“不想努力”，只是有一点累了。</div>
+      <div class="entry" style="margin-top:13px">月灵没有催我振作，它只是问：</div>
+      <div class="entry highlight" style="margin-top:13px">“如果今天只照顾一个需要，你最想照顾哪一个？”</div>
+      <div class="divider"></div>
+      <div class="entry-label">TODAY'S INNER WEATHER</div>
+      <div class="star-line"><i>☾</i> 微云 · 需要一点安全感</div>
+      <div class="divider"></div>
+      <div class="entry-label">被花园记住的片段</div>
+      <div class="star-line"><i>✦</i> 情绪容器 +5</div>
+    </div>
+  </div>
+  <button class="write-btn" onclick="toast('开始一篇新的日记')">＋ 写下此刻</button>
+</section>
+
+<!-- 宇宙 -->
+<section id="cosmos" class="screen cosmos">
+  <div class="glow"></div><div class="noise"></div>
+  <div class="page-head"><div><div class="eyebrow">YOUR COSMOS</div><div class="head-title">宇宙</div></div><button class="icon-btn">⌖</button></div>
+  <div class="constellation">
+    <i style="left:14%;top:20%"></i><i style="left:28%;top:29%"></i><i style="left:44%;top:17%"></i><i style="left:65%;top:23%"></i><i style="left:84%;top:15%"></i><i style="left:75%;top:37%"></i><i style="left:18%;top:49%"></i><i style="left:34%;top:58%"></i><i style="left:87%;top:59%"></i><i style="left:53%;top:71%"></i>
+  </div>
+  <div class="orbit"></div><div class="orbit two"></div><div class="orbit three"></div><div class="core">你</div>
+  <div class="planet p1">☾</div><div class="planet p2">♀</div><div class="planet p3">☿</div><div class="planet p4">♂</div>
+  <div class="cosmos-copy">
+    <h2>你的星图，是花园的地形。</h2>
+    <p>首页只给你今天的一封短信。<br>月运、年运、行运与星盘咨询，都在这里慢慢展开。</p>
+    <div class="cosmos-grid">
+      <button class="cosmos-card" onclick="toast('进入自我星盘轮')"><b>自我星盘轮</b>认识自己的结构</button>
+      <button class="cosmos-card" onclick="toast('打开月运模块')"><b>月运 / 年运</b>周期性的私人星信</button>
+      <button class="cosmos-card" onclick="toast('查看行运触发')"><b>今日行运</b>为什么今天是月灵</button>
+      <button class="cosmos-card" onclick="toast('进入星盘咨询')"><b>星盘咨询</b>一起校准判断</button>
+    </div>
+  </div>
+</section>
+
+<!-- 我的 -->
+<section id="me" class="screen me">
+  <div class="glow"></div><div class="noise"></div>
+  <div class="page-head"><div><div class="eyebrow">MY JOURNEY</div><div class="head-title">我的</div></div><button class="icon-btn">⚙</button></div>
+  <div class="me-content">
+    <div class="profile"><div class="profile-avatar">✦</div><div><h2>我的花园</h2><p>正在学着，更温柔地理解自己。</p></div></div>
+    <div class="stat-row"><div class="stat"><b>28</b><span>记录天数</span></div><div class="stat"><b>12</b><span>深度对话</span></div><div class="stat"><b>07</b><span>自我发现</span></div></div>
+    <div class="section-label">STAR SPIRIT PREFERENCE · 星灵偏好</div>
+    <div class="pref-card"><b>默认由星象唤醒</b><small>系统会根据月相、水逆、行运与本命盘触发今日星灵。</small></div>
+    <div class="pref-card"><b>也可以由你选择</b><small>如果你最近总想找月灵或土灵，花园会记住这个偏好。</small></div>
+    <div class="section-label">SETTINGS · 设置</div>
+    <div class="setting"><span>星灵偏好</span><span>→</span></div>
+    <div class="setting"><span>推送与提醒</span><span>→</span></div>
+    <div class="setting"><span>隐私与安全</span><span>→</span></div>
+  </div>
+</section>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" data-page="garden"><span class="ico">⌂</span><span>花园</span></button>
+  <button class="nav-item" data-page="diary"><span class="ico">▱</span><span>日记</span></button>
+  <button class="nav-item" data-page="cosmos"><span class="ico">☾</span><span>宇宙</span></button>
+  <button class="nav-item" data-page="me"><span class="ico">◌</span><span>我的</span></button>
+</nav>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+const screens=document.querySelectorAll('.screen');
+const navs=document.querySelectorAll('.nav-item');
+function go(id){
+  screens.forEach(s=>s.classList.toggle('active',s.id===id));
+  navs.forEach(n=>n.classList.toggle('active',n.dataset.page===id));
+  document.getElementById('sourceCard')?.classList.remove('show');
+}
+navs.forEach(n=>n.addEventListener('click',()=>go(n.dataset.page)));
+function toast(t){
+  const el=document.getElementById('toast');
+  el.textContent=t;el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>el.classList.remove('show'),1800);
+}
+function toggleSource(){
+  const el=document.getElementById('sourceCard');
+  el.classList.toggle('show');
+}
+</script>
+</body>
+</html>
