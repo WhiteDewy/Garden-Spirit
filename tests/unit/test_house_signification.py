@@ -130,6 +130,23 @@ def test_flight_evidence_in_wealth_reading(chart, engine):
     assert target.strength >= 3.5
 
 
+def test_connection_evidence_no_misleading_lord_prefix(chart, engine):
+    """连接证据不得再拼"3宫主jupiter接纳moon"式误导前缀。
+
+    连接事实的 detail 自带行星中文名（"木星接纳月亮"/"木星飞3宫"），
+    直接引用即可；"3宫主"+detail 的拼接会让人误读为 3 宫主是木星
+    （实际 3 宫主是月亮）。回归锁（2026-08-12 修复）。
+    """
+    items = engine.interpret(chart, "career", houses=[3])
+    all_ev = [e for i in items for e in i.evidence]
+    # 连接证据应为可读中文事实，且不带"宫主+行星名"误导串
+    assert any("木星接纳月亮" in ev for ev in all_ev)
+    assert not any("宫主jupiter" in ev for ev in all_ev)
+    assert not any(ev.startswith("3宫主木星") for ev in all_ev)
+    # 飞宫证据写宫号：火星飞2宫（不是"火星飞木星宫"）
+    assert not any("飞木星宫" in ev for ev in all_ev)
+
+
 # -- 宫位交感 --------------------------------------------------------------
 
 def test_synapsis_mercury_1_2_5(chart, kb):
@@ -174,9 +191,11 @@ def test_natal_reading_multi_domain(chart, kb):
     # 职业域 top 应有"高等学问/深造"（土星9/10宫主，9宫三巨头）
     career_words = [i.word for i in reading.top("career")]
     assert any("高等学问" in w for w in career_words)
-    # 财富域 top 应有"玄学/灵性"（12R火星飞2增强）
-    wealth_words = [i.word for i in reading.top("wealth")]
-    assert any("玄学" in w for w in wealth_words)
+    # 财富域 per-word 排序（v2 §5）：2宫水星正财、8宫木星他人资源占前列——
+    # 不再整宫平摊把 12宫玄学财抬到 top；玄学财切片另行在 flight 测试全量覆盖
+    wealth_words = [i.word for i in reading.domains["wealth"]]
+    assert any("正财" in w for w in wealth_words)
+    assert any("他人资源" in w for w in wealth_words)
     # 感情域主切片应有"伴侣"（7宫；恋爱脑为次级倾向，另测于12宫专项）
     rel_words = [i.word for i in reading.domains["relationship"]]
     assert any("伴侣" in w for w in rel_words)

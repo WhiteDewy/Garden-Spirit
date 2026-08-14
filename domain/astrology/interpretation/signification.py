@@ -2,7 +2,8 @@
 
 同一宫位是多义词（语义场）。三步把控：
 ① 语境选择：问题域（domain）过滤 → 该宫位只激活相关含义（防关键词倾倒）
-② 结构调制：宫主尊贵/吉凶/宫内星 → 质量分（-3..+3）→ 极性倾斜 + 强度调制
+② per-signification 调制：每个含义按自己的 governors 主星状态算强度
+   （词级基础 × 主星净吉凶 × 宫结构加权贡献），不再"一宫一吉凶平摊"
 ③ 收敛门槛：event（事件预言）条目需强连接收敛数达标才发射；tendency 默认
 
 宫主飞宫（含宫头末度）→ 飞行增强；共振词挂在解读上（LLM 只转述，不发明）。
@@ -10,23 +11,17 @@
 
 from __future__ import annotations
 
+import re
+
 from shared.enums import Planet
 from shared.models import Chart
 
-from domain.astrology.common import aspect_score, aspects_to, dignity_total, house_lord
+from domain.astrology.common import assess_planet, house_lord
 from domain.astrology.knowledge import DignityEngine
 from domain.astrology.knowledge.loader import KnowledgeBase
 from domain.astrology.interpretation.models import SignificationItem
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
 
-_MALEFICS = {Planet.MARS, Planet.SATURN}
-_BENEFICS = {Planet.JUPITER, Planet.VENUS}
-_ASPECT_ZH = {
-    "conjunction": "合", "opposition": "冲", "trine": "三合", "square": "刑",
-    "sextile": "六合", "quincunx": "梅花", "semisextile": "半六合",
-    "semisquare": "半刑", "sesquiquadrate": "八分相",
-    "quintile": "五相", "biquintile": "倍五相",
-}
 _MEANINGFUL = {
     Planet.SUN, Planet.MOON, Planet.MERCURY, Planet.VENUS, Planet.MARS,
     Planet.JUPITER, Planet.SATURN, Planet.URANUS, Planet.NEPTUNE, Planet.PLUTO,
@@ -65,7 +60,9 @@ class HouseSignificationEngine:
             pos, neg, pos_ev, neg_ev = self._house_quality_dual(chart, house)
             conn_evidence = self._house_connection_evidence(chart, house)
             for e in eligible:
-                strength = self._strength(chart, house, e, pos, neg)
+                # per-signification 调制：每个含义按自己的 governors 单独算强度
+                gpos, gneg, gov_ev = self._governor_quality(chart, e.get("governors") or [])
+                strength = self._strength(chart, house, e, pos, neg, gpos, gneg)
                 if strength is None or strength < _MIN_STRENGTH:
                     continue
                 # 各论各的：正向解读吃吉轨证据，负向解读吃凶轨证据
@@ -83,7 +80,7 @@ class HouseSignificationEngine:
                     intensity=float(e.get("intensity", 2)),
                     strength=strength,
                     resonance=tuple(e.get("resonance", []) or []),
-                    evidence=tuple(base_ev + conn_evidence),
+                    evidence=tuple(base_ev + gov_ev + conn_evidence),
                     gated=e.get("gated", "tendency"),
                 ))
         items.sort(key=lambda i: i.strength, reverse=True)
@@ -107,36 +104,16 @@ class HouseSignificationEngine:
         lord = house_lord(chart, self._kb, house)
         if lord is not None and lord in chart.planets:
             name = self._kb.planet(lord).name_zh
-            dt = dignity_total(chart, self._kb, lord, self._dignity)
-            if dt > 0:
-                pos += dt * 0.4
-                pos_ev.append(f"{name}为{house}宫主（尊贵{dt:+d}）")
-            elif dt < 0:
-                neg += abs(dt) * 0.4
-                neg_ev.append(f"{name}为{house}宫主（尊贵{dt:+d}）")
-            if lord in _BENEFICS:
-                pos += 1.0
-                pos_ev.append(f"{name}为吉星")
-            if lord in _MALEFICS:
-                neg += 1.0
-                neg_ev.append(f"{name}为凶星")
-            for asp in aspects_to(chart, lord):
-                info = self._kb.aspects.get(asp.aspect_type)
-                if info is None:
-                    continue
-                asc = aspect_score(self._kb, asp)
-                azh = _ASPECT_ZH.get(asp.aspect_type.value, asp.aspect_type.value)
-                other = asp.body2 if asp.body1 == lord else asp.body1
-                other_zh = self._kb.planet(other).name_zh
-                if info.nature == "HARMONIOUS":
-                    pos += asc * 0.2
-                    pos_ev.append(f"{name}{azh}{other_zh}（和谐）")
-                elif info.nature == "DYNAMIC":
-                    neg += abs(asc) * 0.2
-                    received = self._classifier.is_received(chart, lord, other)
-                    neg += 0.4 if received else 0.8
-                    tag = "磨合" if received else "未接纳"
-                    neg_ev.append(f"{name}受{other_zh}{azh}（{tag}）")
+            lord_assessment = assess_planet(chart, self._kb, lord, self._dignity, self._classifier)
+            lpos, lneg = self._house_weighted_score(lord_assessment)
+            pos += lpos
+            neg += lneg
+            pos_ev.extend(self._house_axis_evidence(name, house, lord_assessment.essential_ev, positive=True))
+            pos_ev.extend(self._polarity_evidence(lord_assessment.accidental_ev, positive=True))
+            pos_ev.extend(self._polarity_evidence(lord_assessment.relational_ev, positive=True))
+            neg_ev.extend(self._house_axis_evidence(name, house, lord_assessment.essential_ev, positive=False))
+            neg_ev.extend(self._polarity_evidence(lord_assessment.accidental_ev, positive=False))
+            neg_ev.extend(self._polarity_evidence(lord_assessment.relational_ev, positive=False))
         else:
             neg_ev.append(f"{house}宫主不明")
 
@@ -144,37 +121,85 @@ class HouseSignificationEngine:
             if pl not in _MEANINGFUL or cp.house.house != house:
                 continue
             pname = self._kb.planet(pl).name_zh
-            dt = dignity_total(chart, self._kb, pl, self._dignity)
-            if dt > 0:
-                pos += dt * 0.2
-                pos_ev.append(f"{pname}落{house}宫（尊贵{dt:+d}）")
-            elif dt < 0:
-                neg += abs(dt) * 0.2
-                neg_ev.append(f"{pname}落{house}宫（尊贵{dt:+d}）")
-            if pl in _BENEFICS:
-                pos += 0.5
-                pos_ev.append(f"{pname}为吉星")
-            if pl in _MALEFICS:
-                neg += 0.5
-                neg_ev.append(f"{pname}为凶星")
+            assessment = assess_planet(chart, self._kb, pl, self._dignity, self._classifier)
+            apos, aneg = self._house_weighted_score(assessment)
+            pos += apos * 0.5
+            neg += aneg * 0.5
+            pos_ev.extend(self._occupant_axis_evidence(pname, house, assessment.essential_ev, positive=True))
+            pos_ev.extend(self._polarity_evidence(assessment.accidental_ev, positive=True))
+            pos_ev.extend(self._polarity_evidence(assessment.relational_ev, positive=True))
+            neg_ev.extend(self._occupant_axis_evidence(pname, house, assessment.essential_ev, positive=False))
+            neg_ev.extend(self._polarity_evidence(assessment.accidental_ev, positive=False))
+            neg_ev.extend(self._polarity_evidence(assessment.relational_ev, positive=False))
 
         return pos, neg, list(dict.fromkeys(pos_ev)), list(dict.fromkeys(neg_ev))
+
+    @staticmethod
+    def _house_weighted_score(assessment) -> tuple[float, float]:
+        """house 层消费 assess_planet：尊贵打底，刑冲压力优先保留。"""
+        house_pos = (
+            assessment.essential_pos
+            + assessment.accidental_pos * 0.4
+            + assessment.relational_pos * 0.3
+        )
+        house_neg = (
+            assessment.essential_neg
+            + assessment.accidental_neg * 0.8
+            + assessment.relational_neg * 1.5
+        )
+        return house_pos, house_neg
+
+    @staticmethod
+    def _polarity_evidence(evidence: tuple[str, ...], *, positive: bool) -> list[str]:
+        """按证据语义拆正负轨，避免正向解读携带凶轨证据。"""
+        negative_markers = ("受", "刑", "冲", "燃烧", "日光下", "逆行", "失时", "为凶星")
+        positive_markers = ("尊贵", "和谐", "互溶", "接纳", "日核", "落角宫", "落续宫", "得时", "为吉星")
+        markers = positive_markers if positive else negative_markers
+        return [ev for ev in evidence if any(marker in ev for marker in markers)]
+
+    @staticmethod
+    def _house_axis_evidence(
+        planet_name: str, house: int, evidence: tuple[str, ...], *, positive: bool
+    ) -> list[str]:
+        """assess_planet 本质轴证据 → 宫主语境证据（保持宫结构可读）。"""
+        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（尊贵"
+        return [ev.replace(planet_name, f"{planet_name}为{house}宫主", 1) for ev in evidence if marker in ev]
+
+    @staticmethod
+    def _occupant_axis_evidence(
+        planet_name: str, house: int, evidence: tuple[str, ...], *, positive: bool
+    ) -> list[str]:
+        """assess_planet 本质轴证据 → 宫内星语境证据。"""
+        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（尊贵"
+        return [ev.replace(planet_name, f"{planet_name}落{house}宫", 1) for ev in evidence if marker in ev]
 
     # -- 强度调制 ---------------------------------------------------------
 
     def _strength(
-        self, chart: Chart, house: int, entry: dict, pos: float, neg: float
+        self, chart: Chart, house: int, entry: dict, pos: float, neg: float,
+        gpos: float, gneg: float,
     ) -> float | None:
-        """吉凶两论：正向解读只吃吉分量，负向解读只吃凶分量，中性取较大者。不抵消。"""
+        """per-signification 调制（领域引擎 v2 §5）。
+
+        含义强度 = 词级基础(intensity)
+                 × (1 + 主星净吉凶 × 0.4，最低保 0.15)    # governors 状态（词级，占主导）
+                 × (1 + 宫极性贡献 × 0.25)                 # 宫结构只贡献一部分，不独占
+                 + 飞宫增强
+
+        修复"一宫一吉凶平摊"：3宫强时，手足(governor=3rd_lord)吃宫主土星的旺，
+        表达(governor=水星)吃水星自己的克——两顶帽子各论各的，互不污染。
+        """
         base = float(entry.get("intensity", 2))
         pol = entry.get("polarity", "neutral")
 
+        gov_factor = max(1 + (gpos - gneg) * 0.4, 0.15)
         if pol == "positive":
-            s = base * (1 + pos * 0.4)
+            house_contrib = pos
         elif pol == "negative":
-            s = base * (1 + neg * 0.4)
+            house_contrib = neg
         else:
-            s = base * (1 + max(pos, neg) * 0.3)
+            house_contrib = max(pos, neg)
+        s = base * gov_factor * (1 + house_contrib * 0.25)
 
         s += self._flight_boost(chart, house, entry.get("domains", []))
 
@@ -187,6 +212,39 @@ class HouseSignificationEngine:
             s += corr
 
         return round(s, 2)
+
+    # -- per-signification 主星 -------------------------------------------
+
+    def _governor_quality(
+        self, chart: Chart, governors: list[str]
+    ) -> tuple[float, float, list[str]]:
+        """governors 主星状态 → (吉分量, 凶分量, 证据)。
+
+        展开 {n}th_lord 宫主引用为实际宫主星（传统守卫星，common.py 已实现）。
+        天海冥可作次级关联（贡献自己的尊贵/相位），但引擎层面的掌宫/互溶排除
+        仍由 house_lord/reception 保证——这里只读它们的状态做词级调制。
+        """
+        gpos, gneg = 0.0, 0.0
+        ev: list[str] = []
+        for g in governors:
+            pl = self._resolve_governor(chart, g)
+            if pl is None or pl not in chart.planets:
+                continue
+            assessment = assess_planet(chart, self._kb, pl, self._dignity, self._classifier)
+            gpos += assessment.pos
+            gneg += assessment.neg
+            ev.extend(assessment.evidence)
+        return gpos, gneg, list(dict.fromkeys(ev))
+
+    def _resolve_governor(self, chart: Chart, governor: str) -> Planet | None:
+        """governor 取值 → 行星。'3rd_lord' → 3宫主星；具体行星名（'mercury'）→ 该行星。"""
+        m = re.fullmatch(r"(\d+)(?:st|nd|rd|th)_lord", governor)
+        if m:
+            return house_lord(chart, self._kb, int(m.group(1)))
+        try:
+            return Planet(governor)
+        except ValueError:
+            return None
 
     def _flight_boost(self, chart: Chart, house: int, domains: list[str]) -> float:
         """宫主飞宫（含末度）→ 飞入宫与该含义同域时增强。
@@ -221,7 +279,8 @@ class HouseSignificationEngine:
                     continue
                 if not (self._classifier.is_strong(c) or c.conn_type == "flight"):
                     continue
-                line = f"{house}宫主{c.detail}"
+                # detail 自带行星名（如"火星飞2宫"、"木星↔月亮互溶"），无需再拼"3宫主"前缀
+                line = c.detail
                 if line in seen:
                     continue
                 seen.add(line)
