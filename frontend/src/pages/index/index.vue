@@ -5,7 +5,7 @@
     <view class="grain"></view>
     <view class="stars"><text v-for="n in 5" :key="n" class="star-dot">✦</text></view>
 
-    <view class="appbar" v-if="stage !== 'welcome'">
+    <view class="appbar" v-if="stage === 'garden'">
       <view>
         <text class="eyebrow">GARDEN SPIRIT</text>
         <text class="app-title">{{ appTitle }}</text>
@@ -17,8 +17,7 @@
       <view class="welcome-controls">
         <text class="prologue-mark">星灵花园 · 序章</text>
         <view class="control-actions">
-          <button class="ghost-control sound-toggle" @tap.stop="enableWelcomeSound">{{ soundEnabled ? '星音已开' : '开启星音' }}</button>
-          <button class="ghost-control skip-control" @tap.stop="skipWelcomeIntro">跳过</button>
+          <button class="ghost-control sound-toggle" @tap.stop="toggleWelcomeSound">{{ soundEnabled ? '关闭星音' : '开启星音' }}</button>
         </view>
       </view>
 
@@ -90,9 +89,22 @@
           <text>遇见我的星灵</text>
         </button>
       </view>
+
+      <view v-if="welcomeStarted && !typingDone" class="welcome-skip-fab" @tap.stop="skipWelcomeIntro">
+        <text>跳过序章</text>
+        <text class="skip-star">✦</text>
+      </view>
     </view>
 
     <view v-else-if="stage === 'register'" class="screen register-screen create-chart-screen">
+      <view class="register-sky" aria-hidden="true">
+        <text v-for="n in 14" :key="`register-star-${n}`" :class="['sky-star', `sky-star-${n}`]">✦</text>
+        <view class="constellation constellation-a">
+          <view class="c-dot d1"></view><view class="c-dot d2"></view><view class="c-dot d3"></view><view class="c-dot d4"></view>
+          <view class="c-line l1"></view><view class="c-line l2"></view><view class="c-line l3"></view>
+        </view>
+      </view>
+
       <view class="chart-orb" aria-hidden="true">
         <text class="chart-star s1">✦</text>
         <text class="chart-star s2">✧</text>
@@ -108,56 +120,111 @@
       </view>
 
       <view class="question-card">
-        <text class="spirit-says">{{ registerPrompt }}</text>
-        <text v-if="registerHint" class="question-hint">{{ registerHint }}</text>
-
-        <view v-if="registerStep === 1" class="answer-block">
-          <input v-model="form.name" class="answer-input name-input" placeholder="你的名字" confirm-type="next" />
-          <text class="field-note">这是星灵以后称呼你的方式。</text>
-        </view>
-
-        <view v-else-if="registerStep === 2" class="answer-block date-answer">
-          <picker mode="date" :value="form.date" @change="onDate">
-            <view class="date-picker-card">
-              <text v-if="birthDateParts" class="date-part year">{{ birthDateParts.year }}</text>
-              <text v-if="birthDateParts" class="date-unit">年</text>
-              <text v-if="birthDateParts" class="date-part">{{ birthDateParts.month }}</text>
-              <text v-if="birthDateParts" class="date-unit">月</text>
-              <text v-if="birthDateParts" class="date-part">{{ birthDateParts.day }}</text>
-              <text v-if="birthDateParts" class="date-unit">日</text>
-              <text v-else class="date-placeholder">选择出生日期</text>
-            </view>
-          </picker>
-        </view>
-
-        <view v-else-if="registerStep === 3" class="answer-block time-answer">
-          <picker mode="time" :value="form.time" :disabled="form.time_unknown" @change="onTime">
-            <view :class="['time-picker-card', { muted: form.time_unknown }]">
-              <text>{{ form.time_unknown ? '时间不确定' : (form.time || '选择时间') }}</text>
-            </view>
-          </picker>
-          <text class="field-note">出生时间越准确，星图越精确。</text>
-          <view :class="['unknown-pill', { active: form.time_unknown }]" @tap="form.time_unknown = !form.time_unknown">
-            <text>{{ form.time_unknown ? '已选择：不知道出生时间' : '不确定出生时间？没关系。' }}</text>
+        <view class="register-spirit" aria-hidden="true">
+          <view class="spirit-stage">
+            <view class="aura"></view>
+            <view class="nest"></view>
+            <view class="spirit"><view class="antenna"></view><view class="arm left"></view><view class="arm right"></view><view class="mouth"></view></view>
           </view>
         </view>
 
-        <view v-else class="answer-block place-answer">
-          <view class="search-shell">
-            <text class="search-icon">⌕</text>
-            <input v-model="form.city" class="answer-input city-input" placeholder="搜索出生城市" confirm-type="done" />
+        <view :key="registerStep" class="prompt-swap">
+          <text class="spirit-says">{{ registerPrompt }}</text>
+          <text v-if="registerHint" class="question-hint">{{ registerHint }}</text>
+        </view>
+
+        <view :key="`answer-${registerStep}`" class="answer-block">
+          <view v-if="registerStep === 1">
+            <input v-model="form.name" class="answer-input name-input" placeholder="你的名字" confirm-type="next" />
+            <view class="gender-row">
+              <view :class="['gender-pill', { on: form.gender === 'female' }]" @tap="form.gender = 'female'"><text>她</text></view>
+              <view :class="['gender-pill', { on: form.gender === 'male' }]" @tap="form.gender = 'male'"><text>他</text></view>
+              <view :class="['gender-pill', { on: !form.gender }]" @tap="form.gender = ''"><text>先不说</text></view>
+            </view>
+            <text class="field-note">这是星灵以后称呼你的方式；称呼可选。</text>
           </view>
-          <text class="field-note">例如：杭州，中国。用于计算你的出生星图。</text>
+
+          <view v-else-if="registerStep === 2" class="date-answer">
+            <picker mode="date" :value="form.date" @change="onDate">
+              <view :class="['date-picker-card', { lit: justPicked === 'date' }]">
+                <text v-if="birthDateParts" class="date-part year">{{ birthDateParts.year }}</text>
+                <text v-if="birthDateParts" class="date-unit">年</text>
+                <text v-if="birthDateParts" class="date-part">{{ birthDateParts.month }}</text>
+                <text v-if="birthDateParts" class="date-unit">月</text>
+                <text v-if="birthDateParts" class="date-part">{{ birthDateParts.day }}</text>
+                <text v-if="birthDateParts" class="date-unit">日</text>
+                <text v-else class="date-placeholder">选择出生日期</text>
+              </view>
+            </picker>
+          </view>
+
+          <view v-else-if="registerStep === 3" class="time-answer">
+            <picker mode="time" :value="form.time" :disabled="form.time_unknown" @change="onTime">
+              <view :class="['time-picker-card', { muted: form.time_unknown, lit: justPicked === 'time' }]">
+                <text>{{ form.time_unknown ? '时间不确定' : (form.time || '选择时间') }}</text>
+              </view>
+            </picker>
+            <text class="field-note">出生时间越准确，星图越精确。请确认你的选择：</text>
+            <view class="time-confirm-row">
+              <view :class="['confirm-pill', { on: !form.time_unknown && !!form.time }]" @tap="confirmTimeKnown">
+                <text>确定这个时间</text>
+              </view>
+              <view :class="['confirm-pill', { on: form.time_unknown }]" @tap="toggleTimeUnknown">
+                <text>时间不确定</text>
+              </view>
+            </view>
+            <view v-if="dstAsk" class="dst-ask">
+              <text class="dst-title">这段日期中国用过夏令时（时钟拨快 1 小时）</text>
+              <view class="dst-options">
+                <view :class="['dst-pill', { on: form.dst === 'dst' }]" @tap="form.dst = 'dst'"><text>按夏令时算</text></view>
+                <view :class="['dst-pill', { on: form.dst === 'std' }]" @tap="form.dst = 'std'"><text>按标准时间算</text></view>
+              </view>
+              <text class="dst-note">不确定就选「按夏令时算」，之后可以在验证里校准。</text>
+            </view>
+          </view>
+
+          <view v-else-if="registerStep === 4" class="place-answer">
+            <picker mode="multiSelector" :range="birthRegionRange" :value="birthRegionValue" @columnchange="onBirthRegionColumn" @change="onBirthRegionConfirm">
+              <view :class="['date-picker-card', { lit: justPicked === 'region' }]">
+                <text v-if="form.regionLabel" class="date-part region-text">{{ form.regionLabel }}</text>
+                <text v-else class="date-placeholder">选择出生省 / 市 / 区</text>
+              </view>
+            </picker>
+            <button class="secondary-btn overseas-trigger" @tap="openOverseas">
+              <text>海外出生 / 精确坐标 →</text>
+            </button>
+            <text class="field-note">国内用级联选择；海外用坐标定位，经纬度直接决定你的宫位。</text>
+          </view>
+
+          <view v-else class="residence-answer">
+            <view class="same-as-birth" :class="{ on: sameAsBirth }" @tap="toggleSameAsBirth">
+              <text>{{ sameAsBirth ? `同出生地 · ${form.regionLabel || form.city || '—'}` : '现居地和出生地不一样' }}</text>
+            </view>
+            <picker v-if="!sameAsBirth" mode="multiSelector" :range="resRegionRange" :value="resRegionValue" @columnchange="onResRegionColumn" @change="onResRegionConfirm">
+              <view :class="['date-picker-card', { lit: justPicked === 'residence' }]">
+                <text v-if="form.residenceLabel" class="date-part region-text">{{ form.residenceLabel }}</text>
+                <text v-else class="date-placeholder">选择现居省 / 市 / 区</text>
+              </view>
+            </picker>
+            <picker mode="selector" :range="tzOptions" @change="onTz">
+              <view class="tz-card">
+                <text class="tz-label">时区</text>
+                <text class="tz-value">{{ form.tz }}</text>
+              </view>
+            </picker>
+            <text class="field-note">现居地决定星灵每天什么时候来找你；时区默认东八区。</text>
+          </view>
         </view>
 
         <view class="create-actions">
           <button v-if="registerStep > 1" class="secondary-btn back-btn" :disabled="busy" @tap="prevRegisterStep">上一颗星</button>
           <button class="primary-btn create-next" :disabled="busy" @tap="nextRegisterStep">
-            {{ registerStep < 4 ? '继续' : (busy ? '正在绘制星图…' : '绘制我的星图') }}
+            {{ registerStep < 5 ? '继续' : (busy ? '正在绘制星图…' : '绘制我的星图') }}
           </button>
         </view>
         <text v-if="error" class="error create-error">{{ error }}</text>
-        <view class="create-progress" aria-hidden="true"><text v-for="n in 4" :key="n" :class="['progress-dot', n <= registerStep ? 'on' : '']"></text></view>
+        <view class="create-progress" aria-hidden="true"><text v-for="n in 5" :key="n" :class="['progress-dot', n <= registerStep ? 'on' : '']"></text></view>
+        <text v-if="registerStep === 1" class="back-to-sky" @tap="stage = 'welcome'">← 回到星空</text>
       </view>
     </view>
 
@@ -174,7 +241,7 @@
         <view class="draw-aspect a1"></view><view class="draw-aspect a2"></view><view class="draw-aspect a3"></view>
       </view>
 
-      <view class="orbit chart-orbit">
+      <view :class="['orbit', 'chart-orbit', { found: awakeFound }]">
         <view class="chart-wheel-core">
           <view class="wheel-ring outer"></view>
           <view class="wheel-ring inner"></view>
@@ -182,6 +249,8 @@
           <view class="wheel-cross v"></view>
           <view class="planet-dot p1"></view><view class="planet-dot p2"></view><view class="planet-dot p3"></view><view class="planet-dot p4"></view>
         </view>
+        <view v-if="awakeFound" class="burst-ring r-one"></view>
+        <view v-if="awakeFound" class="burst-ring r-two"></view>
         <view class="spirit-stage large chart-spirit">
           <view class="aura"></view>
           <view class="nest"></view>
@@ -195,10 +264,10 @@
         <text class="card-copy">日期、时间和地点正在变成太阳、月亮、行星、宫位与相位。</text>
         <view class="steps chart-steps">
           <view class="step"><text>出生信息</text><text>{{ savedName || form.name || '你' }}</text></view>
-          <view class="step"><text>星图地形</text><text>正在生成</text></view>
-          <view class="step"><text>第一颗星灵</text><text>{{ recommendedSpirit ? '已找到' : '寻找中' }}</text></view>
+          <view class="step"><text>出生星图</text><text>{{ gardenState ? '已生成' : '绘制中…' }}</text></view>
+          <view class="step"><text>第一颗星灵</text><text>{{ recommendedSpirit ? `已找到 · ${spiritName}` : '寻找中' }}</text></view>
         </view>
-        <view class="found-message">
+        <view :class="['found-message', { lit: awakeFound }]">
           <text>「我找到你的星图了。」</text>
           <text>「以后，我会陪你一起读懂它。」</text>
         </view>
@@ -293,6 +362,28 @@
       </view>
     </view>
 
+    <view v-if="overseasOpen" class="sheet-mask" @tap="overseasOpen = false"></view>
+    <view v-if="overseasOpen" class="overseas-sheet">
+      <view class="sheet-handle"></view>
+      <text class="sheet-eyebrow">OVERSEAS BIRTH</text>
+      <text class="os-title">海外出生 · 精确坐标</text>
+      <input v-model="overseasName" class="answer-input os-name" placeholder="城市名，如 东京 / London" confirm-type="done" />
+      <picker mode="multiSelector" :range="latCols" :value="osLat" @change="onOsLat">
+        <view class="os-row"><text class="os-label">纬度</text><text class="os-value">{{ latLabel }}</text></view>
+      </picker>
+      <picker mode="multiSelector" :range="lonCols" :value="osLon" @change="onOsLon">
+        <view class="os-row"><text class="os-label">经度</text><text class="os-value">{{ lonLabel }}</text></view>
+      </picker>
+      <picker mode="selector" :range="tzOptions" :value="osTzIdx" @change="onOsTz">
+        <view class="os-row"><text class="os-label">时区</text><text class="os-value">{{ tzOptions[osTzIdx] }}</text></view>
+      </picker>
+      <text class="os-note">滚轮粗选到度即可；分秒级差异对星盘的影响可以忽略。</text>
+      <view class="sheet-actions">
+        <button class="sheet-secondary" @tap="overseasOpen = false">取消</button>
+        <button class="sheet-primary" @tap="confirmOverseas">确认坐标</button>
+      </view>
+    </view>
+
     <view v-if="sheetOpen" class="sheet-mask" @tap="toggleSheet"></view>
     <view v-if="sheetOpen" class="bottom-sheet">
       <view class="sheet-handle"></view>
@@ -321,7 +412,50 @@ const form = reactive({
   time: "",
   city: "",
   time_unknown: false,
+  gender: "",
+  regionLabel: "",
+  residenceLabel: "",
+  residenceCity: "",
+  tz: "GMT+8:00",
+  dst: "" as "" | "dst" | "std",
 });
+const manualCity = ref("");
+const manualGeo = ref<{ lat: number; lon: number; tz: string } | null>(null);
+const sameAsBirth = ref(true);
+const tzOptions = ["GMT-8:00", "GMT-5:00", "GMT+0:00", "GMT+1:00", "GMT+3:00", "GMT+5:30", "GMT+8:00", "GMT+9:00", "GMT+10:00", "GMT+12:00"];
+const TZ_IANA: Record<string, string> = {
+  "GMT-8:00": "America/Los_Angeles", "GMT-5:00": "America/New_York", "GMT+0:00": "Europe/London",
+  "GMT+1:00": "Europe/Paris", "GMT+3:00": "Europe/Moscow", "GMT+5:30": "Asia/Kolkata",
+  "GMT+8:00": "Asia/Shanghai", "GMT+9:00": "Asia/Tokyo", "GMT+10:00": "Australia/Sydney", "GMT+12:00": "Pacific/Auckland",
+};
+// 海外坐标弹框：纬度/经度各三列（半球、度、分），精度到分
+const latCols = [["北纬", "南纬"], Array.from({ length: 90 }, (_, i) => `${i}°`), Array.from({ length: 60 }, (_, i) => `${i}′`)];
+const lonCols = [["东经", "西经"], Array.from({ length: 180 }, (_, i) => `${i}°`), Array.from({ length: 60 }, (_, i) => `${i}′`)];
+const overseasOpen = ref(false);
+const overseasName = ref("");
+const osLat = ref<[number, number, number]>([0, 35, 0]);
+const osLon = ref<[number, number, number]>([0, 139, 0]);
+const osTzIdx = ref(6);
+const latLabel = computed(() => `${latCols[0][osLat.value[0]]} ${osLat.value[1]}°${osLat.value[2]}′`);
+const lonLabel = computed(() => `${lonCols[0][osLon.value[0]]} ${osLon.value[1]}°${osLon.value[2]}′`);
+const latVal = computed(() => (osLat.value[0] === 0 ? 1 : -1) * (osLat.value[1] + osLat.value[2] / 60));
+const lonVal = computed(() => (osLon.value[0] === 0 ? 1 : -1) * (osLon.value[1] + osLon.value[2] / 60));
+function openOverseas() {
+  overseasName.value = manualCity.value;
+  overseasOpen.value = true;
+}
+function onOsLat(e: any) { osLat.value = e.detail.value as [number, number, number]; }
+function onOsLon(e: any) { osLon.value = e.detail.value as [number, number, number]; }
+function onOsTz(e: any) { osTzIdx.value = Number(e.detail.value); }
+function confirmOverseas() {
+  const name = overseasName.value.trim() || "东京";
+  manualCity.value = name;
+  manualGeo.value = { lat: latVal.value, lon: lonVal.value, tz: tzOptions[osTzIdx.value] };
+  form.city = "";
+  form.regionLabel = `${name} · ${latLabel.value} ${lonLabel.value}`;
+  overseasOpen.value = false;
+  flashPick("region");
+}
 const registerStep = ref(1);
 const busy = ref(false);
 const error = ref("");
@@ -383,7 +517,7 @@ const WELCOME_LINES: WelcomeLine[] = [
   { text: "欢迎来到星灵花园。", tone: "closing", scene: "closing", pace: "brand", pauseAfter: 800 },
 ];
 const WELCOME_FULL_TEXT = WELCOME_LINES.map((line) => line.text).join("\n");
-const WELCOME_VOICE_SRC = "/static/audio/welcome_spirit.mp3";
+const WELCOME_VOICE_SRC = "/static/audio/welcome_spirit.mp3"; // 配音资产缺位时自动回落到 WebAudio 星音
 const typedWelcomeCount = ref(0);
 const soundEnabled = ref(false);
 const welcomeStarted = ref(false);
@@ -498,6 +632,16 @@ function onWelcomeTap() {
     return;
   }
   if (!soundEnabled.value) void enableWelcomeSound();
+}
+
+async function toggleWelcomeSound() {
+  if (soundEnabled.value) {
+    soundEnabled.value = false;
+    stopWelcomeVoice();
+    stopWelcomeAmbient();
+    return;
+  }
+  await enableWelcomeSound();
 }
 
 async function enableWelcomeSound() {
@@ -634,6 +778,7 @@ onUnmounted(() => {
 });
 
 watch(stage, async (value) => {
+  if (value === "register") void ensureRegionData();
   if (value !== "welcome") {
     stopWelcomeTyping();
     stopWelcomeVoice();
@@ -678,7 +823,8 @@ const PLANET_ZH: Record<string, string> = {
 
 const nowHour = new Date().getHours();
 const phase = nowHour < 11 ? "morning" : nowHour < 16 ? "noon" : nowHour < 20 ? "dusk" : "night";
-const phaseClass = computed(() => `phase-${phase}`);
+// 注册与绘制星图固定使用夜空主题，与欢迎页深空序章保持同一章视觉
+const phaseClass = computed(() => (stage.value === "register" || stage.value === "awakening" ? "phase-night" : `phase-${phase}`));
 const stageClass = computed(() => `stage-${stage.value}`);
 const phaseLabel = computed(() => ({ morning: "清晨", noon: "中午", dusk: "黄昏", night: "夜晚" }[phase]));
 const appTitle = computed(() => stage.value === "welcome" ? "星灵花园" : stage.value === "register" ? "创建星图" : stage.value === "awakening" ? "绘制星图" : "花园");
@@ -689,13 +835,15 @@ const registerPrompt = computed(() => [
   "那么，你是什么时候来到这个世界的？",
   "还有一个很重要的时刻。\n你出生时，大约是几点？",
   "最后，告诉我你在哪里来到这个世界。",
+  "你现在住在哪儿？",
 ][registerStep.value]);
 const registerHint = computed(() => [
   "",
   "现在，轮到你了。",
   "这一天会成为星图的起点。",
   "不知道也没有关系，我们会进入简化星图。",
-  "城市会帮助花园换算出生地点的天空。",
+  "国内用级联选择，海外城市可以直接输入。",
+  "让每日星信在合适的时候抵达，默认东八区。",
 ][registerStep.value]);
 const birthDateParts = computed(() => {
   if (!form.date) return null;
@@ -799,10 +947,175 @@ function maybeSubscribePush(pid: string) {
 
 function onDate(e: any) {
   form.date = e.detail.value;
+  form.dst = "";
+  flashPick("date");
+}
+function toggleTimeUnknown() {
+  form.time_unknown = !form.time_unknown;
+  if (form.time_unknown) form.dst = "";
+}
+function confirmTimeKnown() {
+  if (!form.time) {
+    error.value = "先在上方选择一个时间";
+    return;
+  }
+  form.time_unknown = false;
+  flashPick("time");
 }
 function onTime(e: any) {
   form.time = e.detail.value;
+  flashPick("time");
 }
+function onRegion(e: any) {
+  const [province, city] = e.detail.value || [];
+  if (city) {
+    form.city = String(city).replace(/市$/, "");
+    const prov = String(province).replace(/(省|壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区)/g, "");
+    form.regionLabel = prov === form.city ? form.city : `${prov} · ${form.city}`;
+  }
+  flashPick("region");
+}
+
+// 三级行政区划级联（省/市/区县）：H5 不支持 picker mode="region"，用 multiSelector + 区划数据包自实现
+// 区划 JSON 约 300KB，动态 import 拆出首屏 chunk，进入注册阶段时再装载
+interface RegionRow { code: string; name: string; province: string; city?: string }
+const MUNICIPALITIES = new Set(["北京市", "天津市", "上海市", "重庆市"]);
+const regionData = ref<{ provinces: RegionRow[]; cities: Map<string, { code: string; name: string }[]>; districts: Map<string, string[]> } | null>(null);
+let regionLoadPromise: Promise<void> | null = null;
+function ensureRegionData() {
+  if (regionData.value || regionLoadPromise) return regionLoadPromise;
+  regionLoadPromise = (async () => {
+    const [p, c, a] = await Promise.all([
+      import("province-city-china/dist/province.json"),
+      import("province-city-china/dist/city.json"),
+      import("province-city-china/dist/area.json"),
+    ]);
+    const provinces = (p as any).default as RegionRow[];
+    const cities = new Map<string, { code: string; name: string }[]>();
+    for (const row of (c as any).default as RegionRow[]) {
+      const list = cities.get(row.province) || [];
+      list.push({ code: row.city || "01", name: row.name });
+      cities.set(row.province, list);
+    }
+    for (const prov of provinces) {
+      if (MUNICIPALITIES.has(prov.name)) cities.set(prov.province, [{ code: "01", name: prov.name }]);
+    }
+    const districts = new Map<string, string[]>();
+    for (const row of (a as any).default as RegionRow[]) {
+      const key = `${row.province}:${row.city}`;
+      const list = districts.get(key) || [];
+      list.push(row.name);
+      districts.set(key, list);
+    }
+    regionData.value = { provinces, cities, districts };
+  })();
+  return regionLoadPromise;
+}
+function citiesOf(provIdx: number): { code: string; name: string }[] {
+  const d = regionData.value;
+  const p = d?.provinces[provIdx];
+  if (!d || !p) return [{ code: "01", name: "北京市" }];
+  return d.cities.get(p.province) || [{ code: "01", name: p.name }];
+}
+function districtsOf(provIdx: number, cityCode: string): string[] {
+  const d = regionData.value;
+  const p = d?.provinces[provIdx];
+  if (!d || !p) return ["北京市"];
+  return d.districts.get(`${p.province}:${cityCode}`) || [p.name];
+}
+function cityShort(name: string): string {
+  if (name.includes("直辖县级行政区划")) return "省直辖";
+  return name.replace(/市$/, "");
+}
+
+const birthRegionIndex = ref<[number, number, number]>([0, 0, 0]);
+const birthRegionRange = computed(() => {
+  const provNames = regionData.value?.provinces.map(p => p.name) || ["北京市"];
+  const cities = citiesOf(birthRegionIndex.value[0]);
+  const c = cities[Math.min(birthRegionIndex.value[1], cities.length - 1)];
+  return [provNames, cities.map(x => cityShort(x.name)), districtsOf(birthRegionIndex.value[0], c.code)];
+});
+const birthRegionValue = computed(() => [
+  birthRegionIndex.value[0],
+  Math.min(birthRegionIndex.value[1], birthRegionRange.value[1].length - 1),
+  Math.min(birthRegionIndex.value[2], birthRegionRange.value[2].length - 1),
+]);
+function onBirthRegionColumn(e: any) {
+  const { column, value } = e.detail;
+  const i = birthRegionIndex.value;
+  birthRegionIndex.value = column === 0 ? [Number(value), 0, 0] : column === 1 ? [i[0], Number(value), 0] : [i[0], i[1], Number(value)];
+}
+function onBirthRegionConfirm(e: any) {
+  const v = (e.detail?.value || birthRegionValue.value) as number[];
+  const cities = citiesOf(Number(v[0]));
+  const c = cities[Math.min(Number(v[1]), cities.length - 1)];
+  const districts = districtsOf(Number(v[0]), c.code);
+  const d = districts[Math.min(Number(v[2]), districts.length - 1)];
+  const direct = c.name.includes("直辖县级行政区划");
+  form.city = direct ? d : `${c.name}${d}`;
+  form.regionLabel = direct ? d : `${cityShort(c.name)} · ${d}`;
+  manualCity.value = "";
+  manualGeo.value = null;
+  flashPick("region");
+}
+
+const resRegionIndex = ref<[number, number, number]>([0, 0, 0]);
+const resRegionRange = computed(() => {
+  const provNames = regionData.value?.provinces.map(p => p.name) || ["北京市"];
+  const cities = citiesOf(resRegionIndex.value[0]);
+  const c = cities[Math.min(resRegionIndex.value[1], cities.length - 1)];
+  return [provNames, cities.map(x => cityShort(x.name)), districtsOf(resRegionIndex.value[0], c.code)];
+});
+const resRegionValue = computed(() => [
+  resRegionIndex.value[0],
+  Math.min(resRegionIndex.value[1], resRegionRange.value[1].length - 1),
+  Math.min(resRegionIndex.value[2], resRegionRange.value[2].length - 1),
+]);
+function onResRegionColumn(e: any) {
+  const { column, value } = e.detail;
+  const i = resRegionIndex.value;
+  resRegionIndex.value = column === 0 ? [Number(value), 0, 0] : column === 1 ? [i[0], Number(value), 0] : [i[0], i[1], Number(value)];
+}
+function onResRegionConfirm(e: any) {
+  const v = (e.detail?.value || resRegionValue.value) as number[];
+  const cities = citiesOf(Number(v[0]));
+  const c = cities[Math.min(Number(v[1]), cities.length - 1)];
+  const districts = districtsOf(Number(v[0]), c.code);
+  const d = districts[Math.min(Number(v[2]), districts.length - 1)];
+  const direct = c.name.includes("直辖县级行政区划");
+  form.residenceCity = direct ? d : `${c.name}${d}`;
+  form.residenceLabel = direct ? d : `${cityShort(c.name)} · ${d}`;
+  flashPick("residence");
+}
+function onTz(e: any) {
+  form.tz = tzOptions[Number(e.detail.value)] || form.tz;
+}
+function toggleSameAsBirth() {
+  sameAsBirth.value = !sameAsBirth.value;
+  if (sameAsBirth.value) {
+    form.residenceCity = "";
+    form.residenceLabel = "";
+  }
+}
+
+// 1986–1991 年中国夏令时窗口（4 月中 ~ 10 月中）：这段日期出生要问一句钟表时间
+const dstAsk = computed(() => {
+  if (!form.date || form.time_unknown) return false;
+  const [y, m] = form.date.split("-").map(Number);
+  return y >= 1986 && y <= 1991 && m >= 4 && m <= 10;
+});
+
+// 选择确认反馈：日期/时间/城市选完后卡片短暂点亮，给「被记下了」的感觉
+const justPicked = ref("");
+let pickTimer: ReturnType<typeof setTimeout> | null = null;
+function flashPick(key: "date" | "time" | "region" | "residence") {
+  justPicked.value = key;
+  if (pickTimer) clearTimeout(pickTimer);
+  pickTimer = setTimeout(() => { justPicked.value = ""; }, 900);
+}
+
+// awakening：星灵找到的瞬间，星轮定格 + 星光扩散
+const awakeFound = computed(() => stage.value === "awakening" && !!recommendedSpirit.value);
 
 function prevRegisterStep() {
   error.value = "";
@@ -823,7 +1136,11 @@ function nextRegisterStep() {
     error.value = "选择出生时间，或告诉星灵你不确定";
     return;
   }
-  if (registerStep.value < 4) {
+  if (registerStep.value === 4 && !form.city && !manualCity.value.trim()) {
+    error.value = "选择或输入一个出生城市";
+    return;
+  }
+  if (registerStep.value < 5) {
     registerStep.value += 1;
     return;
   }
@@ -837,17 +1154,37 @@ async function enterGarden() {
   busy.value = true;
   error.value = "";
   try {
-    const city = form.city.trim() || "上海";
-    const time = form.time_unknown ? "12:00" : form.time;
+    let time = form.time_unknown ? "12:00" : form.time;
+    // 夏令时钟表时间 → 标准时间（拨回 1 小时），后端按标准时区换算 UTC
+    if (form.dst === "dst" && !form.time_unknown && time) {
+      const [h, m] = time.split(":").map(Number);
+      time = `${String((h + 23) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    const overseas = !!(manualCity.value.trim() && manualGeo.value);
+    const city = overseas ? manualCity.value.trim() : (form.city || "上海");
+    const residence = sameAsBirth.value ? city : (form.residenceCity || city);
     const person = await api.createPerson({
       name: form.name.trim(),
+      gender: form.gender || undefined,
       birth: {
         datetime_local: `${form.date}T${time}:00`,
-        location: { place_name: city },
+        location: overseas
+          ? {
+              place_name: city,
+              latitude: manualGeo.value!.lat,
+              longitude: manualGeo.value!.lon,
+              timezone_name: TZ_IANA[manualGeo.value!.tz] || "Asia/Tokyo",
+            }
+          : { place_name: city },
         time_known: !form.time_unknown,
       },
-    });
+      // 现居地/时区：后端 Person 暂无字段，先随请求携带并留存本地，等后端落库
+      residence_city: residence,
+      timezone_label: form.tz,
+    } as any);
     uni.setStorageSync(PERSON_KEY, person.id);
+    uni.setStorageSync("gs_residence", residence);
+    uni.setStorageSync("gs_timezone", form.tz);
     uni.removeStorageSync(SESSION_KEY);
     savedName.value = person.name;
     maybeSubscribePush(person.id);
@@ -945,7 +1282,11 @@ function goUniverse() {
 .scene-galaxy .milky-way, .scene-spirit .milky-way, .scene-natal .milky-way, .scene-garden .milky-way, .scene-questions .milky-way, .scene-closing .milky-way { opacity: 0.72; transform: rotate(-18deg) translate3d(0, 0, 0); }
 .scene-closing .milky-way { opacity: 0.86; }
 .milky-way::after { content: ''; position: absolute; inset: 18% 8%; border-radius: 50%; background-image: radial-gradient(rgba(255, 249, 220, 0.72) 1rpx, transparent 1rpx), radial-gradient(rgba(185, 206, 255, 0.38) 1rpx, transparent 1rpx); background-size: 42rpx 34rpx, 63rpx 51rpx; opacity: 0.5; }
-.sky-star { position: absolute; color: rgba(255, 248, 220, 0.82); font-size: 13rpx; text-shadow: 0 0 18rpx rgba(246, 223, 156, 0.8); animation: welcomeTwinkle 3.8s ease-in-out infinite; }
+.sky-star { position: absolute; color: rgba(255, 248, 220, 0.82); font-size: 11rpx; text-shadow: 0 0 14rpx rgba(246, 223, 156, 0.8); animation: welcomeTwinkle 3.8s ease-in-out infinite; }
+/* 星点大小做层级：均匀同尺寸会显得假，按 nth 分三档 + 少数亮星（保持克制，星是背景不是主角） */
+.sky-star:nth-child(2n) { font-size: 8rpx; opacity: 0.72; text-shadow: 0 0 8rpx rgba(246, 223, 156, 0.5); }
+.sky-star:nth-child(3n) { font-size: 13rpx; }
+.sky-star:nth-child(7n) { font-size: 15rpx; text-shadow: 0 0 22rpx rgba(246, 223, 156, 0.9); animation-duration: 4.6s; }
 .sky-star-1 { left: 8%; top: 9%; } .sky-star-2 { left: 18%; top: 19%; animation-delay: .4s; } .sky-star-3 { left: 31%; top: 8%; animation-delay: .9s; } .sky-star-4 { left: 43%; top: 16%; animation-delay: 1.4s; } .sky-star-5 { left: 63%; top: 8%; animation-delay: .7s; } .sky-star-6 { left: 82%; top: 15%; animation-delay: 1.8s; }
 .sky-star-7 { left: 91%; top: 29%; animation-delay: 1.1s; } .sky-star-8 { left: 12%; top: 34%; animation-delay: 2.2s; } .sky-star-9 { left: 26%; top: 42%; animation-delay: 1.6s; } .sky-star-10 { left: 73%; top: 38%; animation-delay: .3s; } .sky-star-11 { left: 86%; top: 52%; animation-delay: 2.8s; } .sky-star-12 { left: 9%; top: 59%; animation-delay: 1.9s; }
 .sky-star-13 { left: 20%; top: 72%; animation-delay: .8s; } .sky-star-14 { left: 37%; top: 66%; animation-delay: 2.4s; } .sky-star-15 { left: 58%; top: 72%; animation-delay: 1.2s; } .sky-star-16 { left: 79%; top: 78%; animation-delay: 2.9s; } .sky-star-17 { left: 50%; top: 28%; animation-delay: .2s; } .sky-star-18 { left: 68%; top: 24%; animation-delay: 2.5s; }
@@ -1018,7 +1359,7 @@ function goUniverse() {
 .welcome-bottom.ready { opacity: 1; transform: translateY(0); pointer-events: auto; }
 .welcome-final { display: block; text-align: center; font-size: 22rpx; font-weight: 620; color: rgba(255, 248, 224, 0.5); letter-spacing: 0.04em; }
 .welcome-bottom.ready .welcome-final { color: rgba(255, 248, 224, 0.78); }
-.primary-btn.welcome-cta { width: 100%; margin-top: 0; min-height: 104rpx; border-radius: 999rpx; color: rgba(255, 247, 221, 0.94); background: linear-gradient(180deg, rgba(255, 248, 224, 0.14), rgba(255, 248, 224, 0.055)); border: 1rpx solid rgba(255, 238, 188, 0.3); box-shadow: 0 22rpx 70rpx rgba(0, 0, 0, 0.26), 0 0 48rpx rgba(242, 205, 120, 0.13), inset 0 1rpx rgba(255, 255, 255, 0.14); letter-spacing: 0.08em; backdrop-filter: blur(18rpx); display: flex; align-items: center; justify-content: center; gap: 12rpx; }
+.primary-btn.welcome-cta { width: 100%; margin-top: 0; min-height: 88rpx; border-radius: 22rpx; color: rgba(255, 247, 221, 0.94); background: linear-gradient(180deg, rgba(255, 248, 224, 0.14), rgba(255, 248, 224, 0.055)); border: 1rpx solid rgba(255, 238, 188, 0.3); box-shadow: 0 22rpx 70rpx rgba(0, 0, 0, 0.26), 0 0 48rpx rgba(242, 205, 120, 0.13), inset 0 1rpx rgba(255, 255, 255, 0.14); letter-spacing: 0.08em; backdrop-filter: blur(18rpx); display: flex; align-items: center; justify-content: center; gap: 12rpx; }
 .cta-star { color: #ffe7a3; font-size: 24rpx; text-shadow: 0 0 20rpx rgba(255, 231, 163, 0.8); animation: welcomeTwinkle 2.6s ease-in-out infinite; }
 @keyframes listenFloat { 50% { transform: translateY(-14rpx) rotate(-1deg) scale(1.02); } }
 @keyframes waveLeft { 50% { transform: rotate(34deg) translateY(-4rpx); } }
@@ -1046,22 +1387,22 @@ function goUniverse() {
 .chart-star.s1 { left: 16%; top: 22%; font-size: 28rpx; }
 .chart-star.s2 { right: 18%; top: 18%; font-size: 22rpx; animation-delay: .8s; }
 .chart-star.s3 { right: 24%; bottom: 22%; font-size: 26rpx; animation-delay: 1.6s; }
-.create-chart-hero { position: relative; z-index: 1; display: grid; justify-items: center; gap: 14rpx; margin-top: 18rpx; text-align: center; }
+.create-chart-hero { position: relative; z-index: 1; display: grid; justify-items: center; gap: 16rpx; margin-top: 64rpx; text-align: center; }
 .create-sigil { width: 64rpx; height: 64rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff3c4; background: rgba(23, 37, 31, 0.86); box-shadow: 0 18rpx 54rpx rgba(23, 37, 31, 0.2), 0 0 36rpx rgba(239, 213, 139, 0.42); }
 .create-title { display: block; font-size: 56rpx; font-weight: 860; letter-spacing: -0.055em; color: #17251f; }
 .create-copy { max-width: 520rpx; color: rgba(23, 37, 31, 0.58); font-size: 25rpx; line-height: 1.7; }
 .phase-night .create-title, .phase-night .create-copy { color: #fff8eb; }
-.question-card { position: relative; z-index: 1; width: 100%; margin-top: 44rpx; padding: 44rpx 34rpx 34rpx; box-sizing: border-box; border-radius: 58rpx; border: 1rpx solid rgba(94, 109, 98, 0.15); background: rgba(255, 253, 247, 0.68); box-shadow: 0 28rpx 82rpx rgba(36, 39, 31, 0.14), inset 0 1rpx rgba(255, 255, 255, 0.74); backdrop-filter: blur(24rpx); }
+.question-card { position: relative; z-index: 1; width: 100%; margin-top: 48rpx; padding: 48rpx 36rpx 40rpx; box-sizing: border-box; border-radius: 46rpx; border: 1rpx solid rgba(94, 109, 98, 0.15); background: rgba(255, 253, 247, 0.68); box-shadow: 0 28rpx 82rpx rgba(36, 39, 31, 0.14), inset 0 1rpx rgba(255, 255, 255, 0.74); backdrop-filter: blur(24rpx); }
 .phase-night .question-card { background: rgba(255, 248, 235, 0.09); border-color: rgba(255, 255, 255, 0.13); box-shadow: 0 28rpx 82rpx rgba(0, 0, 0, 0.28); }
-.spirit-says { display: block; white-space: pre-line; text-align: center; font-size: 40rpx; line-height: 1.45; font-weight: 830; letter-spacing: -0.035em; color: #17251f; }
-.question-hint { display: block; margin-top: 16rpx; text-align: center; font-size: 23rpx; line-height: 1.6; color: rgba(23, 37, 31, 0.52); }
+.spirit-says { display: block; white-space: pre-line; text-align: center; font-size: 36rpx; line-height: 1.45; font-weight: 830; letter-spacing: -0.035em; color: #17251f; }
+.question-hint { display: block; margin-top: 22rpx; text-align: center; font-size: 23rpx; line-height: 1.6; color: rgba(23, 37, 31, 0.52); }
 .phase-night .spirit-says { color: #fff8eb; }
 .phase-night .question-hint { color: rgba(255, 248, 235, 0.62); }
-.answer-block { margin-top: 38rpx; display: grid; gap: 16rpx; }
+.answer-block { margin-top: 46rpx; display: grid; gap: 20rpx; }
 .answer-input { width: 100%; min-height: 104rpx; border-radius: 38rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.55); padding: 0 30rpx; box-sizing: border-box; color: #17251f; font-size: 30rpx; text-align: center; }
 .name-input { font-size: 34rpx; font-weight: 760; letter-spacing: 0.04em; }
 .field-note { display: block; text-align: center; color: rgba(23, 37, 31, 0.5); font-size: 22rpx; line-height: 1.6; }
-.date-picker-card, .time-picker-card { min-height: 118rpx; border-radius: 42rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.56); display: flex; align-items: center; justify-content: center; gap: 12rpx; box-shadow: inset 0 1rpx rgba(255, 255, 255, 0.64); }
+.date-picker-card, .time-picker-card { min-height: 104rpx; border-radius: 42rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.56); display: flex; align-items: center; justify-content: center; gap: 12rpx; }
 .date-part { font-size: 44rpx; font-weight: 860; color: #17251f; letter-spacing: -0.035em; }
 .date-part.year { min-width: 108rpx; text-align: right; }
 .date-unit, .date-placeholder { font-size: 24rpx; color: rgba(23, 37, 31, 0.52); }
@@ -1069,15 +1410,17 @@ function goUniverse() {
 .time-picker-card.muted text { font-size: 32rpx; letter-spacing: 0; color: rgba(23, 37, 31, 0.46); }
 .unknown-pill { justify-self: center; margin-top: 4rpx; border-radius: 999rpx; padding: 18rpx 24rpx; background: rgba(239, 213, 139, 0.16); border: 1rpx solid rgba(239, 213, 139, 0.28); color: rgba(23, 37, 31, 0.64); font-size: 23rpx; }
 .unknown-pill.active { background: rgba(23, 37, 31, 0.86); color: #fff5dc; box-shadow: 0 14rpx 36rpx rgba(23, 37, 31, 0.18); }
-.search-shell { min-height: 104rpx; border-radius: 38rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.55); display: flex; align-items: center; padding: 0 24rpx; gap: 12rpx; }
+.search-shell { min-height: 104rpx; border-radius: 32rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.55); display: flex; align-items: center; padding: 0 28rpx; gap: 14rpx; }
 .search-icon { color: rgba(23, 37, 31, 0.38); font-size: 30rpx; }
-.city-input { min-height: 96rpx; border: 0; background: transparent; text-align: left; padding: 0; }
-.create-actions { display: grid; grid-template-columns: auto 1fr; gap: 16rpx; align-items: center; margin-top: 32rpx; }
+.phase-night .search-icon { color: rgba(255, 248, 235, 0.4); }
+/* 行内透明输入：不挂 answer-input，避免暗色覆盖把内层染出第二层边框 */
+.city-input { flex: 1; min-height: 88rpx; border: 0; background: transparent; color: inherit; font-size: 28rpx; text-align: left; padding: 0; }
+.create-actions { display: flex; grid-template-columns: auto 1fr; gap: 18rpx; align-items: center; margin-top: 46rpx;justify-content: center; }
 .create-actions .primary-btn, .create-actions .secondary-btn { margin-top: 0; }
 .back-btn { min-width: 168rpx; padding-left: 22rpx; padding-right: 22rpx; }
-.create-next { min-height: 96rpx; border-radius: 999rpx; }
+.create-next { min-height: 60rpx; border-radius: 20rpx; }
 .create-error { text-align: center; }
-.create-progress { display: flex; justify-content: center; gap: 12rpx; margin-top: 26rpx; }
+.create-progress { display: flex; justify-content: center; gap: 12rpx; margin-top: 36rpx; }
 .create-progress .progress-dot { width: 12rpx; height: 12rpx; background: rgba(23, 37, 31, 0.18); transition: all .28s ease; }
 .create-progress .progress-dot.on { width: 12rpx; background: #17251f; box-shadow: 0 0 20rpx rgba(239, 213, 139, 0.55); }
 .phase-night .answer-input, .phase-night .date-picker-card, .phase-night .time-picker-card, .phase-night .search-shell { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.13); color: #fff8eb; }
@@ -1105,7 +1448,7 @@ function goUniverse() {
 .privacy-row { display: flex; gap: 14rpx; align-items: flex-start; margin-top: 24rpx; }
 .privacy-mark { color: #efd58b; }
 .privacy-text { color: rgba(23, 37, 31, 0.62); font-size: 21rpx; line-height: 1.6; }
-.primary-btn, .secondary-btn { border: 0; border-radius: 34rpx; padding: 24rpx 28rpx; font-size: 26rpx; font-weight: 800; line-height: 1.2; }
+.primary-btn, .secondary-btn { border: 0; border-radius: 20rpx; padding: 20rpx 26rpx; font-size: 25rpx; font-weight: 700; line-height: 1; }
 .primary-btn { margin-top: 28rpx; background: #17251f; color: #fff5dc; box-shadow: 0 18rpx 42rpx rgba(23, 37, 31, 0.24); }
 .secondary-btn { margin-top: 28rpx; background: rgba(255, 255, 255, 0.42); color: #17251f; border: 1rpx solid rgba(77, 92, 82, 0.14); }
 .primary-btn[disabled] { opacity: 0.6; }
@@ -1134,7 +1477,7 @@ function goUniverse() {
 @keyframes float { 50% { transform: translateY(-12rpx) rotate(-1.6deg); } }
 @keyframes pulse { 50% { transform: scale(1.09); opacity: 0.52; } }
 .awake-card { padding: 36rpx; }
-.chart-drawing-screen { position: relative; overflow: hidden; justify-content: flex-start; padding-top: 60rpx; }
+.chart-drawing-screen { position: relative; overflow: hidden; justify-content: flex-start; }
 .chart-sky { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .chart-sky::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255, 248, 235, 0.72) 0 1rpx, transparent 2rpx), radial-gradient(circle, rgba(160, 184, 255, 0.42) 0 1rpx, transparent 2rpx); background-size: 92rpx 92rpx, 138rpx 138rpx; opacity: 0.38; animation: starsDrift 22s linear infinite; }
 .drawing-milky { position: absolute; left: -18%; top: 12%; width: 132%; height: 360rpx; transform: rotate(-18deg); background: radial-gradient(ellipse at center, rgba(255, 238, 179, 0.24), rgba(162, 180, 255, 0.12) 35%, transparent 70%); filter: blur(18rpx); animation: galaxyDrift 14s ease-in-out infinite; }
@@ -1150,7 +1493,7 @@ function goUniverse() {
 .draw-aspect.a1 { left: 21%; top: 43%; width: 58%; transform: rotate(14deg); }
 .draw-aspect.a2 { left: 25%; top: 56%; width: 49%; transform: rotate(-31deg); animation-delay: 1.2s; }
 .draw-aspect.a3 { left: 33%; top: 36%; width: 34%; transform: rotate(72deg); animation-delay: 2.1s; }
-.chart-orbit { height: 500rpx; margin-top: 22rpx; }
+.chart-orbit { height: 500rpx; margin-top: -22rpx; }
 .chart-wheel-core { position: absolute; width: 390rpx; height: 390rpx; border-radius: 50%; opacity: 0.72; animation: spin 30s linear infinite; }
 .wheel-ring { position: absolute; inset: 0; border-radius: 50%; border: 1rpx solid rgba(255, 248, 235, 0.2); }
 .wheel-ring.inner { inset: 86rpx; border-style: dashed; opacity: 0.72; }
@@ -1218,11 +1561,91 @@ function goUniverse() {
 .sheet-title { display: block; margin-top: 10rpx; font-size: 30rpx; font-weight: 800; }
 .sheet-copy { display: block; margin-top: 14rpx; font-size: 24rpx; line-height: 1.75; color: rgba(255, 248, 235, 0.66); white-space: pre-line; }
 .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 22rpx; }
-.sheet-primary, .sheet-secondary { border-radius: 28rpx; padding: 20rpx; font-size: 23rpx; }
+.sheet-primary, .sheet-secondary { border-radius: 22rpx; padding: 20rpx; font-size: 23rpx; }
 .sheet-primary { background: #f3dfaa; color: #17251f; }
 .sheet-secondary { background: rgba(255, 255, 255, 0.08); color: rgba(255, 248, 235, 0.78); border: 1rpx solid rgba(255, 255, 255, 0.1); }
 .phase-night .date-row, .phase-night .wake-copy, .phase-night .letter-body, .phase-night .mini-copy, .phase-night .evidence-row, .phase-night .label, .phase-night .privacy-text { color: rgba(255, 248, 235, 0.66); }
 .phase-night .wake-title, .phase-night .mini-title, .phase-night .letter-title, .phase-night .card-title, .phase-night .step text:first-child { color: #fff8eb; }
+/* 注册/绘制阶段：与欢迎页同章的深空视觉 */
+/* 根节点与内容屏同底渐变，避免 page 级背景在屏幕边缘露出异色断层 */
+.stage-register { background: linear-gradient(180deg, #02040d 0%, #060817 42%, #0a0e1d 70%, #04070d 100%); color: #f8f1de; }
+.stage-awakening { background: linear-gradient(180deg, #070b17 0%, #111827 54%, #1b211f 100%); color: #fff8eb; }
+.stage-register .bg-glow, .stage-awakening .bg-glow { display: none; }
+.stage-register > .stars, .stage-awakening > .stars { display: none; }
+.stage-register .grain { opacity: 0.055; background-image: radial-gradient(rgba(255, 248, 235, 0.38) 1rpx, transparent 1rpx); background-size: 18rpx 18rpx; }
+.stage-register .create-chart-screen { background: radial-gradient(circle at 52% 24%, rgba(119, 105, 189, 0.16), transparent 30%), radial-gradient(circle at 82% 66%, rgba(59, 121, 143, 0.11), transparent 34%), linear-gradient(180deg, #02040d 0%, #060817 42%, #0a0e1d 70%, #04070d 100%); }
+.stage-register .chart-ring { border-color: rgba(255, 248, 235, 0.13); }
+.register-sky { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.register-sky .constellation { opacity: 0.24; }
+.register-spirit { position: absolute; right: -10rpx; top: -124rpx; width: 220rpx; height: 270rpx; transform: scale(0.6); transform-origin: top right; z-index: 3; pointer-events: none; }
+.register-spirit .spirit-stage { width: 220rpx; height: 270rpx; border-radius: 58rpx; border-color: rgba(255, 248, 224, 0.16); background: radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.5), transparent 35%), linear-gradient(180deg, rgba(255, 252, 232, 0.14), rgba(189, 181, 255, 0.07)); box-shadow: inset 0 1rpx rgba(255, 255, 255, 0.26), 0 28rpx 90rpx rgba(3, 7, 24, 0.5), 0 0 52rpx rgba(235, 204, 132, 0.12); backdrop-filter: blur(8rpx); }
+.create-chart-screen .primary-btn, .create-chart-screen .secondary-btn, .chart-drawing-screen .primary-btn, .chart-drawing-screen .secondary-btn { display: flex; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(255, 248, 224, 0.16), rgba(255, 248, 224, 0.06)); border: 1rpx solid rgba(255, 238, 188, 0.32); color: rgba(255, 250, 230, 0.96); box-shadow: 0 22rpx 70rpx rgba(0, 0, 0, 0.26), 0 0 48rpx rgba(242, 205, 120, 0.13), inset 0 1rpx rgba(255, 255, 255, 0.14); }
+.create-chart-screen .secondary-btn, .chart-drawing-screen .secondary-btn { background: rgba(255, 248, 224, 0.07); border: 1rpx solid rgba(255, 255, 255, 0.12); color: rgba(255, 248, 224, 0.72); box-shadow: none; }
+.create-actions .primary-btn:first-child:last-child { grid-column: 1 / -1; }
+.prompt-swap { animation: stepIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.answer-block { animation: stepIn 0.5s 0.06s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.answer-block > view { display: grid; gap: 52rpx; }
+@keyframes stepIn { from { opacity: 0; transform: translateY(24rpx) scale(0.99); } }
+.create-actions .primary-btn, .create-actions .secondary-btn, .awake-actions .primary-btn, .awake-actions .secondary-btn { min-height: 60rpx; }
+.date-picker-card, .time-picker-card { transition: border-color 0.35s ease, box-shadow 0.35s ease; }
+.date-picker-card.lit, .time-picker-card.lit { border-color: rgba(239, 213, 139, 0.55); box-shadow: 0 0 34rpx rgba(239, 213, 139, 0.22), inset 0 0 26rpx rgba(239, 213, 139, 0.1); }
+.chart-orbit.found .chart-wheel-core { animation-play-state: paused; }
+.burst-ring { position: absolute; width: 390rpx; height: 390rpx; border-radius: 50%; border: 2rpx solid rgba(243, 223, 170, 0.85); box-shadow: 0 0 44rpx rgba(243, 223, 170, 0.32); animation: burstRing 1.8s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; pointer-events: none; }
+.burst-ring.r-two { animation-delay: 0.35s; }
+@keyframes burstRing { 0% { transform: scale(0.55); opacity: 0.95; } 100% { transform: scale(2.3); opacity: 0; } }
+.found-message { transition: box-shadow 0.6s ease; }
+.found-message.lit { animation: foundGlow 1.4s ease-out both; }
+@keyframes foundGlow { 0% { box-shadow: 0 0 0 rgba(243, 223, 170, 0); } 35% { box-shadow: 0 0 46rpx rgba(243, 223, 170, 0.3); border-color: rgba(243, 223, 170, 0.35); } 100% { box-shadow: 0 0 0 rgba(243, 223, 170, 0); } }
+.gender-row { display: flex; justify-content: center; gap: 14rpx; }
+.gender-pill { border-radius: 999rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.42); padding: 16rpx 34rpx; font-size: 23rpx; color: rgba(23, 37, 31, 0.6); }
+.gender-pill.on { background: rgba(23, 37, 31, 0.86); border-color: transparent; color: #fff5dc; box-shadow: 0 12rpx 32rpx rgba(23, 37, 31, 0.2); }
+.phase-night .gender-pill { background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 255, 255, 0.12); color: rgba(255, 248, 235, 0.62); }
+.phase-night .gender-pill.on { background: rgba(243, 223, 170, 0.92); color: #17251f; }
+.dst-ask { display: grid; gap: 12rpx; margin-top: 6rpx; padding: 20rpx 22rpx; border-radius: 26rpx; border: 1rpx solid rgba(239, 213, 139, 0.3); background: rgba(239, 213, 139, 0.1); }
+.dst-title { font-size: 22rpx; font-weight: 700; color: rgba(23, 37, 31, 0.78); }
+.phase-night .dst-title { color: rgba(255, 248, 235, 0.85); }
+.dst-options { display: flex; gap: 12rpx; }
+.dst-pill { flex: 1; text-align: center; border-radius: 18rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.42); padding: 16rpx 0; font-size: 22rpx; color: rgba(23, 37, 31, 0.62); }
+.dst-pill.on { background: rgba(23, 37, 31, 0.86); border-color: transparent; color: #fff5dc; }
+.phase-night .dst-pill { background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 255, 255, 0.12); color: rgba(255, 248, 235, 0.62); }
+.phase-night .dst-pill.on { background: rgba(243, 223, 170, 0.92); color: #17251f; }
+.dst-note { font-size: 20rpx; color: rgba(23, 37, 31, 0.5); }
+.phase-night .dst-note { color: rgba(255, 248, 235, 0.5); }
+.region-text { font-size: 30rpx; letter-spacing: 0.02em; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.residence-answer { display: grid; gap: 16rpx; }
+.same-as-birth { border-radius: 26rpx; border: 1rpx solid rgba(239, 213, 139, 0.32); background: rgba(239, 213, 139, 0.12); padding: 22rpx 24rpx; font-size: 24rpx; color: rgba(23, 37, 31, 0.72); text-align: center; }
+.same-as-birth.on { background: rgba(23, 37, 31, 0.86); border-color: transparent; color: #fff5dc; box-shadow: 0 14rpx 36rpx rgba(23, 37, 31, 0.18); }
+.phase-night .same-as-birth { color: rgba(255, 248, 235, 0.7); }
+.phase-night .same-as-birth.on { background: rgba(243, 223, 170, 0.92); color: #17251f; }
+.tz-card { min-height: 104rpx; border-radius: 30rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.42); display: flex; align-items: center; justify-content: space-between; padding: 0 28rpx; }
+.phase-night .tz-card { background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 255, 255, 0.12); }
+.tz-label { font-size: 23rpx; color: rgba(23, 37, 31, 0.55); }
+.phase-night .tz-label { color: rgba(255, 248, 235, 0.55); }
+.tz-value { font-size: 30rpx; font-weight: 800; letter-spacing: 0.04em; color: #17251f; }
+.phase-night .tz-value { color: #fff8eb; }
+/* 序章跳过：底部居中胶囊，2.5s 后淡入，视觉权重高于旧顶部小字但不抢主视觉 */
+.welcome-skip-fab { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0rpx) + 44rpx); transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 10rpx; padding: 20rpx 40rpx; border-radius: 999rpx; border: 1rpx solid rgba(255, 238, 188, 0.32); background: rgba(255, 248, 224, 0.07); backdrop-filter: blur(14rpx); color: rgba(255, 248, 224, 0.82); font-size: 23rpx; letter-spacing: 0.08em; animation: skipFabIn 0.8s 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.skip-star { color: #ffe7a3; font-size: 20rpx; text-shadow: 0 0 16rpx rgba(255, 231, 163, 0.7); }
+@keyframes skipFabIn { from { opacity: 0; transform: translate(-50%, 18rpx); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* 时间步显式二选一 */
+.time-confirm-row { display: flex; justify-content: center; gap: 16rpx; }
+.confirm-pill { flex: 1; text-align: center; border-radius: 18rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.42); padding: 18rpx 0; font-size: 23rpx; color: rgba(23, 37, 31, 0.62); }
+.confirm-pill.on { background: rgba(23, 37, 31, 0.86); border-color: transparent; color: #fff5dc; box-shadow: 0 12rpx 32rpx rgba(23, 37, 31, 0.2); }
+.phase-night .confirm-pill { background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 255, 255, 0.12); color: rgba(255, 248, 235, 0.62); }
+.phase-night .confirm-pill.on { background: rgba(243, 223, 170, 0.92); color: #17251f; }
+/* 回到星空 */
+.back-to-sky { display: block; margin-top: 26rpx; text-align: center; font-size: 22rpx; color: rgba(23, 37, 31, 0.44); padding: 8rpx; }
+.phase-night .back-to-sky { color: rgba(255, 248, 235, 0.46); }
+/* 海外坐标弹框 */
+.overseas-trigger { width: 100%; margin-top: 0; }
+.overseas-sheet { position: fixed; z-index: 31; left: 24rpx; right: 24rpx; bottom: 32rpx; border-radius: 46rpx; padding: 20rpx 30rpx 30rpx; background: rgba(13, 18, 34, 0.97); color: #fff8eb; box-shadow: 0 24rpx 72rpx rgba(0, 0, 0, 0.4); backdrop-filter: blur(24rpx); display: grid; gap: 16rpx; }
+.os-title { font-size: 32rpx; font-weight: 800; }
+.os-name { min-height: 92rpx; text-align: left; background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 255, 255, 0.12); color: #fff8eb; }
+.os-row { min-height: 92rpx; border-radius: 26rpx; border: 1rpx solid rgba(255, 255, 255, 0.12); background: rgba(255, 248, 235, 0.07); display: flex; align-items: center; justify-content: space-between; padding: 0 28rpx; }
+.os-label { font-size: 23rpx; color: rgba(255, 248, 235, 0.55); }
+.os-value { font-size: 28rpx; font-weight: 700; line-height: 1; color: #fff8eb; letter-spacing: 0.02em; }
+.os-note { font-size: 20rpx; color: rgba(255, 248, 235, 0.5); line-height: 1.6; }
+.overseas-sheet .sheet-actions { margin-top: 6rpx; }
 @media (max-width: 360px) {
   .hero-row, .dash-grid, .field-row, .home-actions, .awake-actions, .letter-actions { grid-template-columns: 1fr; }
   .spirit-stage.small { width: 100%; }

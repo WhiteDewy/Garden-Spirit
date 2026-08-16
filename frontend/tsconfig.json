@@ -3,11 +3,12 @@
   "compilerOptions": {
     "sourceMap": true,
     "baseUrl": ".",
+    "resolveJsonModule": true,
     "paths": {
       "@/*": ["./src/*"]
     },
     "lib": ["esnext", "dom"],
     "types": ["@dcloudio/types"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "node_modules/province-city-china/dist/*.json"]
 }
