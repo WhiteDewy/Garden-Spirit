@@ -46,6 +46,7 @@ export interface PersonOut {
   time_known: boolean;
   house_system: string | null;
   is_premium: boolean;
+  created_at?: string | null;
 }
 
 export interface ChatIn {

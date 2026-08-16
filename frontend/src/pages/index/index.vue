@@ -280,85 +280,72 @@
     </view>
 
     <view v-else class="screen garden-screen">
-      <view class="date-row">
-        <text>{{ phaseLabel }} · 星灵回家</text>
-        <text>{{ gardenState?.trust_level ? trustZh(gardenState.trust_level) : '关系温度 · 初遇' }}</text>
+      <view class="scene" aria-hidden="true">
+        <view class="scene-glow"></view>
+        <view class="scene-moon"></view>
+        <view class="scene-cloud a"></view>
+        <view class="scene-cloud b"></view>
+        <view class="scene-hill back"></view>
+        <view class="scene-hill front"></view>
+        <text class="scene-flower f1">✦</text>
+        <text class="scene-flower f2">✿</text>
+        <text class="scene-flower f3">·</text>
       </view>
 
-      <view class="hero-row">
-        <view class="hero-copy-wrap">
-          <text class="eyebrow">PRIVATE ASTRO COMPANION</text>
-          <text class="home-title">{{ homeTitle }}</text>
-          <text class="home-copy">{{ homeCopy }}</text>
-        </view>
-        <view class="spirit-stage small">
-          <view class="aura"></view>
-          <view class="nest"></view>
-          <view class="spirit"><view class="antenna"></view><view class="arm left"></view><view class="arm right"></view><view class="mouth"></view></view>
-        </view>
+      <view class="garden-date-row">
+        <text class="garden-date">{{ todayStr }}</text>
+        <text v-if="gardenState?.trust_level" class="garden-trust">{{ trustZh(gardenState.trust_level) }}</text>
       </view>
 
-      <view class="home-actions">
-        <button class="primary-btn" @tap="goChat">和今天醒来的星灵聊聊 →</button>
-        <button class="secondary-btn why" @tap="toggleSheet">为什么是它</button>
+      <view class="garden-greeting">
+        <text class="greeting-main">{{ greetingLine }}</text>
+        <text class="greeting-sub">今天的你怎么样？</text>
       </view>
 
-      <view class="wake-strip">
-        <view>
-          <text class="wake-title">{{ spiritName }}被唤醒</text>
-          <text class="wake-copy">{{ shortSpiritReason }}</text>
-        </view>
-        <text class="chip">top 1</text>
-      </view>
-
-      <view class="card letter-card">
-        <text class="letter-k">PRIVATE TRANSIT LETTER</text>
-        <text class="letter-title">{{ gardenState?.letter?.title || '今天，先温柔地醒来。' }}</text>
-        <text class="letter-body">{{ letterPreview }}</text>
-        <view class="chip-row">
-          <text class="chip">{{ gardenState?.letter_unread ? '今日来信 unread' : '今日来信' }}</text>
-          <text v-if="gardenState?.letter?.sender_zh" class="chip">{{ gardenState.letter.sender_zh }}</text>
-          <text class="chip">记忆镜头：温柔回访</text>
-        </view>
-        <view class="letter-actions">
-          <button class="primary-btn" @tap="goChat">继续这封信 →</button>
-          <button class="secondary-btn" @tap="goMailbox">打开信箱</button>
+      <view class="spirit-buddy" @tap="goChat">
+        <view class="spirit-orb"></view>
+        <view class="spirit-buddy-copy">
+          <text class="spirit-buddy-name">{{ spiritName }}</text>
+          <text class="spirit-buddy-line">{{ spiritLine }}</text>
         </view>
       </view>
 
-      <view class="dash-grid">
-        <view class="mini-card" @tap="goChat">
-          <text class="mini-label">继续昨天</text>
-          <text class="mini-title">{{ continueTitle }}</text>
-          <text class="mini-copy">{{ continueCopy }}</text>
+      <view v-if="inviteText" class="garden-quote">“{{ inviteText }}”</view>
+
+      <button class="chat-cta" @tap="goChat">和{{ spiritName }}聊聊 →</button>
+
+      <view class="weather-card" @tap="goMailbox">
+        <view class="weather-main">
+          <text class="weather-label">INNER WEATHER · 今日来信</text>
+          <text class="weather-strong">{{ gardenState?.letter?.title || '今天，先温柔地醒来。' }}</text>
+          <text class="weather-desc">{{ weatherDesc }}</text>
+          <text class="weather-link" @tap.stop="goChat">继续这封信 →</text>
         </view>
-        <view class="mini-card" @tap="goUniverse">
-          <text class="mini-label">今日碎片</text>
-          <text class="mini-title">{{ fragmentTitle }}</text>
-          <view v-if="gardenState?.soul_fragments?.length" class="fragment-row">
-            <text v-for="frag in gardenState.soul_fragments.slice(0, 3)" :key="frag.id" class="frag-chip">{{ frag.name }}</text>
+        <view class="weather-side">
+          <text class="weather-icon">☁︎</text>
+          <view class="mini-stars">
+            <text v-for="n in 5" :key="n" :class="['mini-star', { lit: n <= (gardenState?.soul_fragments?.length || 0) }]"></text>
           </view>
-          <text v-else class="mini-copy">还没有亮起，随时可以从一句话开始。</text>
         </view>
       </view>
 
-      <view v-if="recallText" class="mini-card recall-card">
-        <text class="mini-label">我记得你</text>
-        <view class="recall-line"><text class="pulse-star">✦</text><view><text class="mini-title">{{ recallText }}</text><text class="mini-copy">这不是标签，只是一颗被你校准过的记忆星。</text></view></view>
-      </view>
-
-      <view class="card evidence-card">
-        <text class="mini-label">Evidence Rows · 解释线索</text>
-        <view class="evidence-row"><text>trigger</text><text>{{ shortSpiritReason }}</text></view>
-        <view class="evidence-row"><text>memory</text><text>{{ recallText || '记忆镜头会优先取你确认过、最近聊过的内容' }}</text></view>
-        <view class="evidence-row"><text>growth</text><text>今日碎片只代表聊过、被照见、做过</text></view>
+      <view class="dust-band">
+        <view v-if="gardenState?.continue_from" class="dust-chip" @tap="goChat">
+          <text>继续昨天 · {{ continueTitle.replace(/[“”"]/g, "") }}</text>
+        </view>
+        <view class="dust-chip" @tap="goUniverse">
+          <text>今日碎片 · {{ fragmentTitle }}</text>
+        </view>
+        <view v-if="recallText" class="dust-chip" @tap="goUniverse">
+          <text>我记得你</text>
+        </view>
       </view>
 
       <view class="nav-bar">
         <view class="nav-item active"><text>✦</text><text>花园</text></view>
-        <view class="nav-item" @tap="goChat"><text>☾</text><text>星灵</text></view>
         <view class="nav-item" @tap="goMailbox"><text>✉</text><text>信箱</text><text v-if="gardenState?.letter_unread" class="nav-badge"></text></view>
         <view class="nav-item" @tap="goUniverse"><text>◌</text><text>宇宙</text><text v-if="(gardenState?.pending_verifications ?? 0) > 0" class="nav-badge"></text></view>
+        <view class="nav-item" @tap="goMe"><text>☺</text><text>我的</text></view>
       </view>
     </view>
 
@@ -401,7 +388,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import api, { describeError, type GardenState, type SoulFragmentOut, type SpiritRecommendationOut } from "@/api/client";
+import api, { ApiError, describeError, type GardenState, type SoulFragmentOut, type SpiritRecommendationOut } from "@/api/client";
 import { subscribePush } from "@/utils/push";
 
 type HomeStage = "welcome" | "register" | "awakening" | "garden";
@@ -857,10 +844,39 @@ const spiritName = computed(() => {
 });
 const spiritReason = computed(() => recommendedSpirit.value?.reason || "它会先从安全感、情绪和归属感的角度陪你看今天。");
 const shortSpiritReason = computed(() => spiritReason.value.length > 28 ? `${spiritReason.value.slice(0, 28)}…` : spiritReason.value);
-const homeTitle = computed(() => gardenState.value?.letter?.title || `今天，${spiritName.value}\n在花园里等你。`);
-const homeCopy = computed(() => {
-  if (gardenState.value?.continue_from?.summary) return `它记得你上次聊到：${gardenState.value.continue_from.summary.slice(0, 42)}…`;
-  return "它会把星盘语言说得更像朋友，也会记住你亲自校准过的感受。";
+// 接引语：/opening 是多行回访话术（问候+信任称呼+缺口钩子+上次话题+记忆钩子），
+// 首行做问候行大标题，其余行做星灵下方的接引语；首见用户是单行自我介绍
+const openingText = ref("");
+const openingLines = computed(() => openingText.value.split("\n").map((s) => s.trim()).filter(Boolean));
+const greetingLine = computed(() => {
+  if (!openingLines.value.length) return `${phaseLabel.value === "夜晚" ? "夜深了" : phaseLabel.value === "黄昏" ? "晚上好" : "你好"}，${savedName.value || "你"}`;
+  return openingLines.value.length === 1 ? "欢迎来到花园" : openingLines.value[0];
+});
+const inviteText = computed(() => (openingLines.value.length <= 1 ? openingLines.value[0] || "" : openingLines.value.slice(1).join("\n")));
+
+// 首页实景版文案源：日期行 / 星灵伙伴一句话（前端过渡台词，后端 persona 台词出 API 后替换）/ 天气卡短述
+const todayStr = computed(() => {
+  const d = new Date();
+  const wd = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()} · ${p(d.getMonth() + 1)} · ${p(d.getDate())}  星期${wd}`;
+});
+const SPIRIT_LINES: Record<string, string> = {
+  sun: "今天也值得被看见一点。",
+  moon: "我会先听你说，不急着给答案。",
+  mercury: "想到什么说什么，我们一起整理。",
+  venus: "先照顾好感受，再谈对错。",
+  mars: "想说就去做，我陪你冲一次。",
+  jupiter: "往远处看看，路比你以为的宽。",
+  saturn: "慢慢来，我先把结构理清楚。",
+  uranus: "不安分也没关系，自由是天赋。",
+  neptune: "做梦很重要，我帮你留住它。",
+  pluto: "深一点的真相，我们慢慢挖。",
+};
+const spiritLine = computed(() => SPIRIT_LINES[recommendedSpirit.value?.planet?.toLowerCase() || "moon"] || SPIRIT_LINES.moon);
+const weatherDesc = computed(() => {
+  const body = (gardenState.value?.letter?.body || "今天适合慢一点回应别人。").replace(/\s+/g, " ").trim();
+  return body.length > 44 ? `${body.slice(0, 44)}…` : body;
 });
 const letterPreview = computed(() => {
   const body = gardenState.value?.letter?.body || "第一封星信正在等你打开。如果你愿意，可以从今天的一句话开始，让星灵慢慢认识你。";
@@ -878,7 +894,8 @@ const sheetCopy = computed(() => `${spiritReason.value}\n\n首页只保留一个
 onShow(async () => {
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   if (!pid) {
-    stage.value = "welcome";
+    // 只在「花园态却没有档案」时回欢迎页；注册/绘制中途切后台回来不清表单
+    if (stage.value === "garden") stage.value = "welcome";
     return;
   }
   if (stage.value === "awakening" && lastLoadedPersonId.value === pid) return;
@@ -895,9 +912,17 @@ async function loadExistingGarden(pid: string) {
     await loadRecommendation(pid);
     await loadGarden(pid, recommendedSpirit.value?.planet);
   } catch (e) {
-    uni.removeStorageSync(PERSON_KEY);
-    stage.value = "welcome";
+    // 只有「档案确实不存在(404)/不可解密(410)」才登出回欢迎页；
+    // 网络抖动/后端重启不能清登录态踢人——保留状态，进花园兜底页等恢复
+    const gone = e instanceof ApiError && (e.status === 404 || e.status === 410);
+    if (gone) {
+      uni.removeStorageSync(PERSON_KEY);
+      stage.value = "welcome";
+    } else if (stage.value !== "garden") {
+      stage.value = "garden";
+    }
     error.value = describeError(e);
+    uni.showToast({ title: describeError(e), icon: "none", duration: 2200 });
   }
 }
 
@@ -917,7 +942,17 @@ async function loadGarden(pid: string, persona?: string) {
     gardenState.value = null;
     error.value = describeError(e);
   }
+  void loadOpening(pid, persona);
   stage.value = "garden";
+}
+
+async function loadOpening(pid: string, persona?: string) {
+  try {
+    const o = await api.opening(pid, persona);
+    openingText.value = o.opening;
+  } catch {
+    openingText.value = "";
+  }
 }
 
 async function loadAwakening(pid: string) {
@@ -931,6 +966,7 @@ async function loadAwakening(pid: string) {
     gardenState.value = null;
     error.value = describeError(e);
   }
+  void loadOpening(pid, recommendedSpirit.value?.planet);
 }
 
 // Web Push：延迟触发订阅（推送是增强能力，失败安静返回，绝不打断主页流程）。
@@ -1213,6 +1249,9 @@ function goMailbox() {
 function goUniverse() {
   uni.navigateTo({ url: "/pages/universe/universe" });
 }
+function goMe() {
+  uni.navigateTo({ url: "/pages/me/me" });
+}
 </script>
 
 <style scoped>
@@ -1434,7 +1473,7 @@ function goUniverse() {
 .phase-night .hero-copy, .phase-night .card-copy, .phase-night .home-copy { color: rgba(255, 248, 235, 0.66); }
 .seed-wrap { height: 210rpx; display: flex; align-items: center; justify-content: center; margin: 26rpx 0 8rpx; }
 .seed { width: 150rpx; height: 150rpx; border-radius: 44% 56% 50% 50%; background: radial-gradient(circle at 35% 24%, #fff, transparent 24%), linear-gradient(145deg, #d9d0f0, #efd58b 72%); box-shadow: inset -16rpx -20rpx 34rpx rgba(110, 94, 130, 0.12), 0 32rpx 80rpx rgba(128, 107, 67, 0.2); animation: float 5.6s ease-in-out infinite; }
-.card { border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 253, 247, 0.74); backdrop-filter: blur(20rpx); border-radius: 56rpx; box-shadow: 0 22rpx 70rpx rgba(36, 39, 31, 0.15); }
+.card { border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 253, 247, 0.74); backdrop-filter: blur(20rpx); border-radius: 40rpx; box-shadow: 0 22rpx 70rpx rgba(36, 39, 31, 0.15); }
 .phase-night .card { background: rgba(255, 248, 235, 0.1); border-color: rgba(255, 255, 255, 0.13); }
 .form-card { padding: 34rpx; }
 .step-label, .mini-label, .letter-k { display: block; font-size: 19rpx; letter-spacing: 0.16em; color: rgba(23, 37, 31, 0.38); font-weight: 900; text-transform: uppercase; }
@@ -1448,8 +1487,8 @@ function goUniverse() {
 .privacy-row { display: flex; gap: 14rpx; align-items: flex-start; margin-top: 24rpx; }
 .privacy-mark { color: #efd58b; }
 .privacy-text { color: rgba(23, 37, 31, 0.62); font-size: 21rpx; line-height: 1.6; }
-.primary-btn, .secondary-btn { border: 0; border-radius: 20rpx; padding: 20rpx 26rpx; font-size: 25rpx; font-weight: 700; line-height: 1; }
-.primary-btn { margin-top: 28rpx; background: #17251f; color: #fff5dc; box-shadow: 0 18rpx 42rpx rgba(23, 37, 31, 0.24); }
+.primary-btn, .secondary-btn { border: 0; border-radius: 20rpx; padding: 20rpx 26rpx; font-size: 25rpx; font-weight: 700; line-height: 1; min-height: 80rpx; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+.primary-btn { margin-top: 28rpx; background: linear-gradient(180deg, #6c9179 0%, #5f826c 100%); color: #fff9ec; box-shadow: 0 16rpx 40rpx rgba(95, 130, 108, 0.32); }
 .secondary-btn { margin-top: 28rpx; background: rgba(255, 255, 255, 0.42); color: #17251f; border: 1rpx solid rgba(77, 92, 82, 0.14); }
 .primary-btn[disabled] { opacity: 0.6; }
 .error { display: block; margin-top: 18rpx; color: #b85c54; font-size: 23rpx; line-height: 1.5; }
@@ -1538,8 +1577,8 @@ function goUniverse() {
 .letter-body { display: block; font-size: 26rpx; line-height: 1.9; color: rgba(23, 37, 31, 0.62); }
 .chip-row, .fragment-row { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 20rpx; }
 .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18rpx; margin-top: 22rpx; }
-.mini-card { border-radius: 42rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.38); padding: 26rpx; box-shadow: 0 12rpx 32rpx rgba(35, 40, 34, 0.08); }
-.mini-title { display: block; margin: 14rpx 0 8rpx; font-size: 30rpx; font-weight: 800; letter-spacing: -0.025em; line-height: 1.35; }
+.mini-card { border-radius: 28rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 255, 255, 0.38); padding: 26rpx; box-shadow: 0 12rpx 32rpx rgba(35, 40, 34, 0.08); }
+.mini-title { display: block; margin: 14rpx 0 8rpx; font-family: Georgia, "Noto Serif SC", serif; font-size: 28rpx; font-weight: 750; letter-spacing: -0.02em; line-height: 1.35; }
 .mini-copy { display: block; font-size: 22rpx; color: rgba(23, 37, 31, 0.62); line-height: 1.6; }
 .frag-chip { border-radius: 999rpx; background: rgba(240, 213, 139, 0.2); padding: 10rpx 14rpx; color: rgba(23, 37, 31, 0.68); font-size: 20rpx; }
 .recall-card, .evidence-card { margin-top: 20rpx; }
@@ -1549,11 +1588,6 @@ function goUniverse() {
 .evidence-row { display: grid; grid-template-columns: 120rpx 1fr; gap: 18rpx; padding: 18rpx 0; border-top: 1rpx solid rgba(77, 92, 82, 0.14); font-size: 22rpx; color: rgba(23, 37, 31, 0.66); }
 .evidence-row:first-of-type { margin-top: 14rpx; border-top: 0; }
 .evidence-row text:first-child { text-transform: uppercase; letter-spacing: 0.12em; font-size: 18rpx; color: rgba(23, 37, 31, 0.38); }
-.nav-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: 24rpx; height: 112rpx; border-radius: 44rpx; border: 1rpx solid rgba(77, 92, 82, 0.14); background: rgba(255, 253, 247, 0.78); backdrop-filter: blur(20rpx); box-shadow: 0 18rpx 54rpx rgba(36, 39, 31, 0.14); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; z-index: 8; }
-.nav-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4rpx; font-size: 20rpx; color: rgba(23, 37, 31, 0.42); }
-.nav-item text:first-child { font-size: 30rpx; }
-.nav-item.active { color: #17251f; }
-.nav-badge { position: absolute; top: 2rpx; right: 32rpx; width: 14rpx; height: 14rpx; background: #d66b5f; border-radius: 50%; box-shadow: 0 0 0 6rpx rgba(214, 107, 95, 0.14); }
 .sheet-mask { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.08); }
 .bottom-sheet { position: fixed; z-index: 21; left: 24rpx; right: 24rpx; bottom: 32rpx; border-radius: 52rpx; padding: 20rpx 30rpx 30rpx; background: rgba(17, 27, 24, 0.94); color: #fff8eb; box-shadow: 0 24rpx 72rpx rgba(0, 0, 0, 0.3); }
 .sheet-handle { width: 72rpx; height: 8rpx; border-radius: 999rpx; background: rgba(255, 255, 255, 0.22); margin: 0 auto 24rpx; }
@@ -1646,6 +1680,86 @@ function goUniverse() {
 .os-value { font-size: 28rpx; font-weight: 700; line-height: 1; color: #fff8eb; letter-spacing: 0.02em; }
 .os-note { font-size: 20rpx; color: rgba(255, 248, 235, 0.5); line-height: 1.6; }
 .overseas-sheet .sheet-actions { margin-top: 6rpx; }
+/* 首页 · 全屏晨雾花园（V2 demo 化）：场景铺满整页，元素长在场景上 */
+.stage-garden { background: linear-gradient(180deg, #87aeb8 0%, #adc4bf 38%, #d0d4bc 59%, #8da487 100%); color: #263d38; }
+.stage-garden.phase-dusk { background: linear-gradient(180deg, #9aa8b0 0%, #c3c3ab 40%, #d3cbaa 62%, #8f9b7f 100%); }
+.stage-garden.phase-night { background: linear-gradient(180deg, #16302e 0%, #1f4034 48%, #27503f 78%, #1d3a2e 100%); color: #f2eee0; }
+.stage-garden .bg-glow, .stage-garden > .stars { display: none; }
+.stage-garden .eyebrow { color: rgba(35, 54, 51, 0.55); }
+.stage-garden .app-title { color: #263d38; }
+.stage-garden .icon-btn { border-color: rgba(40, 61, 53, 0.12); background: rgba(255, 255, 255, 0.18); color: #35483f; }
+.stage-garden.phase-night .eyebrow { color: rgba(255, 248, 235, 0.45); }
+.stage-garden.phase-night .app-title { color: #f2eee0; }
+.stage-garden.phase-night .icon-btn { border-color: rgba(255, 248, 235, 0.14); background: rgba(255, 248, 235, 0.08); color: rgba(255, 248, 235, 0.7); }
+.scene { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.scene-glow { position: absolute; width: 380rpx; height: 380rpx; border-radius: 50%; background: rgba(255, 237, 181, 0.4); filter: blur(56rpx); right: -20rpx; top: 60rpx; }
+.phase-night .scene-glow { background: rgba(233, 216, 158, 0.14); }
+.scene-moon { position: absolute; right: 100rpx; top: 150rpx; width: 100rpx; height: 100rpx; border-radius: 50%; background: #f7efcf; box-shadow: 0 0 90rpx rgba(255, 240, 183, 0.45); }
+.phase-night .scene-moon { background: #e6e0c4; }
+.scene-cloud { position: absolute; background: rgba(255, 255, 255, 0.18); filter: blur(36rpx); border-radius: 50%; animation: cloudDrift 46s ease-in-out infinite; }
+.scene-cloud.a { width: 420rpx; height: 110rpx; left: -130rpx; top: 270rpx; }
+.scene-cloud.b { width: 360rpx; height: 90rpx; right: -120rpx; top: 470rpx; animation-delay: -18s; animation-duration: 58s; }
+.phase-night .scene-cloud { background: rgba(255, 248, 235, 0.06); }
+.scene-hill { position: absolute; width: 124%; border-radius: 50% 50% 0 0 / 25% 25% 0 0; }
+.scene-hill.back { bottom: 14%; height: 29%; background: #a7b89b; opacity: 0.7; left: -20%; }
+.scene-hill.front { bottom: 0; height: 36%; background: linear-gradient(180deg, #9eae8d, #687f69); }
+.phase-night .scene-hill.back { background: #24463a; opacity: 0.85; }
+.phase-night .scene-hill.front { background: linear-gradient(180deg, #2c5243, #1d3a2e); }
+.scene-flower { position: absolute; bottom: 24%; font-size: 34rpx; opacity: 0.75; }
+.scene-flower.f1 { left: 13%; }
+.scene-flower.f2 { left: 72%; bottom: 28%; }
+.scene-flower.f3 { left: 88%; bottom: 19%; font-size: 24rpx; }
+.garden-screen { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: calc(100vh - 196rpx); }
+.garden-date-row { display: flex; justify-content: space-between; align-items: center; }
+.garden-date { font-size: 22rpx; letter-spacing: 0.1em; color: rgba(35, 54, 51, 0.7); }
+.garden-trust { font-size: 20rpx; color: rgba(35, 54, 51, 0.5); }
+.phase-night .garden-date { color: rgba(255, 248, 235, 0.6); }
+.phase-night .garden-trust { color: rgba(255, 248, 235, 0.45); }
+.garden-greeting { margin-top: 20rpx; }
+.greeting-main { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 54rpx; font-weight: 600; letter-spacing: -0.02em; line-height: 1.4; color: #263d38; }
+.greeting-sub { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 54rpx; font-weight: 600; letter-spacing: -0.02em; line-height: 1.4; color: #263d38; }
+.phase-night .greeting-main, .phase-night .greeting-sub { color: #f2eee0; }
+.spirit-buddy { margin-top: 36rpx; display: flex; align-items: center; gap: 24rpx; }
+.spirit-orb { width: 112rpx; height: 112rpx; flex-shrink: 0; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 62% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.8) 0 17%, transparent 18%), radial-gradient(circle at 50% 65%, rgba(224, 235, 222, 0.8) 0 28%, transparent 29%), linear-gradient(145deg, #e8ece0, #879f94);
+  box-shadow: 0 0 0 2rpx rgba(255, 255, 255, 0.3), 0 20rpx 70rpx rgba(45, 68, 58, 0.2); animation: orbBreath 4.6s ease-in-out infinite; transition: transform 0.18s ease; }
+.spirit-buddy:active .spirit-orb { transform: scale(0.9); }
+.spirit-buddy-name { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 32rpx; font-weight: 600; color: #263d38; }
+.spirit-buddy-line { display: block; margin-top: 8rpx; font-size: 22rpx; color: rgba(38, 58, 52, 0.68); }
+.phase-night .spirit-buddy-name { color: #f2eee0; }
+.phase-night .spirit-buddy-line { color: rgba(255, 248, 235, 0.6); }
+.garden-quote { margin-top: 36rpx; font-family: Georgia, "Noto Serif SC", serif; font-size: 40rpx; line-height: 1.75; color: #253c37; white-space: pre-line; }
+.phase-night .garden-quote { color: rgba(242, 238, 224, 0.92); }
+.chat-cta { margin-top: 30rpx; align-self: flex-start; border: 0; border-radius: 22rpx; padding: 20rpx 34rpx; min-height: 80rpx; box-sizing: border-box; display: flex; align-items: center; background: rgba(49, 72, 63, 0.82); color: #f2eee0; font-size: 25rpx; font-weight: 600; box-shadow: 0 16rpx 50rpx rgba(36, 56, 48, 0.18); }
+.phase-night .chat-cta { background: rgba(243, 223, 170, 0.92); color: #1d3a2e; }
+.weather-card { margin-top: auto; border: 1rpx solid rgba(255, 255, 255, 0.25); background: rgba(245, 247, 236, 0.25); backdrop-filter: blur(18rpx); border-radius: 32rpx; padding: 30rpx; display: flex; justify-content: space-between; gap: 24rpx; }
+.phase-night .weather-card { background: rgba(20, 34, 30, 0.5); border-color: rgba(255, 248, 235, 0.12); }
+.weather-main { min-width: 0; }
+.weather-label { display: block; font-size: 19rpx; letter-spacing: 0.15em; color: rgba(35, 54, 51, 0.65); font-weight: 800; }
+.phase-night .weather-label { color: rgba(255, 248, 235, 0.5); }
+.weather-strong { display: block; margin-top: 10rpx; font-family: Georgia, "Noto Serif SC", serif; font-size: 36rpx; font-weight: 600; color: #30453e; }
+.phase-night .weather-strong { color: #f2eee0; }
+.weather-desc { display: block; margin-top: 8rpx; font-size: 22rpx; line-height: 1.6; color: #5e7069; }
+.phase-night .weather-desc { color: rgba(255, 248, 235, 0.55); }
+.weather-link { display: inline-block; margin-top: 14rpx; font-size: 22rpx; color: #3d5a4c; text-decoration: underline; }
+.phase-night .weather-link { color: rgba(243, 223, 170, 0.85); }
+.weather-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; flex-shrink: 0; }
+.weather-icon { font-size: 48rpx; color: #30453e; }
+.phase-night .weather-icon { color: rgba(255, 248, 235, 0.7); }
+.mini-stars { display: flex; gap: 8rpx; }
+.mini-star { width: 10rpx; height: 10rpx; border-radius: 50%; background: rgba(217, 197, 142, 0.35); }
+.mini-star.lit { background: #d9c58e; box-shadow: 0 0 16rpx rgba(217, 197, 142, 0.9); }
+.dust-band { display: flex; gap: 16rpx; overflow-x: auto; margin-top: 24rpx; padding-bottom: 10rpx; }
+.dust-chip { flex-shrink: 0; border: 1rpx solid rgba(255, 255, 255, 0.3); background: rgba(245, 247, 236, 0.28); backdrop-filter: blur(12rpx); border-radius: 999rpx; padding: 16rpx 26rpx; font-size: 22rpx; color: #33503f; }
+.phase-night .dust-chip { background: rgba(255, 248, 235, 0.06); border-color: rgba(255, 248, 235, 0.14); color: rgba(255, 248, 235, 0.8); }
+.nav-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: 24rpx; height: 112rpx; border-radius: 36rpx; border: 1rpx solid rgba(255, 255, 255, 0.12); background: rgba(20, 34, 30, 0.68); backdrop-filter: blur(24rpx); box-shadow: 0 18rpx 54rpx rgba(36, 39, 31, 0.14); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; z-index: 8; }
+.nav-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4rpx; font-size: 20rpx; color: rgba(235, 241, 233, 0.48); }
+.nav-item text:first-child { font-size: 30rpx; }
+.nav-item.active { background: rgba(255, 255, 255, 0.1); color: #f2eee0; border-radius: 21rpx; }
+.nav-item.active text:first-child { filter: drop-shadow(0 0 16rpx rgba(235, 216, 158, 0.7)); }
+.nav-badge { position: absolute; top: 2rpx; right: 32rpx; width: 14rpx; height: 14rpx; background: #d66b5f; border-radius: 50%; box-shadow: 0 0 0 6rpx rgba(214, 107, 95, 0.14); }
+@keyframes cloudDrift { 50% { transform: translateX(36rpx); } }
+@keyframes orbBreath { 50% { transform: translateY(-6rpx) scale(1.03); } }
 @media (max-width: 360px) {
   .hero-row, .dash-grid, .field-row, .home-actions, .awake-actions, .letter-actions { grid-template-columns: 1fr; }
   .spirit-stage.small { width: 100%; }

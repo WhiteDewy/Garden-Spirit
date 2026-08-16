@@ -48,6 +48,13 @@
 				"navigationBarTitleText": "子类介绍",
 				"navigationStyle": "custom"
 			}
+		},
+		{
+			"path": "pages/me/me",
+			"style": {
+				"navigationBarTitleText": "我的",
+				"navigationStyle": "custom"
+			}
 		}
 	],
 	"globalStyle": {
