@@ -1,7 +1,7 @@
 # 领域引擎 v2 设计（Domain Engine v2）
 
 > 状态：**已实现 v1（2026-08-12）**，四步迁移全落地，707→716 测试全绿。
-> 实现记录：① 词汇合一（`shared/enums.py` IntentDomain 11 域 + 三套词汇对齐）；② 语义场（house_significations 全词条加 `governors`、signs.yaml 12 星座 `behavior_style`、planet_nature 天海冥只关联）；③ 领域定义数据化（intent_profiles 新增 growth/network/self 三域配方 + 反向点亮映射）；④ per-signification 调制（`signification.py::_strength` 改为"词级基础 × 主星净吉凶 × 宫结构加权"）+ 三轨合成器（`interpretation/compositor.py::DomainCompositor`，轨A征象×轨B宫主×轨C互溶桥，§4.4 合读规则五档）。
+> 实现记录：① 词汇合一（`shared/enums.py` IntentDomain 11 域 + 三套词汇对齐）；② 语义场（house_significations 全词条加 `governors`、signs.yaml 12 星座 `behavior_style`、planet_nature 天海冥只关联）；③ 领域定义数据化（intent_profiles 新增 growth/network/self 三域配方 + 反向点亮映射）；④ per-signification 调制（`signification.py::_strength` 改为"词级基础 × governor 对应正/负轴 × 宫结构加权贡献"）+ 三轨合成器（`interpretation/compositor.py::DomainCompositor`，轨A征象×轨B宫主×轨C互溶桥，§4.4 合读规则五档）。
 > 覆盖：语义场单一真相源 + 领域=精心挑选的子集 + 三轨合成器 + per-signification 调制 + 领域集合（11 域）+ 迁移路径。
 > 配套：`docs/self_map_design.md`（自我地图，本设计取代其中"9宫只挂学习 / 11宫被弱化"的旧表述）· `domain/astrology/knowledge/house_significations.yaml` · `domain/astrology/knowledge/planet_nature.yaml` · `domain/reasoning/intent/intent_profiles.yaml` · `domain/astrology/interpretation/compositor.py`
 
@@ -31,7 +31,7 @@
 1. **语义场是唯一真相源**：12 宫 × 10 星 × 12 星座的"语义单位"（含 `domains` 标签 + `governors` 主星）是事实。领域**不是**事实，是**视图**。
 2. **领域 = 精心挑选的语义场子集（curated selection）**：你决定哪些语义单位属于"事业"，这份"属于"写成标签；引擎机械展开。定义是声明的、数据驱动的，不是每个领域一段手写 Python。
 3. **三轨分离，宫性优先**：论一个领域，三轨并出、结构轨优先——征象轨（星性/色彩）× 宫主轨（宫性/结构）× 互溶桥（通道）。"宫性大于星性"= 领域的成败以宫主星（宫性的代言人）为准，先天征象星只做色彩调制。
-4. **per-signification 调制**：每个语义含义带自己的 `governors`（主星），强弱 = 词级基础 × 主星状态 × 宫结构贡献。**严禁**整个宫一份吉凶平摊给所有含义。
+4. **per-signification 调制**：每个语义含义带自己的 `governors`（主星），强弱 = 词级基础 × governor 对应正/负轴 × 宫结构贡献。**严禁**整个宫一份状态平摊给所有含义。
 5. **三王星只做关联影响**：天王/海王/冥王不掌宫、不互溶接纳、无传统尊贵、刑冲算"外部压力"——只从星性 × 落座 × 落宫解读，做领域染色，不做结构判断。规则已实现（`reception.yaml:11-18` / `dignity.yaml:7` / `common.py:20-26` / `dispositor.py:86-90`）。
 6. **硬线不变**：占星结论全由 Domain 出，LLM 自由度只在"怎么疗愈 / 怎么陪伴"。
 
@@ -219,16 +219,16 @@
 
 ---
 
-## 5. per-signification 调制（修复"一宫一吉凶"缺陷）
+## 5. per-signification 调制（修复整宫状态平摊缺陷）
 
-**现状缺陷**：`signification.py:64-69` 整个宫算一份吉凶 `pos/neg`，平摊给该宫所有含义 → "3宫强"会让"沟通/学习/手足/出行"全部被抬高，**表达不出"3宫强但自己表达弱、手足旺"的分化**。
+**已修复口径**：每个语义词按自己的 `governors` 与 polarity-specific axes 单独调制，避免把同一宫位的一份状态平摊给所有含义 → 引擎可以表达“3宫结构强，但自己表达弱、手足旺”的分化。
 
 **改造**：每个含义按 `governors` 单独算强度。
 
 ```
 含义强度(word) = 词级基础(intensity)
-              × (1 + Σ governors 状态调制)      # 主星尊贵/受克/互溶
-              × (1 + 宫结构贡献 × 权重)         # 宫吉凶只贡献一部分，不独占
+              × (1 + Σ governors 对应正/负轴调制)  # 词级主星状态
+              × (1 + 宫结构贡献 × 权重)              # 宫结构只贡献一部分，不独占
 ```
 
 **设计用例（验收标准）**——"3宫强，但沟通弱、手足旺"：

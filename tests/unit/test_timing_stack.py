@@ -11,6 +11,7 @@ import zoneinfo
 import pytest
 
 from domain.astrology.calculation import NatalChartCalculator
+from domain.astrology.common import house_lord
 from domain.astrology.knowledge import load_knowledge
 from domain.timeline import build_timing_stack
 from shared.enums import AspectType, DignityState, HouseSystem, Planet
@@ -77,6 +78,25 @@ def test_timing_stack_export_exposes_helper_targets(person, chart):
     assert first["target_planets"] == d["transit_targets"]
     assert first["helper_target_planets"] == d["helper_transit_targets"]
     assert first["scoring_target_planets"] == d["scoring_transit_targets"]
+
+
+def test_timing_stack_uses_question_significators_from_enrichment(person, chart):
+    """阶段5：时机栈不能只看法达领主，也要吃本轮问题的真实承载者。"""
+    kb = load_knowledge()
+    career_lord = house_lord(chart, kb, 10)
+
+    d = build_timing_stack(
+        person,
+        chart,
+        kb,
+        reference=REF,
+        enrichment={"focus_planets": ["venus"], "focus_house_lords": [10]},
+    ).to_dict()
+
+    assert set(d["transit_targets"]).issuperset({"moon", "mars", "venus", career_lord.value})
+    assert "year_lord" not in d
+    assert d["transits"][0]["target_planets"] == d["transit_targets"]
+    assert set(d["scoring_transit_targets"]).issuperset(d["transit_targets"])
 
 
 def test_timing_stack_export(person, chart):

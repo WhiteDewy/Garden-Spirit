@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 
 from shared.constants import SIGNS_IN_ORDER
-from shared.enums import Planet, Sect
+from shared.enums import FirdariaMethod, Planet, Sect
 from shared.models import Chart
 
 from domain.astrology.common import aspects_to, house_lord, house_rulers
@@ -22,19 +22,22 @@ from domain.astrology.interpretation.affliction import affliction_readings
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
 from domain.astrology.knowledge.loader import KnowledgeBase
 
-#: 法达各主年限（75 年循环；北交 3 + 南交 2，依据宫神星网）
+#: 法达各主年限（75 年循环；北交 3 + 南交 2）
 _FIRDARIA_YEARS = {
     Planet.SUN: 10, Planet.VENUS: 8, Planet.MERCURY: 13, Planet.MOON: 9,
     Planet.SATURN: 11, Planet.JUPITER: 12, Planet.MARS: 7,
     Planet.NORTH_NODE: 3, Planet.SOUTH_NODE: 2,
 }
-#: 日生：日金水月土木火 北交 南交；夜生：月土木火日金水 北交 南交（双交殿后）
+#: 日生：日金水月土木火 北交 南交；夜生产品口径：月土木火 北交 南交 日金水。
 _DAY_SEQUENCE = [Planet.SUN, Planet.VENUS, Planet.MERCURY, Planet.MOON,
                  Planet.SATURN, Planet.JUPITER, Planet.MARS,
                  Planet.NORTH_NODE, Planet.SOUTH_NODE]
-_NIGHT_SEQUENCE = [Planet.MOON, Planet.SATURN, Planet.JUPITER, Planet.MARS,
-                   Planet.SUN, Planet.VENUS, Planet.MERCURY,
-                   Planet.NORTH_NODE, Planet.SOUTH_NODE]
+_NIGHT_NODES_AFTER_MARS_SEQUENCE = [Planet.MOON, Planet.SATURN, Planet.JUPITER, Planet.MARS,
+                                    Planet.NORTH_NODE, Planet.SOUTH_NODE,
+                                    Planet.SUN, Planet.VENUS, Planet.MERCURY]
+_NIGHT_NODES_AT_END_SEQUENCE = [Planet.MOON, Planet.SATURN, Planet.JUPITER, Planet.MARS,
+                                Planet.SUN, Planet.VENUS, Planet.MERCURY,
+                                Planet.NORTH_NODE, Planet.SOUTH_NODE]
 _CHALDEAN = [Planet.SATURN, Planet.JUPITER, Planet.MARS, Planet.SUN,
              Planet.VENUS, Planet.MERCURY, Planet.MOON]
 
@@ -114,6 +117,7 @@ def compute_firdaria(
     birth_utc: datetime,
     sect: Sect,
     reference: datetime | None = None,
+    method: FirdariaMethod | str = FirdariaMethod.PRODUCT,
 ) -> FirdariaPeriod:
     """计算出生时刻（UTC）在参考时刻所处的法达大限 + 子限。"""
     birth = birth_utc
@@ -125,7 +129,7 @@ def compute_firdaria(
     if ref < birth:
         raise ValueError("参考时间早于出生时间")
 
-    sequence = _DAY_SEQUENCE if sect == Sect.DAY else _NIGHT_SEQUENCE
+    sequence = _sequence_for(sect, method)
 
     # 走大限（75 年后循环重来）
     cursor = birth
@@ -142,7 +146,14 @@ def compute_firdaria(
         cursor = end
         idx += 1
 
-    # 走子限：大限等分为 7 段（7 迦勒底主，从大限主开始，北交不作子限主）
+    # 节点大限读作整段南/北交主题，不再机械切成 7 个行星小运。
+    if major_lord in (Planet.NORTH_NODE, Planet.SOUTH_NODE):
+        return FirdariaPeriod(
+            major_lord=major_lord, major_start=major_start, major_end=major_end,
+            sub_lord=major_lord, sub_start=major_start, sub_end=major_end,
+        )
+
+    # 走子限：大限等分为 7 段（7 迦勒底主，从大限主开始）。
     # 依据宫神星网数据：月亮大限 9 年 ÷ 7 ≈ 470 天/段。
     major_days = max(1, (major_end - major_start).days)
     sub_days = major_days / 7.0
@@ -164,10 +175,18 @@ def compute_firdaria(
     )
 
 
+def _sequence_for(sect: Sect, method: FirdariaMethod | str) -> list[Planet]:
+    """按 preset 返回大限序列；产品默认采用夜生火星后接南北交。"""
+    selected = FirdariaMethod(method)
+    if sect == Sect.DAY:
+        return list(_DAY_SEQUENCE)
+    if selected == FirdariaMethod.NODES_AT_END:
+        return list(_NIGHT_NODES_AT_END_SEQUENCE)
+    return list(_NIGHT_NODES_AFTER_MARS_SEQUENCE)
+
+
 def _sub_order(major_lord: Planet) -> list[Planet]:
-    """子限主：7 迦勒底主，从大限主开始（北交/南交大限用完整迦勒底序）。"""
-    if major_lord in (Planet.NORTH_NODE, Planet.SOUTH_NODE):
-        return list(_CHALDEAN)
+    """子限主：7 迦勒底主，从大限主开始；节点大限在 compute_firdaria 中整段处理。"""
     idx = _CHALDEAN.index(major_lord)
     return _CHALDEAN[idx:] + _CHALDEAN[:idx]
 
@@ -189,9 +208,10 @@ def firdaria_reading(
     reference: datetime | None = None,
     domains: tuple[str, ...] = ("career", "wealth", "relationship"),
     top_n: int = 5,
+    method: FirdariaMethod | str = FirdariaMethod.PRODUCT,
 ) -> FirdariaReading:
     """法达 × 本命条件：读大限主/子限主管辖宫（含本命落宫）的语义场 + 行为特征。"""
-    period = compute_firdaria(chart.epoch_utc, chart.sect, reference)
+    period = compute_firdaria(chart.epoch_utc, chart.sect, reference, method)
     engine = HouseSignificationEngine(kb)
     major = _lord_reading(chart, kb, engine, period.major_lord, domains, top_n)
     sub = _lord_reading(chart, kb, engine, period.sub_lord, domains, top_n)

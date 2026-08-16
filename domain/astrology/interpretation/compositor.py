@@ -27,7 +27,7 @@ from domain.astrology.knowledge.loader import KnowledgeBase, domain_planet_roles
 
 # 有桥阈值：主相位(2.5)及以上算"通道兑现"
 _BRIDGE_MIN = 2.5
-# 轨分强/弱阈值：净吉凶分 ≥ +1.0 算强，≤ -1.0 算弱
+# 轨分强/弱阈值：轨A/B 读公共评估的正负轴差值，≥ +1.0 算强，≤ -1.0 算弱
 _TRACK_STRONG = 1.0
 _TRACK_WEAK = -1.0
 
@@ -39,7 +39,7 @@ class TrackResult:
     track: str                 # "A" / "B" / "C"
     kind: str                  # signification / lordship / bridge
     label: str                 # 中文轨名
-    score: float               # 净分（轨A/B：吉-凶；轨C：桥强度 0-4）
+    score: float               # 轨A/B：正负轴差值；轨C：桥强度 0-4
     verdict: str               # strong / weak / mixed / none
     evidence: tuple[str, ...]
     planets: tuple[str, ...]

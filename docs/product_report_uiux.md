@@ -108,7 +108,7 @@
 **Strategy 插件系统**：8 个领域默认策略（career 最重：Strength+Timing+Risk+Psychology 四模块 DAG）。新增技法 = 加 4 样东西（YAML 策略 + 分析模块/配方 + 知识库数据 + 注册），不改现有代码。
 
 **结论生成（Reasoner，完全无 LLM）**：
-- 净分 = 所有证据 权重×置信度 之和 → verdict（有利/不利/中性/数据不足）
+- 证据按 polarity 分轨汇总：权重×置信度 形成有利/不利/中性/数据不足 verdict
 - 核心模块失败 → 强制"数据不足"（宁可诚实不说，不硬造）
 - 产出 `Conclusion`：摘要 + 最多 6 条 findings（含 polarity/confidence）+ 时间窗口 + 建议 + 数据缺口
 
@@ -151,7 +151,7 @@ Timeline: windows 序列 + best_window + worst_window + overall_quality
 
 **回答长度**：deep 300-600 字；quick 120-180 字三段式（共情→核心判断→出路）。
 
-**咨询节奏（consult_method 编译进 prompt）**：本命基调优先 → 当前章节（法达/年主星）→ 对话验证（讲结构请用户核对）→ 验证通过才补行运时机。一轮只验证一条主线，给功课不给正确废话。
+**咨询节奏（consult_method 编译进 prompt）**：本命基调优先 → 当前章节（法达大限/子限）+ 本轮征象星/帮手星 → 对话验证（讲结构请用户核对）→ 验证通过才补行运触发时机。一轮只验证一条主线，给功课不给正确废话。
 
 ### 2.5 记忆能力（第四层）
 

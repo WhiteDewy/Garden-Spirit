@@ -293,7 +293,7 @@ assess_planet(chart, planet) -> PlanetState
 以下判断逻辑是反复实盘推演验证过的**资产**，抽取时**原样保留**，只收敛矛盾系数：
 
 1. **吉凶两论**——正负分开累积、不抵消（`_house_quality_dual`）
-2. **per-signification 调制**——词级基础 × 主星净吉凶 × 宫极性（`_strength`）
+2. **per-signification 调制**——词级基础 × governor 对应正/负轴 × 宫极性（`_strength`）
 3. **飞宫增强**（`_flight_boost`）
 4. **event 门控收敛**——gated + strong_count 强连接门槛
 5. **接纳三档**——磨合 / 外部压力 / 硬碰（dispositor `_quality`）

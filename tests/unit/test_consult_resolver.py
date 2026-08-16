@@ -4,8 +4,26 @@ from datetime import datetime, timezone
 
 import pytest
 
-from shared.enums import ChartType, HouseSystem, IntentDomain, Planet, PlanetSpeed, Sign, ZodiacType
-from shared.models import Chart, ChartPlanet, EclipticPosition, HouseCusp, HousePosition, SignPosition
+from shared.enums import (
+    AspectType,
+    ChartType,
+    DignityState,
+    HouseSystem,
+    IntentDomain,
+    Planet,
+    PlanetSpeed,
+    Sign,
+    ZodiacType,
+)
+from shared.models import (
+    Chart,
+    ChartAcceptance,
+    ChartPlanet,
+    EclipticPosition,
+    HouseCusp,
+    HousePosition,
+    SignPosition,
+)
 from shared.models.intent import Intent, IntentSlot
 
 from domain.reasoning.consult import (
@@ -31,7 +49,6 @@ def _planet(planet: Planet, sign: Sign, house: int, lon: float) -> ChartPlanet:
         speed=PlanetSpeed.DIRECT,
         speed_deg_per_day=1.0,
     )
-
 
 def _carrier_chart() -> Chart:
     now = datetime(2026, 8, 15, tzinfo=timezone.utc)
@@ -60,6 +77,47 @@ def _carrier_chart() -> Chart:
             Planet.PLUTO: _planet(Planet.PLUTO, Sign.LIBRA, 7, 190.0),
         },
     )
+
+def _marriage_ally_chart(*, with_ally: bool) -> Chart:
+    """7宫宫头白羊 → 7R 火星；火星落天秤失势，用显式接纳快照模拟援军。"""
+    now = datetime(2026, 8, 15, tzinfo=timezone.utc)
+    chart = Chart(
+        id="marriage_ally_chart",
+        person_id="p_marriage_ally",
+        chart_type=ChartType.NATAL,
+        calculated_at_utc=now,
+        julian_day=0.0,
+        epoch_utc=now,
+        location="test",
+        zodiac=ZodiacType.TROPICAL,
+        house_system=HouseSystem.WHOLE_SIGN,
+        house_cusps={
+            1: HouseCusp(1, 180.0, Sign.LIBRA),
+            5: HouseCusp(5, 300.0, Sign.AQUARIUS),
+            7: HouseCusp(7, 0.0, Sign.ARIES),
+            10: HouseCusp(10, 90.0, Sign.CANCER),
+        },
+        planets={
+            Planet.MARS: _planet(Planet.MARS, Sign.LIBRA, 1, 190.0),
+            Planet.VENUS: _planet(Planet.VENUS, Sign.LIBRA, 1, 195.0),
+            Planet.MOON: _planet(Planet.MOON, Sign.CANCER, 10, 95.0),
+            Planet.SUN: _planet(Planet.SUN, Sign.LEO, 11, 125.0),
+        },
+    )
+    if with_ally:
+        chart.acceptances = [
+            ChartAcceptance(
+                acceptor=Planet.VENUS,
+                accepted=Planet.MARS,
+                dignities=(DignityState.DOMICILE,),
+                dignity_type=DignityState.DOMICILE,
+                score=5,
+                aspect_type=AspectType.CONJUNCTION,
+                aspect_nature="HARMONIOUS",
+                description_zh="金星接纳火星",
+            )
+        ]
+    return chart
 
 
 class TestConsultCallPlan:
@@ -153,6 +211,55 @@ class TestConsultCallPlan:
         assert "venus" in d["house_lord_planets"]
         assert any(item["house"] == 7 and item["lord_house"] == 9 for item in d["house_lord_placements"])
         assert d["house_occupants"] == ["sun", "moon", "pluto"]
+
+    def test_scenario_map_triggers_debilitated_lord_with_ally(self, resolver):
+        """阶段4：scenario_maps 的 has_ally 必须由真实 Chart 接纳链触发。"""
+        plan = resolver.resolve_call_plan("我能和他结婚吗", chart=_marriage_ally_chart(with_ally=True))
+
+        matched = [
+            s for s in plan.scenarios
+            if s.get("condition") == "7R debilitated + has_ally"
+        ]
+        assert len(matched) == 1
+        scenario = matched[0]
+        assert scenario["matched"] is True
+        assert scenario["target_house"] == 7
+        assert scenario["target_lord"] == "mars"
+        assert scenario["target_planet_name"] == "火星"
+        assert scenario["essential_neg"] > 0
+        assert scenario["ally_planet"] == "venus"
+        assert scenario["ally_name"] == "金星"
+        assert scenario["ally_kind"] == "acceptance"
+        assert scenario["ally_aspect"] == "conjunction"
+        assert scenario["ally_domain"] == "1宫领域"
+        assert scenario["ally_timeline"][0]["helper"] == "venus"
+        assert "金星" in scenario["say"]
+        assert "1宫领域" in scenario["say"]
+        assert "{al ally_name}" not in scenario["say"]
+
+    def test_scenario_map_keeps_no_ally_when_chain_absent(self, resolver):
+        """阶段4：没有接纳/互溶帮手时，has_ally 不应误命中。"""
+        plan = resolver.resolve_call_plan("我能和他结婚吗", chart=_marriage_ally_chart(with_ally=False))
+
+        conditions = [s.get("condition") for s in plan.scenarios if s.get("type") == "topic"]
+        assert "7R debilitated + has_ally" not in conditions
+        assert "7R afflicted + ally_timeline_exists" not in conditions
+        assert "7R debilitated + no_ally" in conditions
+        no_ally = next(s for s in plan.scenarios if s.get("condition") == "7R debilitated + no_ally")
+        assert no_ally["matched"] is True
+        assert no_ally["target_lord"] == "mars"
+        assert "ally_planet" not in no_ally
+
+    def test_scenario_map_without_chart_preserves_template_layer(self, resolver):
+        """兼容层：无 Chart 时仍把 YAML 场景模板交给 prompt，不做伪判断。"""
+        plan = resolver.resolve_call_plan("我能和他结婚吗")
+
+        conditions = [s.get("condition") for s in plan.scenarios if s.get("type") == "topic"]
+        assert "7R debilitated + has_ally" in conditions
+        assert "7R debilitated + no_ally" in conditions
+        template = next(s for s in plan.scenarios if s.get("condition") == "7R debilitated + has_ally")
+        assert "matched" not in template
+        assert "{al ally_name}" in template["say"]
 
 
 # =============================================================================

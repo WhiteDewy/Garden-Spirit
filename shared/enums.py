@@ -73,11 +73,18 @@ class ChartType(str, Enum):
     TRANSIT = "transit"
     SOLAR_RETURN = "solar_return"
     LUNAR_RETURN = "lunar_return"
-    ANNUAL_PROFECTION = "annual_profection"
     FIRDARIA = "firdaria"
     SECONDARY_PROGRESSION = "secondary_progression"
     SYNASTRY = "synastry"
     COMPOSITE = "composite"
+
+
+class FirdariaMethod(str, Enum):
+    """法达大限排法 preset。"""
+
+    PRODUCT = "product"  # Garden-Spirit 产品默认：夜生火星后接南北交
+    NOCTURNAL_NODES_AFTER_MARS = "nocturnal_nodes_after_mars"
+    NODES_AT_END = "nodes_at_end"
 
 
 class ZodiacType(str, Enum):

@@ -60,6 +60,7 @@ def build_timing_stack(
     reference: datetime | None = None,
     location: GeoLocation | None = None,
     house_system=None,
+    enrichment: dict | None = None,
 ) -> TimingStack:
     """合成当前时期（法达 + 返回盘 + 推运 + 行运）。"""
     loc = location or person.birth.location
@@ -68,13 +69,14 @@ def build_timing_stack(
     if ref.tzinfo is None:
         ref = ref.replace(tzinfo=timezone.utc)
 
-    # 行运窗口（法达大限/子限 + 逐月扫描）
+    # 行运窗口（法达大限/子限 + 本轮问题征象星 + 接纳/互溶帮手星）
     timing = Timing(kb)
     firdaria = firdaria_reading(chart, kb, ref)
     targets = timing._timing_targets(
         chart,
         firdaria.period.major_lord,
         firdaria.period.sub_lord,
+        enrichment,
     )
     helper_targets = timing._helper_targets(chart, targets)
     scoring_targets = targets | helper_targets

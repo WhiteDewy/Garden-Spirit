@@ -12,7 +12,7 @@ from domain.astrology.calculation import NatalChartCalculator
 from domain.astrology.knowledge import load_knowledge
 from domain.astrology.interpretation import affliction_readings, natal_reading
 from domain.timeline.firdaria import compute_firdaria, firdaria_reading, house_rulers, time_lord_character
-from shared.enums import HouseSystem, Planet, Sect
+from shared.enums import FirdariaMethod, HouseSystem, Planet, Sect
 from shared.models import BirthData, GeoLocation, Person
 
 
@@ -63,19 +63,52 @@ def test_firdaria_moon_major_mars_sub(chart):
     assert 400 <= days <= 550
 
 
-def test_firdaria_day_night_sequences():
-    """昼夜序列：日生从太阳起、夜生从月亮起，双交殿后（古典规则）。"""
+def test_firdaria_product_night_nodes_after_mars_and_compatibility():
+    """产品默认：夜生火星后接南北交；nodes_at_end 只作为旧口径 compatibility preset。"""
     day_chart = NatalChartCalculator().compute(_person(9, 25))
     assert day_chart.sect == Sect.DAY
     assert compute_firdaria(day_chart.epoch_utc, day_chart.sect, day_chart.epoch_utc).major_lord == Planet.SUN
 
     night_chart = NatalChartCalculator().compute(_person(22, 0))
     assert night_chart.sect == Sect.NIGHT
-    # 夜生：从月亮起
     assert compute_firdaria(night_chart.epoch_utc, night_chart.sect, night_chart.epoch_utc).major_lord == Planet.MOON
+
+    age_39 = night_chart.epoch_utc.replace(year=night_chart.epoch_utc.year + 39)
+    age_42 = night_chart.epoch_utc.replace(year=night_chart.epoch_utc.year + 42)
+    age_44 = night_chart.epoch_utc.replace(year=night_chart.epoch_utc.year + 44)
+    assert compute_firdaria(night_chart.epoch_utc, night_chart.sect, age_39).major_lord == Planet.NORTH_NODE
+    assert compute_firdaria(night_chart.epoch_utc, night_chart.sect, age_42).major_lord == Planet.SOUTH_NODE
+    assert compute_firdaria(night_chart.epoch_utc, night_chart.sect, age_44).major_lord == Planet.SUN
+
+    compat = compute_firdaria(
+        night_chart.epoch_utc,
+        night_chart.sect,
+        age_39,
+        method=FirdariaMethod.NODES_AT_END,
+    )
+    assert compat.major_lord == Planet.SUN
+
     # 日生 75 年周期（含双交）验证：日生 @ birth+75年 应回到太阳
     late = compute_firdaria(day_chart.epoch_utc, day_chart.sect, day_chart.epoch_utc.replace(year=day_chart.epoch_utc.year + 75))
     assert late.major_lord == Planet.SUN
+
+
+def test_firdaria_node_major_is_whole_node_period():
+    """节点大限读整段南/北交主题，不再机械切成 7 个行星子限。"""
+    night_chart = NatalChartCalculator().compute(_person(22, 0))
+    north_ref = night_chart.epoch_utc.replace(year=night_chart.epoch_utc.year + 40)
+    north = compute_firdaria(night_chart.epoch_utc, night_chart.sect, north_ref)
+    assert north.major_lord == Planet.NORTH_NODE
+    assert north.sub_lord == Planet.NORTH_NODE
+    assert north.sub_start == north.major_start
+    assert north.sub_end == north.major_end
+
+    south_ref = night_chart.epoch_utc.replace(year=night_chart.epoch_utc.year + 43)
+    south = compute_firdaria(night_chart.epoch_utc, night_chart.sect, south_ref)
+    assert south.major_lord == Planet.SOUTH_NODE
+    assert south.sub_lord == Planet.SOUTH_NODE
+    assert south.sub_start == south.major_start
+    assert south.sub_end == south.major_end
 
 
 def test_house_rulers_including_intercepted(chart, kb):

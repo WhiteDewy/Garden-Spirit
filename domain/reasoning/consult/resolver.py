@@ -9,16 +9,19 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+import re
 
 import yaml
 
 from foundation.logger import get_logger
 from shared.constants import DOMICILE_RULER_TRADITIONAL, PLANETS_IN_ORDER
-from shared.enums import IntentDomain
+from shared.enums import IntentDomain, Planet
 from shared.models import Chart
 from shared.models.intent import Intent
 
-from domain.astrology.knowledge.loader import domain_planet_roles
+from domain.astrology.common import DIGNITY_ZH, assess_planet
+from domain.astrology.interpretation.synapsis import ConnectionClassifier
+from domain.astrology.knowledge.loader import domain_planet_roles, load_knowledge
 
 logger = get_logger("reasoning.consult")
 
@@ -217,7 +220,12 @@ class ConsultResolver:
 
         # 4. 旧 prompt payload 保持原样，确保 LLM 只拿叙事结构不改结论
         cross_readings = self._match_cross_readings(topic_id, focus_house, supplementary)
-        scenarios = self._match_scenarios(topic_id)
+        scenarios = self._match_scenarios(
+            topic_id,
+            chart=chart,
+            house_lords=house_lords,
+            house_lord_placements=house_lord_placements,
+        )
         output_structure = self._natal_comp.get("output_structures", {}).get(topic_id)
         guardrails = self._format_guardrails(self._natal_comp.get("guardrails", []))
 
@@ -538,23 +546,205 @@ class ConsultResolver:
     # 场景映射匹配
     # -----------------------------------------------------------------
 
-    def _match_scenarios(self, topic_id: str) -> list[dict]:
-        """匹配适用于当前话题的场景映射。"""
+    def _match_scenarios(
+        self,
+        topic_id: str,
+        *,
+        chart: Chart | None = None,
+        house_lords: list[int] | None = None,
+        house_lord_placements: list[dict] | None = None,
+    ) -> list[dict]:
+        """匹配适用于当前话题的场景映射。
+
+        无 chart 时保留 YAML 模板，作为旧 prompt 兼容层；有 chart 时只输出真实命中的
+        topic scenarios，并把帮手星/受克状态作为可审计 payload 带出去。
+        """
         scenario_maps = self._natal_comp.get("scenario_maps", {})
         matched: list[dict] = []
 
-        # 通用场景（lord_angularity）
+        # 通用场景（lord_angularity）仍是模板层，等待后续阶段逐条图上化。
         general = scenario_maps.get("lord_angularity", {})
         if general:
             matched.append({"type": "general", "rules": general})
 
-        # 话题专属场景
         topic_scenario_key = f"{topic_id}_scenarios"
         topic_scenarios = scenario_maps.get(topic_scenario_key, [])
         for s in topic_scenarios:
-            matched.append({"type": "topic", "condition": s.get("condition", ""), "say": s.get("say", "")})
+            base = {"type": "topic", "condition": s.get("condition", ""), "say": s.get("say", "")}
+            if chart is None:
+                matched.append(base)
+                continue
+
+            evaluated = self._evaluate_topic_scenario(
+                base,
+                chart=chart,
+                house_lords=house_lords or [],
+                house_lord_placements=house_lord_placements or [],
+            )
+            if evaluated is not None:
+                matched.append(evaluated)
 
         return matched
+
+    def _evaluate_topic_scenario(
+        self,
+        scenario: dict,
+        *,
+        chart: Chart,
+        house_lords: list[int],
+        house_lord_placements: list[dict],
+    ) -> dict | None:
+        """把 YAML condition 落到真实 Chart 上；暂只实现 Phase 4 可审计帮手链。"""
+        condition = str(scenario.get("condition", ""))
+        lord_match = re.search(r"(\d{1,2})R", condition)
+        if not lord_match:
+            return None
+        target_house = int(lord_match.group(1))
+        if target_house not in house_lords:
+            return None
+        target_planet = self._scenario_lord_planet(chart, target_house)
+        if target_planet is None or target_planet not in chart.planets:
+            return None
+
+        kb = self._kb_or_load()
+        classifier = ConnectionClassifier(kb)
+        assessment = assess_planet(chart, kb, target_planet, classifier=classifier)
+        allies = classifier.ally_timeline(chart, target_planet)
+        has_ally = bool(allies)
+        debilitated = assessment.essential_neg > 0
+        afflicted = assessment.relational_neg > 0
+        placement = self._scenario_lord_placement(house_lord_placements, target_house, target_planet)
+
+        matched = self._condition_matches(
+            condition,
+            target_planet=target_planet,
+            debilitated=debilitated,
+            afflicted=afflicted,
+            has_ally=has_ally,
+            lord_house=placement.get("lord_house") if placement else None,
+        )
+        if not matched:
+            return None
+
+        payload = {
+            **scenario,
+            "matched": True,
+            "target_house": target_house,
+            "target_lord": target_planet.value,
+            "target_planet": target_planet.value,
+            "target_planet_name": kb.planet(target_planet).name_zh,
+            "essential_neg": assessment.essential_neg,
+            "relational_neg": assessment.relational_neg,
+            "essential_evidence": list(assessment.essential_ev),
+            "relational_evidence": list(assessment.relational_ev),
+        }
+        if placement:
+            payload["target_lord_placement"] = placement
+        if allies:
+            ally = allies[0]
+            payload.update({
+                "ally_planet": ally.helper.value,
+                "ally_name": kb.planet(ally.helper).name_zh,
+                "ally_kind": ally.kind,
+                "ally_strength": ally.strength,
+                "ally_dignity": ally.dignity_type.value,
+                "ally_dignity_label": DIGNITY_ZH.get(ally.dignity_type, ally.dignity_type.value),
+                "ally_aspect": ally.aspect_type,
+                "ally_aspect_nature": ally.aspect_nature,
+                "ally_detail": ally.detail,
+                "ally_domain": self._ally_domain_label(chart, ally.helper),
+                "ally_timeline": [self._ally_payload(chart, a) for a in allies],
+            })
+        payload["say"] = self._fill_scenario_say(str(payload.get("say", "")), payload)
+        return payload
+
+    def _condition_matches(
+        self,
+        condition: str,
+        *,
+        target_planet: Planet,
+        debilitated: bool,
+        afflicted: bool,
+        has_ally: bool,
+        lord_house: int | None,
+    ) -> bool:
+        """支持 scenario_maps 当前已声明且可由 Domain facts 安全判断的条件片段。"""
+        if re.search(r"\bno_ally\b", condition) and has_ally:
+            return False
+        if re.search(r"\b(has_ally|ally_timeline_exists)\b", condition) and not has_ally:
+            return False
+        if "debilitated" in condition and not debilitated:
+            return False
+        if "afflicted" in condition and not afflicted:
+            return False
+        in_house = re.search(r"\b\d{1,2}R in (\d{1,2})\b", condition)
+        if in_house and lord_house != int(in_house.group(1)):
+            return False
+        if "in cadent" in condition and lord_house not in {3, 6, 9, 12}:
+            return False
+        if "jupiter_mutual" in condition and target_planet != Planet.JUPITER:
+            return False
+        if "dignified" in condition:
+            return False
+        if "connected_to" in condition or "not_connected_to" in condition:
+            return False
+        if "strong" in condition or "weak" in condition:
+            return False
+        return any(token in condition for token in ("has_ally", "no_ally", "ally_timeline_exists"))
+
+    def _scenario_lord_planet(self, chart: Chart, house: int) -> Planet | None:
+        cusp = chart.house_cusps.get(house)
+        if cusp is None:
+            return None
+        return DOMICILE_RULER_TRADITIONAL.get(cusp.sign)
+
+    @staticmethod
+    def _scenario_lord_placement(
+        house_lord_placements: list[dict],
+        house: int,
+        planet: Planet,
+    ) -> dict | None:
+        for item in house_lord_placements:
+            if item.get("house") == house and item.get("lord") == planet.value:
+                return item
+        return None
+
+    def _ally_payload(self, chart: Chart, ally) -> dict:
+        kb = self._kb_or_load()
+        return {
+            "target": ally.target.value,
+            "helper": ally.helper.value,
+            "helper_name": kb.planet(ally.helper).name_zh,
+            "kind": ally.kind,
+            "strength": ally.strength,
+            "dignity": ally.dignity_type.value,
+            "aspect": ally.aspect_type,
+            "aspect_nature": ally.aspect_nature,
+            "detail": ally.detail,
+            "domain": self._ally_domain_label(chart, ally.helper),
+        }
+
+    @staticmethod
+    def _fill_scenario_say(template: str, payload: dict) -> str:
+        """填充已图上命中的场景文案；兼容 YAML 里的 `{al ally_name}` 拼写。"""
+        text = template.replace("{al ally_name}", "{ally_name}")
+        for key in ("ally_name", "ally_domain", "target_planet_name"):
+            value = payload.get(key)
+            if value is not None:
+                text = text.replace("{" + key + "}", str(value))
+        return text
+
+    @staticmethod
+    def _ally_domain_label(chart: Chart, planet: Planet) -> str:
+        placement = chart.planets.get(planet)
+        if placement is None:
+            return f"{planet.value}领域"
+        return f"{placement.house.house}宫领域"
+
+    def _kb_or_load(self):
+        if self._kb is None:
+            self._kb = load_knowledge()
+        return self._kb
 
     # -----------------------------------------------------------------
     # 护栏
