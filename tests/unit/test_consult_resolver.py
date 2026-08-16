@@ -1,8 +1,11 @@
 """Consult Resolver 单元测试 —— 话题解析 + 转宫推导 + prompt 生成。"""
 
+from datetime import datetime, timezone
+
 import pytest
 
-from shared.enums import IntentDomain
+from shared.enums import ChartType, HouseSystem, IntentDomain, Planet, PlanetSpeed, Sign, ZodiacType
+from shared.models import Chart, ChartPlanet, EclipticPosition, HouseCusp, HousePosition, SignPosition
 from shared.models.intent import Intent, IntentSlot
 
 from domain.reasoning.consult import (
@@ -17,6 +20,46 @@ from domain.reasoning.consult import (
 @pytest.fixture(scope="module")
 def resolver():
     return ConsultResolver()
+
+
+def _planet(planet: Planet, sign: Sign, house: int, lon: float) -> ChartPlanet:
+    return ChartPlanet(
+        planet=planet,
+        ecliptic=EclipticPosition(longitude=lon),
+        sign=SignPosition(sign=sign, degree_absolute=lon, degree_in_sign=lon % 30.0),
+        house=HousePosition(house=house, cusp_degree=0.0, distance_from_cusp=0.0),
+        speed=PlanetSpeed.DIRECT,
+        speed_deg_per_day=1.0,
+    )
+
+
+def _carrier_chart() -> Chart:
+    now = datetime(2026, 8, 15, tzinfo=timezone.utc)
+    return Chart(
+        id="carrier_chart",
+        person_id="p_carrier",
+        chart_type=ChartType.NATAL,
+        calculated_at_utc=now,
+        julian_day=0.0,
+        epoch_utc=now,
+        location="test",
+        zodiac=ZodiacType.TROPICAL,
+        house_system=HouseSystem.WHOLE_SIGN,
+        house_cusps={
+            1: HouseCusp(1, 0.0, Sign.ARIES),
+            5: HouseCusp(5, 120.0, Sign.LEO),
+            7: HouseCusp(7, 180.0, Sign.LIBRA),
+            10: HouseCusp(10, 270.0, Sign.CAPRICORN),
+        },
+        planets={
+            Planet.SUN: _planet(Planet.SUN, Sign.LEO, 5, 125.0),
+            Planet.MOON: _planet(Planet.MOON, Sign.LIBRA, 7, 185.0),
+            Planet.VENUS: _planet(Planet.VENUS, Sign.SAGITTARIUS, 9, 250.0),
+            Planet.MARS: _planet(Planet.MARS, Sign.ARIES, 1, 10.0),
+            Planet.SATURN: _planet(Planet.SATURN, Sign.CAPRICORN, 10, 275.0),
+            Planet.PLUTO: _planet(Planet.PLUTO, Sign.LIBRA, 7, 190.0),
+        },
+    )
 
 
 class TestConsultCallPlan:
@@ -84,6 +127,32 @@ class TestConsultCallPlan:
         assert plan.domain == "self"
         assert plan.focus_house == 3
         assert plan.focus_slice == "表达"
+
+    def test_call_plan_derives_actual_house_lord_from_chart(self, resolver):
+        """R10：7R 来自实盘 7 宫宫头星座，而不是 YAML 写死 governors。"""
+        plan = resolver.resolve_call_plan("我能和他结婚吗", chart=_carrier_chart())
+        assert 7 in plan.house_lords                         # 兼容：仍是要追踪的宫号
+        assert "venus" in plan.house_lord_planets           # Libra cusp → traditional Venus
+        assert {
+            "house": 7,
+            "cusp_sign": "libra",
+            "lord": "venus",
+            "lord_house": 9,
+            "lord_sign": "sagittarius",
+        } in plan.house_lord_placements
+
+    def test_call_plan_derives_core_house_occupants_from_chart(self, resolver):
+        """R10：核心宫内星来自实盘行星落宫，非静态配置。"""
+        plan = resolver.resolve_call_plan("我能和他结婚吗", chart=_carrier_chart())
+        assert plan.house_occupants == ["sun", "moon", "pluto"]
+        assert "venus" in plan.natural_significators
+
+    def test_call_plan_serializes_dynamic_carriers(self, resolver):
+        d = resolver.resolve_call_plan("我能和他结婚吗", chart=_carrier_chart()).to_dict()
+        assert 7 in d["house_lords"]
+        assert "venus" in d["house_lord_planets"]
+        assert any(item["house"] == 7 and item["lord_house"] == 9 for item in d["house_lord_placements"])
+        assert d["house_occupants"] == ["sun", "moon", "pluto"]
 
 
 # =============================================================================

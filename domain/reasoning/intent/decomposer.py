@@ -332,9 +332,8 @@ class IntentDecomposer:
                         continue
                     word = entry.get("word", "")
                     domains = "/".join(entry.get("domains", [])[:3])
-                    governors = "/".join(str(g) for g in entry.get("governors", [])[:3])
                     if word:
-                        snippets.append(f"{word} [{domains}] governors={governors}")
+                        snippets.append(f"{word} [{domains}]")
                     for kw in entry.get("route_keywords", []) or []:
                         if kw and kw not in route_terms:
                             route_terms.append(str(kw))

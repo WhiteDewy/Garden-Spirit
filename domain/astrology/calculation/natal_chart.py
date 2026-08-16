@@ -27,7 +27,9 @@ from shared.enums import (
 from shared.models import (
     Aspect,
     Chart,
+    ChartAcceptance,
     ChartPlanet,
+    ChartReception,
     EclipticPosition,
     EssentialDignity,
     HouseCusp,
@@ -46,6 +48,35 @@ logger = get_logger("astrology.calculation")
 
 # 参与相位计算的天体（含节点/凯龙/莉莉丝，容许度更小由 aspects.yaml 控制）
 _ASPECT_BODIES = list(SE_PLANET_IDS.keys())
+
+
+def _chart_reception(r) -> ChartReception:
+    """ReceptionEngine 输出 → 可序列化的 Chart 快照。"""
+    return ChartReception(
+        planet_a=r.planet_a,
+        planet_b=r.planet_b,
+        dignities_of_a_at_b=tuple(r.dignities_of_a_at_b),
+        dignities_of_b_at_a=tuple(r.dignities_of_b_at_a),
+        dignity_type=r.dignity_type,
+        score=r.score,
+        aspect_type=r.aspect_type,
+        aspect_nature=r.aspect_nature,
+        description_zh=r.description_zh,
+    )
+
+
+def _chart_acceptance(a) -> ChartAcceptance:
+    """AcceptanceEngine 输出 → 可序列化的 Chart 快照。"""
+    return ChartAcceptance(
+        acceptor=a.acceptor,
+        accepted=a.accepted,
+        dignities=tuple(a.dignities),
+        dignity_type=a.dignity_type,
+        score=a.score,
+        aspect_type=a.aspect_type,
+        aspect_nature=a.aspect_nature,
+        description_zh=a.description_zh,
+    )
 
 
 class NatalChartCalculator:
@@ -113,6 +144,12 @@ class NatalChartCalculator:
         receptions = self.reception_engine.detect(
             {p: (pe.sign.sign, pe.sign.degree_in_sign) for p, pe in planet_entries.items()},
             sect=sect,
+            aspects=aspects,
+        )
+        acceptances = self.reception_engine.detect_acceptance(
+            {p: (pe.sign.sign, pe.sign.degree_in_sign) for p, pe in planet_entries.items()},
+            aspects,
+            sect=sect,
         )
 
         # 6. 特殊点（福点等）
@@ -140,6 +177,8 @@ class NatalChartCalculator:
             midheaven=self._sign_position(house_data["midheaven"]),
             aspects=aspects,
             dignities=dignities,
+            receptions=[_chart_reception(r) for r in receptions],
+            acceptances=[_chart_acceptance(a) for a in acceptances],
             lots=lots,
             sect=sect,
             moon_phase=moon_phase,

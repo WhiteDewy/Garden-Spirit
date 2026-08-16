@@ -19,10 +19,10 @@ from shared.constants import ASPECT_ZH
 from shared.enums import DignityState, EvidencePolarity, FactCategory, Planet
 from shared.models import Chart, Fact, Person
 
-from domain.analysis.base import AnalysisModule
+from domain.analysis.base import AnalysisModule, focus_planets_from_enrichment
 from domain.astrology.knowledge import DignityEngine, load_knowledge
 
-from domain.astrology.common import aspects_to, aspect_score, house_lord, theme_fact
+from domain.astrology.common import aspects_to, aspect_score, assess_planet, house_lord, theme_fact
 
 logger = get_logger("analysis.risk")
 
@@ -52,6 +52,15 @@ class Risk(AnalysisModule):
         mc_ruler = house_lord(chart, self._kb, 10)
 
         targets = _RISK_TARGETS | ({mc_ruler} if mc_ruler else set())
+        targets.update(
+            focus_planets_from_enrichment(
+                chart,
+                self._kb,
+                params.get("_enrichment"),
+                include_house_lords=True,
+                include_focus_houses=True,
+            )
+        )
 
         # 1. 凶星对事业行星的紧张相位
         for target in targets:
@@ -92,6 +101,7 @@ class Risk(AnalysisModule):
                 mc_ruler, cp.sign.sign, cp.sign.degree_in_sign, chart.sect
             )
             if any(s in (DignityState.DETRIMENT, DignityState.FALL) for s in states):
+                assessment = assess_planet(chart, self._kb, mc_ruler)
                 score += -4
                 facts.append(
                     Fact(
@@ -107,6 +117,9 @@ class Risk(AnalysisModule):
                             "planet": mc_ruler.value,
                             "dignity": "detriment" if DignityState.DETRIMENT in states else "fall",
                             "score": -4,
+                            "raw_score": total,
+                            "essential_pos": assessment.essential_pos,
+                            "essential_neg": assessment.essential_neg,
                             "theme": "career_risk",
                             "module": self.name,
                         },
@@ -116,7 +129,7 @@ class Risk(AnalysisModule):
         # 3. 事业行星落 12 宫 → 隐性障碍
         for planet in targets:
             if planet in chart.planets and chart.planets[planet].house.house == 12:
-                score += 1.5
+                score += -1.5
                 facts.append(
                     Fact(
                         id=new_id("fact"),
@@ -127,13 +140,13 @@ class Risk(AnalysisModule):
                             "可能有未显化的隐性障碍"
                         ),
                         extracted_at=datetime.now(timezone.utc),
-                        payload={"planet": planet.value, "house": 12},
+                        payload={"planet": planet.value, "house": 12, "score": -1.5, "theme": "career_risk", "module": self.name},
                     )
                 )
 
         # 4. 土星落 6 宫 → 工作负荷风险
         if chart.planets.get(Planet.SATURN) and chart.planets[Planet.SATURN].house.house == 6:
-            score += 1.0
+            score += -1.0
             facts.append(
                 Fact(
                     id=new_id("fact"),
@@ -141,14 +154,14 @@ class Risk(AnalysisModule):
                     chart_id=chart.id,
                     description="土星落在第六宫，日常工作负荷偏大",
                     extracted_at=datetime.now(timezone.utc),
-                    payload={"planet": "saturn", "house": 6},
+                    payload={"planet": "saturn", "house": 6, "score": -1.0, "theme": "career_risk", "module": self.name},
                 )
             )
 
         # 5. 主题总结
         if facts:
             polarity = (
-                EvidencePolarity.NEGATIVE if score > 1.0
+                EvidencePolarity.NEGATIVE if score < -1.0
                 else EvidencePolarity.NEUTRAL
             )
             weight = min(4.0, max(0.5, abs(score)))

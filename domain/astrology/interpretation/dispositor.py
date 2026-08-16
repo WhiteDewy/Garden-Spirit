@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from shared.enums import AspectType, Planet
 from shared.models import Chart
 
-from domain.astrology.common import aspects_to, dignity_total, house_rulers
+from domain.astrology.common import aspects_to, assess_planet, house_rulers
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
 from domain.astrology.knowledge.loader import KnowledgeBase
 
@@ -109,6 +109,7 @@ def _quality(
             hard += 0.5  # 外部压力（世代/虚点，不参与接纳）
         else:
             hard += 0.8  # 实星硬碰
-    if dignity_total(chart, kb, lord) < 0:
-        hard += 1.0  # 落陷/失势
+    assessment = assess_planet(chart, kb, lord, classifier=classifier)
+    if assessment.essential_neg > 0:
+        hard += 1.0  # 落陷/失势；保留本质轴内部吉凶两论，不用净分抹掉小尊贵
     return "ke" if hard >= 1.5 else "jin"

@@ -4,7 +4,7 @@
 + 本模块的确定性规则决定，与 LLM 无关。
 
 通用规则（所有意图共享）：
-- DIGNITY 事实   → 极性 = 分值符号，权重 = |分值|，置信度 = 与得分的相关性
+- DIGNITY 事实   → 极性 = 分值符号，权重 = |分值|；若同时给出 essential_pos/essential_neg，则本质轴吉凶并见优先保留受克
 - ASPECT 事实    → 极性 = 相位性质（吉/凶/中性），权重 = weight_multiplier，入相加成
 - RECEPTION 事实 → 极性 = 正，权重 = 互容分
 - THEME 事实     → 由分析模块写入 weight/polarity，本模块直接采纳（分析模块必须来自 Domain）
@@ -109,6 +109,10 @@ class EvidenceBuilder:
     def _dignity_evidence(self, fact: Fact, domain: str) -> Evidence | None:
         state = fact.payload.get("dignity")
         score = int(fact.payload.get("score", 0))
+        essential_pos = float(fact.payload.get("essential_pos", 0.0))
+        essential_neg = float(fact.payload.get("essential_neg", 0.0))
+        if essential_pos > 0 and essential_neg > 0 and score > 0:
+            score = -int(round(essential_neg / 0.35))
         if state is None:
             return None
 

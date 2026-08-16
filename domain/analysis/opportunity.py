@@ -19,10 +19,10 @@ from shared.constants import ASPECT_ZH
 from shared.enums import DignityState, EvidencePolarity, FactCategory, Planet
 from shared.models import Chart, Fact, Person
 
-from domain.analysis.base import AnalysisModule
+from domain.analysis.base import AnalysisModule, focus_planets_from_enrichment
 from domain.astrology.knowledge import DignityEngine, load_knowledge
 
-from domain.astrology.common import aspects_to, aspect_score, house_lord, theme_fact
+from domain.astrology.common import aspects_to, aspect_score, assess_planet, house_lord, theme_fact
 
 logger = get_logger("analysis.opportunity")
 
@@ -45,6 +45,15 @@ class Opportunity(AnalysisModule):
         mc_ruler = house_lord(chart, self._kb, 10)
 
         targets = _OPPORTUNITY_TARGETS | ({mc_ruler} if mc_ruler else set())
+        targets.update(
+            focus_planets_from_enrichment(
+                chart,
+                self._kb,
+                params.get("_enrichment"),
+                include_house_lords=True,
+                include_focus_houses=True,
+            )
+        )
 
         # 1. 吉星对事业行星的助力相位
         for target in targets:
@@ -81,10 +90,12 @@ class Opportunity(AnalysisModule):
         # 2. 木星尊贵（扩张/好运）
         jup = chart.planets.get(Planet.JUPITER)
         if jup:
-            states, total = self._dignity.compute(
+            states, _ = self._dignity.compute(
                 Planet.JUPITER, jup.sign.sign, jup.sign.degree_in_sign, chart.sect
             )
-            if total >= 3:
+            jup_assessment = assess_planet(chart, self._kb, Planet.JUPITER)
+            total = self._raw_essential_score(jup_assessment)
+            if total >= 3 and jup_assessment.essential_neg == 0:
                 score += total
                 facts.append(
                     Fact(
@@ -101,6 +112,9 @@ class Opportunity(AnalysisModule):
                             "sign": jup.sign.sign.value,
                             "dignity": self._top_dignity(states).value,
                             "score": total,
+                            "raw_score": total,
+                            "essential_pos": jup_assessment.essential_pos,
+                            "essential_neg": jup_assessment.essential_neg,
                             "theme": "career_opportunity",
                             "module": self.name,
                         },
@@ -110,9 +124,11 @@ class Opportunity(AnalysisModule):
         # 3. 11 宫主（人脉/贵人）
         h11_lord = house_lord(chart, self._kb, 11)
         if h11_lord and h11_lord in chart.planets:
-            total = self._dignity_total(h11_lord, chart)
+            h11_assessment = assess_planet(chart, self._kb, h11_lord)
+            total = self._raw_essential_score(h11_assessment)
+            h11_strong = h11_assessment.essential_pos > 0 and h11_assessment.essential_neg == 0
             h11 = chart.planets[h11_lord].house.house
-            if total >= 2 or h11 == 11 or h11 == 1:
+            if (total >= 2 and h11_strong) or h11 == 11 or h11 == 1:
                 score += 2.0
                 facts.append(
                     Fact(
@@ -131,8 +147,9 @@ class Opportunity(AnalysisModule):
         # 4. 2 宫主（收入机会）
         h2_lord = house_lord(chart, self._kb, 2)
         if h2_lord and h2_lord in chart.planets:
-            total = self._dignity_total(h2_lord, chart)
-            if total >= 2:
+            h2_assessment = assess_planet(chart, self._kb, h2_lord)
+            total = self._raw_essential_score(h2_assessment)
+            if total >= 2 and h2_assessment.essential_pos > 0 and h2_assessment.essential_neg == 0:
                 score += 1.5
                 facts.append(
                     Fact(
@@ -144,7 +161,15 @@ class Opportunity(AnalysisModule):
                             "收入机会有支撑"
                         ),
                         extracted_at=datetime.now(timezone.utc),
-                        payload={"ruler": h2_lord.value, "score": total},
+                        payload={
+                            "ruler": h2_lord.value,
+                            "score": total,
+                            "raw_score": total,
+                            "essential_pos": h2_assessment.essential_pos,
+                            "essential_neg": h2_assessment.essential_neg,
+                            "theme": "career_opportunity",
+                            "module": self.name,
+                        },
                     )
                 )
 
@@ -169,12 +194,10 @@ class Opportunity(AnalysisModule):
 
     # ------------------------------------------------------------------
 
-    def _dignity_total(self, planet: Planet, chart: Chart) -> int:
-        cp = chart.planets[planet]
-        _states, total = self._dignity.compute(
-            planet, cp.sign.sign, cp.sign.degree_in_sign, chart.sect
-        )
-        return total
+    @staticmethod
+    def _raw_essential_score(assessment) -> int:
+        """展示/审计用原始本质分：由公共 assess_planet 本质轴反推，避免第二套评分。"""
+        return round((assessment.essential_pos - assessment.essential_neg) / 0.35)
 
     @staticmethod
     def _top_dignity(states: list[DignityState]) -> DignityState:

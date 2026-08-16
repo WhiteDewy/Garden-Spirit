@@ -13,14 +13,15 @@ User → Intent Parser → Intent → Strategy → Execution Plan
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 
 from foundation.config import AppConfig
 from foundation.logger import get_logger
 from foundation.utils import new_id
 from shared.constants import HOUSE_SYSTEM_ZH
-from shared.enums import ConsultMode, IntentDomain, PersonaType, Planet, Priority, Verdict
+from shared.enums import ConsultMode, HouseSystem, IntentDomain, PersonaType, Planet, Priority, Verdict
 from shared.models import (
-    Conclusion, ExecutionStatus, Finding, Intent, IntentSlot, Person, Strategy, StrategyStep,
+    Chart, Conclusion, ExecutionStatus, Finding, Intent, IntentSlot, Person, Strategy, StrategyStep,
 )
 
 from application.agent.context_builder import ContextBuilder
@@ -163,6 +164,7 @@ class GardenSpiritAgent:
         self.reasoner = Reasoner()
         self.context_builder = ContextBuilder()
         self._calculator = NatalChartCalculator()
+        self._chart_provider: Callable[[Person, HouseSystem | None], Chart] = self._calculator.compute
 
         # 注册分析模块（必须在 IntentDecomposer 之前，因为 decomposer 需要模块名列表）
         self._register_analysis_modules()
@@ -183,6 +185,13 @@ class GardenSpiritAgent:
             llm_client=self._llm,
             decomposer=self.intent_decomposer,
         )
+
+    def set_chart_provider(
+        self,
+        provider: Callable[[Person, HouseSystem | None], Chart],
+    ) -> None:
+        """注入本命盘读取入口（生产走加密缓存；测试可走即时计算/spy）。"""
+        self._chart_provider = provider
 
     def _register_analysis_modules(self) -> None:
         self.executor.register(CareerStrength())
@@ -299,7 +308,7 @@ class GardenSpiritAgent:
                 )
                 house_slot = intent.get_slot("focus_house")
             if house_slot is not None:
-                chart = self._calculator.compute(person)
+                chart = self._chart_provider(person, None)
                 conclusion = self._house_conclusion(
                     chart, intent, house_slot, deep=True, confirmed=intent.confirmed,
                 )
@@ -322,7 +331,7 @@ class GardenSpiritAgent:
         # 占星结论仍全由 Domain 的 HouseSignificationEngine 出，LLM 只叙事。
         house_slot = intent.get_slot("focus_house")
         if house_slot is not None:
-            chart = self._calculator.compute(person)
+            chart = self._chart_provider(person, None)
             deep = intent.deep_dive or intent.intent_type == "follow_up_deep_dive"
             conclusion = self._house_conclusion(chart, intent, house_slot, deep=deep)
             house = int(house_slot.normalized_value)
@@ -360,9 +369,13 @@ class GardenSpiritAgent:
 
         # 2. 策略 → 计划 → 执行 → 证据 → 结论（全 Domain，无 LLM）
         strategy = self._select_strategy(decomposed, mode=mode)
+        chart = self._chart_provider(person, None)
+        from domain.reasoning.consult import get_resolver
+
+        call_plan = get_resolver().resolve_call_plan(intent, chart=chart)
         plan, chart = self.planner.create_plan(
-            intent, strategy, person,
-            enrichment=self._build_enrichment(decomposed),
+            intent, strategy, person, chart=chart,
+            enrichment=self._build_enrichment(decomposed, call_plan=call_plan),
         )
 
         # 追问的时间指代（如"那明年呢？"）→ 偏移 Timing 扫描窗口起点
@@ -403,7 +416,9 @@ class GardenSpiritAgent:
             )
 
         # 3. 组织回答（LLM 人格化转述；不可用时降级 v1 模板）
-        answer = self._format_response(conclusion, intent, persona, chart, mode=mode)
+        answer = self._format_response(
+            conclusion, intent, persona, chart, mode=mode, call_plan=call_plan,
+        )
 
         # 4. 记录会话
         ctx.latest_intent = intent
@@ -504,16 +519,55 @@ class GardenSpiritAgent:
         return strategy
 
     @staticmethod
-    def _build_enrichment(decomposed: "DecomposedIntent") -> dict:
-        """从 DecomposedIntent 构建 enrichment 字典，注入 step params。"""
+    def _build_enrichment(decomposed: "DecomposedIntent", call_plan=None) -> dict:
+        """从 DecomposedIntent + ConsultCallPlan 构建 step enrichment。"""
         from domain.reasoning.intent.decomposer import DecomposedIntent  # noqa: PLC0415
-        return {
-            "focus_houses": decomposed.focus_houses,
-            "focus_planets": decomposed.focus_planets,
-            "focus_house_lords": decomposed.focus_house_lords,
-            "focus_aspect_pairs": decomposed.focus_aspect_pairs,
-            "focus_dimensions": decomposed.focus_dimensions,
+
+        def _unique(values):
+            out = []
+            for value in values:
+                if value in (None, "") or value in out:
+                    continue
+                out.append(value)
+            return out
+
+        enrichment = {
+            "focus_houses": list(decomposed.focus_houses),
+            "focus_planets": list(decomposed.focus_planets),
+            "focus_house_lords": list(decomposed.focus_house_lords),
+            "focus_aspect_pairs": list(decomposed.focus_aspect_pairs),
+            "focus_dimensions": list(decomposed.focus_dimensions),
         }
+        if call_plan is None:
+            return enrichment
+
+        d = call_plan.to_dict()
+        enrichment["focus_houses"] = _unique([
+            *enrichment["focus_houses"],
+            d.get("focus_house"),
+            d.get("primary_house"),
+            *(d.get("core_houses") or []),
+            *(d.get("supplementary_houses") or []),
+        ])
+        enrichment["focus_house_lords"] = _unique([
+            *enrichment["focus_house_lords"],
+            *(d.get("house_lords") or []),
+        ])
+        enrichment["focus_planets"] = _unique([
+            *enrichment["focus_planets"],
+            *(d.get("natural_significators") or []),
+            *(d.get("supporting_planets") or []),
+            *(d.get("house_lord_planets") or []),
+            *(d.get("house_occupants") or []),
+        ])
+        enrichment["focus_aspect_pairs"] = _unique([
+            *enrichment["focus_aspect_pairs"],
+            *(d.get("aspect_pairs") or []),
+        ])
+        enrichment["consult_call_plan_source"] = d.get("source")
+        enrichment["house_lord_placements"] = d.get("house_lord_placements") or []
+        enrichment["house_occupants"] = d.get("house_occupants") or []
+        return enrichment
 
     def _format_response(
         self,
@@ -524,6 +578,7 @@ class GardenSpiritAgent:
         mode: ConsultMode | str = ConsultMode.DEEP,
         house_focus: int | None = None,
         confirmed: bool | None = None,
+        call_plan=None,
     ) -> str:
         """组织回答文本。
 
@@ -534,13 +589,13 @@ class GardenSpiritAgent:
         chart: 本命盘。用于生成飞星证据卡 + 本命概要（LLM 转述的素材）。
         house_focus: 宫位咨询（"3宫表达"）时注入，LLM 叙事围绕该宫收束。
         confirmed: 证据链收敛轮——LLM 叙事先承接确认/否认，再收敛不展开。
+        call_plan: 本轮咨询主干；常规执行链已解析时复用同一份，避免 prompt/执行漂移。
         """
         answer = ""
         if self._llm.available:
             try:
                 from application.conversation.response import paraphrase
                 from domain.astrology.interpretation import dispositor_cards, natal_reading
-                from domain.reasoning.consult import get_resolver
 
                 profiles = self._planet_profiles_for(intent, chart)
 
@@ -549,8 +604,10 @@ class GardenSpiritAgent:
                 natal = natal_reading(chart, self._kb) if chart is not None else None
 
                 # 咨询模板：Intent → ConsultCallPlan，注入 LLM 叙事指导
-                resolver = get_resolver()
-                call_plan = resolver.resolve_call_plan(intent)
+                if call_plan is None:
+                    from domain.reasoning.consult import get_resolver
+
+                    call_plan = get_resolver().resolve_call_plan(intent, chart=chart)
 
                 answer = paraphrase(
                     conclusion=conclusion,
@@ -578,6 +635,15 @@ class GardenSpiritAgent:
         coda = healing_guardrail_check(answer)
         if coda:
             answer += coda
+
+        # Safety 输出护栏：医疗诊断/用药/寿命红线统一收口；不阻断健康咨询，
+        # 但最终答复必须提示专业边界。合并扫描 answer + raw_query，避免
+        # fallback 已追加 marker 后，raw_query 再触发第二次 coda。
+        from application.conversation.safety import medical_boundary_check
+
+        medical_coda = medical_boundary_check(f"{answer}\n{intent.raw_query or ''}")
+        if medical_coda:
+            answer += medical_coda
         return answer
 
     @staticmethod
@@ -642,6 +708,13 @@ class GardenSpiritAgent:
         coda = healing_guardrail_check(body)
         if coda:
             body += coda
+
+        # Safety 输出护栏：医疗诊断/用药/寿命红线统一收口，位于免责声明之前。
+        from application.conversation.safety import medical_boundary_check
+
+        medical_coda = medical_boundary_check(body) or medical_boundary_check(intent.raw_query)
+        if medical_coda:
+            body += medical_coda
 
         house_system = conclusion.metadata.get("house_system", "placidus")
         hs_label = HOUSE_SYSTEM_ZH.get(house_system, house_system)

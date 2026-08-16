@@ -7,7 +7,7 @@
 数据来源（全部 YAML + 确定性规则，原则三）：
 - 落座风格: knowledge/planet_sign_style.yaml
 - 落宫领域: knowledge/rules/planet_in_house.yaml
-- 尊贵状态: dignity_total()（knowledge/dignity.yaml）
+- 尊贵状态: assess_planet()（knowledge/dignity.yaml，吉凶两论）
 - 支持/破坏: aspects_to() + ConnectionClassifier.is_received()（knowledge/aspects.yaml）
 - 掌宫: house_rulers()（common.py）
 """
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from shared.enums import AspectType, Planet
 from shared.models import Chart
 
-from domain.astrology.common import aspects_to, dignity_total, house_rulers
+from domain.astrology.common import aspects_to, assess_planet, house_rulers
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
 from domain.astrology.knowledge.loader import KnowledgeBase
 
@@ -49,10 +49,11 @@ class PlanetProfile:
     """一颗星的完整档案。"""
 
     planet: Planet
-    sign_style: str              # 落座风格
+    sign_style: str              # 行星×落座风格
+    behavior_style: str          # 星座行为方式（供前端/转述消费）
     house_name: str              # "落X宫"
     house_domain: str            # 落宫领域解读
-    dignity_label: str           # 入庙/入旺/落陷/失势/游走
+    dignity_label: str           # 入庙/入旺/落陷/失势/游走（混合时可带括注）
     dignity_score: int
     supporters: tuple[str, ...]      # 谁在帮它
     underminers: tuple[str, ...]     # 谁在破坏它
@@ -64,6 +65,7 @@ class PlanetProfile:
         return {
             "planet": self.planet.value,
             "sign_style": self.sign_style,
+            "behavior_style": self.behavior_style,
             "house_name": self.house_name,
             "house_domain": self.house_domain,
             "dignity_label": self.dignity_label,
@@ -88,7 +90,7 @@ def read_planet(
     """读一颗星的完整档案。"""
     if planet not in chart.planets:
         return PlanetProfile(
-            planet=planet, sign_style="", house_name="",
+            planet=planet, sign_style="", behavior_style="", house_name="",
             house_domain="", dignity_label="", dignity_score=0,
             supporters=(), underminers=(), rulings=(), ruling_labels=(),
         )
@@ -100,13 +102,15 @@ def read_planet(
 
     # 落座风格
     sign_style = _sign_style(kb, planet, sign)
+    behavior_style = kb.sign(sign).behavior_style
 
     # 落宫领域（复用 planet_in_house.yaml 的 base）
     house_domain = _house_domain(kb, planet, house)
 
-    # 尊贵
-    dignity_score = dignity_total(chart, kb, planet)
-    dignity_label = _dignity_label(dignity_score)
+    # 尊贵（消费 assess_planet：本质轴内部也吉凶两论，不用净分抹掉混合态）
+    assessment = assess_planet(chart, kb, planet, classifier=classifier)
+    dignity_score = _dignity_score_from_assessment(assessment)
+    dignity_label = _dignity_label_from_assessment(assessment)
 
     # 支持者 / 破坏者
     supporters, underminers = _aspect_partners(chart, kb, planet, classifier)
@@ -117,6 +121,7 @@ def read_planet(
     return PlanetProfile(
         planet=planet,
         sign_style=sign_style,
+        behavior_style=behavior_style,
         house_name=f"落{house}宫",
         house_domain=house_domain,
         dignity_label=dignity_label,
@@ -186,6 +191,24 @@ def _house_domain(kb: KnowledgeBase, planet: Planet, house: int) -> str:
     return fallback.get("base", f"{planet.value}落{house}宫")
 
 
+def _dignity_score_from_assessment(assessment) -> int:
+    """旧 score 字段：混合本质尊贵时优先暴露失势/落陷，避免净分抹掉受限。"""
+    pos_score = round(assessment.essential_pos / 0.35)
+    neg_score = round(assessment.essential_neg / 0.35)
+    if pos_score > 0 and neg_score > 0:
+        if _has_essential_fall(assessment):
+            return -5
+        if neg_score >= 2:
+            return -2
+        return 0
+    return pos_score - neg_score
+
+
+def _has_essential_fall(assessment) -> bool:
+    """本质轴是否含落陷；失势/落陷不能只靠负分幅度区分。"""
+    return any("落陷" in ev for ev in assessment.essential_ev)
+
+
 def _dignity_label(score: int) -> str:
     if score >= 5:
         return "入庙"
@@ -196,6 +219,18 @@ def _dignity_label(score: int) -> str:
     if score <= -2:
         return "失势"
     return "游走"
+
+
+def _dignity_label_from_assessment(assessment) -> str:
+    """尊贵标签：沿用旧字段，但混合本质尊贵优先暴露失势/落陷。"""
+    base = _dignity_label(_dignity_score_from_assessment(assessment))
+    if assessment.essential_pos > 0 and assessment.essential_neg > 0:
+        if assessment.essential_neg > assessment.essential_pos:
+            return f"{base}（有支撑）"
+        if assessment.essential_pos > assessment.essential_neg:
+            return f"{base}（有支撑但受限）"
+        return "游走（吉凶并见）"
+    return base
 
 
 def _aspect_partners(

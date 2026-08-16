@@ -35,7 +35,7 @@ def _make_conclusion() -> Conclusion:
                     text="你的情绪有分寸感——冷静、可靠，能扛事也懂得什么时候该收起情绪",
                     polarity=EvidencePolarity.POSITIVE, confidence=0.8),
             Finding(id="f3", category=ConclusionCategory.FINDING,
-                    text="时间窗口 2026-09 至 2027-01：行运对年主星火星总体有利（净分+9.4）",
+                    text="时间窗口 2026-09 至 2027-01：法达月亮大限/火星子限，行运对月亮、火星总体有利（净分+9.4）",
                     polarity=EvidencePolarity.POSITIVE, confidence=0.7),
         ],
         overall_confidence=0.9,
@@ -113,3 +113,16 @@ def test_fallback_fatalistic_gets_coda():
     assert "不过，这都不是判决" in out
     assert out.index("不过，这都不是判决") < out.index("不构成医疗")
     assert "不是绝路" in out
+
+
+def test_fallback_medical_boundary_gets_coda_before_disclaimer():
+    """医疗红线：Domain/用户问题触及诊断用药 → 专业边界补在免责声明前。"""
+    c = _make_conclusion()
+    c.summary = "星盘显示你需要重新评估吃药和治疗方案"
+    intent = _make_intent()
+    intent.raw_query = "星盘能看我该不该停药吗？"
+    out = GardenSpiritAgent._fallback_template(c, intent, PersonaType.MOON)
+    assert "健康和身体问题要以医生诊断为准" in out
+    assert "不能判断疾病" in out
+    assert out.index("健康和身体问题要以医生诊断为准") < out.index("不构成医疗")
+    assert out.count("健康和身体问题要以医生诊断为准") == 1

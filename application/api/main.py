@@ -36,9 +36,10 @@ from application.mailbox.letter_service import LetterService, SENDER_ZH
 from application.memory.journal import JournalService, JournalSummarizer
 from application.memory.service import MemoryService
 from application.relationship import RelationshipService, naturalize_recall
+from application.chart_cache import NatalChartCache
 from application.conversation.action import ActionDetector
 from application.conversation.confirmation import ConfirmationDetector
-from application.conversation.persona import get_persona
+from application.conversation.persona import all_personas, get_persona
 from application.push import PushService
 from application.conversation.fragments import (
     DEPTH_ACTION,
@@ -323,6 +324,17 @@ class RecommendedSpiritsOut(BaseModel):
     generated_at: str
 
 
+class PersonaOut(BaseModel):
+    """前端可选择的 10 星灵人格目录。"""
+
+    key: str
+    name: str
+    healing_name: str
+    style: str
+    tone: str
+    vocabulary: list[str] = []
+
+
 class PersonExportOut(BaseModel):
     """合规数据导出：该用户全量数据明文聚合（下载 / 迁移 / 删除前存档）。
 
@@ -446,17 +458,19 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     person_repo = PersonRepository(db_path=config.storage.db_path)
     store = GardenStore(db_path=config.storage.db_path)
     agent = GardenSpiritAgent(config)
+    chart_cache = NatalChartCache(person_repo, agent._calculator)
+    agent.set_chart_provider(chart_cache.get_or_compute)
     memory = MemoryService(store)
     journal = JournalService(store, summarizer=JournalSummarizer(agent._llm))
     letter = LetterService(
         store,
         llm_client=agent._llm,
-        chart_provider=lambda p: agent._calculator.compute(p),
+        chart_provider=chart_cache.get_or_compute,
     )
     relationship = RelationshipService()  # A2 关系层：纯逻辑，无 io
     learning = LearningService(           # B1 学习层：验前事 → 置信度校准
         store,
-        chart_provider=lambda p: agent._calculator.compute(p),
+        chart_provider=chart_cache.get_or_compute,
     )
     action = ActionService()              # B2 行动层：待验证清单 + 偏好
     fragments = FragmentService()         # 随聊记录层：34 子类点亮（纯逻辑，无 io）
@@ -469,6 +483,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.person_repo = person_repo
     app.state.store = store
     app.state.agent = agent
+    app.state.chart_cache = chart_cache
     app.state.memory = memory
     app.state.journal = journal
     app.state.letter = letter
@@ -638,7 +653,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         """
         person = _get_person(person_id)
         profile = _get_or_init_profile(store, person_id)  # 无画像 → 空碎片，纯行运分
-        natal = agent._calculator.compute(person)
+        natal = chart_cache.get_or_compute(person)
         target = datetime.now(timezone.utc)
         lat = person.birth.location.latitude
         lon = person.birth.location.longitude
@@ -911,6 +926,21 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         store.save_profile(profile)
         return action.preferences(profile)
 
+    @app.get("/personas", response_model=list[PersonaOut])
+    def list_personas() -> list[PersonaOut]:
+        """前端星灵选择器：暴露 10 颗行星人格，不含推理结论。"""
+        return [
+            PersonaOut(
+                key=p.key.value,
+                name=p.name,
+                healing_name=p.healing_name,
+                style=p.style,
+                tone=p.tone,
+                vocabulary=list(p.vocabulary),
+            )
+            for p in all_personas()
+        ]
+
     # ------------------------------------------------------------------
     # Web Push（真实推送通道）：订阅 + VAPID 公钥 + 每日触发
     # ------------------------------------------------------------------
@@ -988,13 +1018,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         person = _get_person(body.person_id)
 
         session_id = body.session_id or new_id("sess")
-        # 10 星灵回归：非法/旧宝石人格名（zircon/rose_quartz…）→ 落默认（月亮），不 500
-        persona = None
-        if body.persona:
-            try:
-                persona = PersonaType(body.persona)
-            except ValueError:
-                persona = None
+        # 10 星灵回归：非法/旧宝石人格名（zircon/rose_quartz…）→ 偏好 → 默认（月亮），不 500
+        persona = _resolve_chat_persona(body.persona, store, action, body.person_id)
         mode = _parse_mode(body.mode)
 
         # 用户指定合盘对象 → 从 DB 恢复到会话上下文（多轮持久化）
@@ -1174,6 +1199,18 @@ def _parse_mode(raw: str | None) -> ConsultMode:
         return ConsultMode(raw)
     except ValueError:
         return ConsultMode.DEEP
+
+
+def _resolve_chat_persona(raw: str | None, store, action, person_id: str) -> PersonaType | None:
+    """聊天人格安全解析：显式选择优先，其次用户偏好，最后交给 Agent 默认。"""
+    for candidate in (raw, action.preferences(store.get_profile(person_id)).get("preferred_persona")):
+        if not candidate:
+            continue
+        try:
+            return PersonaType(str(candidate))
+        except ValueError:
+            continue
+    return None
 
 
 def _action_lighting(detector, store, body, ctx, profile, ledger) -> list[str]:

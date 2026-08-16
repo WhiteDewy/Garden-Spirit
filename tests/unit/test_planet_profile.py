@@ -17,8 +17,48 @@ from domain.astrology.interpretation import (
 )
 from domain.astrology.interpretation.planet_profile import pick_for_theme
 from domain.astrology.knowledge import load_knowledge
-from shared.enums import HouseSystem, Planet
-from shared.models import BirthData, GeoLocation, Person
+from shared.enums import ChartType, HouseSystem, Planet, PlanetSpeed, Sect, Sign, ZodiacType
+from shared.models import (
+    BirthData,
+    Chart,
+    ChartPlanet,
+    EclipticPosition,
+    GeoLocation,
+    HouseCusp,
+    HousePosition,
+    Person,
+    SignPosition,
+)
+
+
+def _minimal_chart_for_planet(planet: Planet, longitude: float, sign: Sign, degree_in_sign: float) -> Chart:
+    now = datetime.now(timezone.utc)
+    return Chart(
+        id="profile_mix",
+        person_id="p",
+        chart_type=ChartType.NATAL,
+        calculated_at_utc=now,
+        julian_day=0.0,
+        epoch_utc=now,
+        location="",
+        zodiac=ZodiacType.TROPICAL,
+        house_system=HouseSystem.WHOLE_SIGN,
+        planets={
+            planet: ChartPlanet(
+                planet=planet,
+                ecliptic=EclipticPosition(longitude=longitude),
+                sign=SignPosition(sign=sign, degree_absolute=longitude, degree_in_sign=degree_in_sign),
+                house=HousePosition(house=1, cusp_degree=0.0, distance_from_cusp=0.0),
+                speed=PlanetSpeed.DIRECT,
+                speed_deg_per_day=1.0,
+            )
+        },
+        house_cusps={
+            h: HouseCusp(house=h, degree=float((h - 1) * 30), sign=list(Sign)[h - 1])
+            for h in range(1, 13)
+        },
+        sect=Sect.DAY,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -49,6 +89,7 @@ def test_read_all_planets_10(chart, kb):
     assert len(profiles) == 10
     for p in profiles:
         assert p.sign_style, f"{p.planet}: sign_style 为空"
+        assert p.behavior_style, f"{p.planet}: behavior_style 为空"
         assert p.house_name, f"{p.planet}: house_name 为空"
         assert p.dignity_label, f"{p.planet}: dignity_label 为空"
 
@@ -98,6 +139,40 @@ def test_dignity_labels_distinct(chart, kb):
     assert len(set(labels.values())) >= 2
 
 
+def test_planet_profile_keeps_mixed_dignity_visible(kb):
+    """星档案消费 assess_planet：火星天秤失势，但仍保留埃及界支撑，不净成普通游走。"""
+    chart = _minimal_chart_for_planet(Planet.MARS, 207.0, Sign.LIBRA, 27.0)
+
+    mars = read_planet(chart, kb, Planet.MARS)
+
+    assert mars.dignity_score < 0
+    assert mars.dignity_label.startswith("失势")
+    assert "支撑" in mars.dignity_label
+
+
+def test_planet_profile_positive_net_fall_still_reads_as_limited(kb):
+    """金星处女落陷 + 三分/界/面净分为正，也不能在星档案显示成纯入旺。"""
+    chart = _minimal_chart_for_planet(Planet.VENUS, 160.5, Sign.VIRGO, 10.5)
+
+    venus = read_planet(chart, kb, Planet.VENUS)
+
+    assert venus.dignity_score < 0
+    assert venus.dignity_label.startswith("落陷")
+    assert "支撑" in venus.dignity_label
+    assert "受限" in venus.dignity_label
+    assert not venus.dignity_label.startswith("入旺")
+
+
+# -- 星座行为方式 --------------------------------------------------------
+
+def test_sign_behavior_style_loaded(kb):
+    """signs.yaml 的星座行为方式被 loader 暴露。"""
+    from shared.enums import Sign
+
+    assert "先冲再说" in kb.sign(Sign.ARIES).behavior_style
+    assert "边说边想" in kb.sign(Sign.GEMINI).behavior_style
+
+
 # -- 落座风格差异化 ----------------------------------------------------
 
 def test_sign_style_differs(chart, kb):
@@ -133,7 +208,7 @@ def test_to_dict_json(chart, kb):
     data = [p.to_dict() for p in profiles]
     json.dumps(data, ensure_ascii=False)
     first = data[0]
-    for key in ("planet", "sign_style", "house_name", "house_domain",
+    for key in ("planet", "sign_style", "behavior_style", "house_name", "house_domain",
                 "dignity_label", "dignity_score", "supporters",
                 "underminers", "rulings", "ruling_labels"):
         assert key in first

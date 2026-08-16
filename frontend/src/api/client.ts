@@ -53,6 +53,8 @@ export interface ChatIn {
   session_id?: string;
   message: string;
   persona?: string;
+  mode?: "quick" | "deep" | "annual" | "chart" | "free";
+  related_person_id?: string;
 }
 
 export interface ChatOut {
@@ -78,6 +80,36 @@ export interface ChatOut {
 export interface OpeningOut {
   opening: string;
   trust_level: string;
+}
+
+export interface SpiritRecommendationOut {
+  planet: string;
+  name: string;
+  healing_name?: string;
+  style?: string;
+  score: number;
+  reason: string;
+  is_default?: boolean;
+  is_firdaria_major_lord?: boolean;
+  is_firdaria_sub_lord?: boolean;
+}
+
+export interface RecommendedSpiritsOut {
+  spirits: SpiritRecommendationOut[];
+  generated_at?: string;
+}
+
+export interface GardenRecallItem {
+  kind: string;
+  title?: string;
+  summary?: string;
+  text?: string;
+  domain?: string;
+}
+
+export interface GardenRecallOut {
+  has_memory: boolean;
+  items: GardenRecallItem[];
 }
 
 export interface FindingOut {
@@ -190,8 +222,10 @@ export const api = {
   // chat 涉及 LLM（意图拆解+叙事），可能较慢，单独放宽超时
   chat: (body: ChatIn) => request<ChatOut>("POST", "/chat", body, 60000),
   profile: (personId: string) => request<ProfileOut>("GET", `/person/${personId}/profile`),
-  opening: (personId: string) =>
-    request<OpeningOut>("GET", `/person/${personId}/opening`),
+  opening: (personId: string, persona?: string) =>
+    request<OpeningOut>("GET", `/person/${personId}/opening${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+  recommendedSpirits: (personId: string) =>
+    request<RecommendedSpiritsOut>("GET", `/person/${personId}/recommended-spirits`),
   feedbackFinding: (personId: string, findingId: string, feedback: "confirmed" | "refuted") =>
     request<{ ok: boolean; user_feedback: string; trust_level: string; new_confidence: number }>(
       "POST", `/person/${personId}/findings/${findingId}/feedback`, { feedback }
@@ -212,8 +246,8 @@ export const api = {
   // 首页红点：打开信箱时把今日未读来信标记为已读（幂等）
   markLettersReadToday: (personId: string) =>
     request<{ ok: boolean; marked: number }>("POST", `/person/${personId}/letters/read-today`),
-  garden: (personId: string) =>
-    request<GardenState>("GET", `/garden?person_id=${personId}`, undefined, 60000),
+  garden: (personId: string, persona?: string) =>
+    request<GardenState>("GET", `/garden?person_id=${personId}${persona ? `&persona=${encodeURIComponent(persona)}` : ""}`, undefined, 60000),
   // 自我星盘轮：34 子类全量 + 当前深度分（含未点亮 = 0，供"盲区即课题"叙事）
   fragments: (personId: string) =>
     request<FragmentsOut>("GET", `/person/${personId}/fragments`),
@@ -268,6 +302,8 @@ export interface GardenState {
   letter_unread: boolean;
   // 站内"回家看看"兜底（推送后置）：今天（本地日）点亮的 top3 灵魂碎片
   soul_fragments: SoulFragmentOut[];
+  // 记忆镜头：确定性召回的「我记得你」卡片（老后端缺字段时可为空）
+  recall?: GardenRecallOut;
 }
 
 export interface SoulFragmentOut {

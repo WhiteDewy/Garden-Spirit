@@ -65,6 +65,7 @@ class SignInfo:
     natural_house: int
     polarity: str
     keywords_zh: list[str]
+    behavior_style: str = ""
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,7 @@ def _parse_sign(raw: dict) -> SignInfo:
         natural_house=int(raw["natural_house"]),
         polarity=raw.get("polarity", "yang"),
         keywords_zh=list(raw.get("keywords_zh") or []),
+        behavior_style=str(raw.get("behavior_style", "")),
     )
 
 

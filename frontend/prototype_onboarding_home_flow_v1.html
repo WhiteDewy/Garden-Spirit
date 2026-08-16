@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Garden-Spirit · 注册→欢迎→首页 Flow V1</title>
+<style>
+:root{
+  --ink:#17251f;--soft:rgba(23,37,31,.62);--faint:rgba(23,37,31,.38);
+  --line:rgba(77,92,82,.14);--card:rgba(255,253,247,.72);--solid:#fffdf7;
+  --star:#efd58b;--moon:#d9d0f0;--leaf:#8fae97;--sunset:#dda46f;
+  --morning:#e9eef0;--noon:#f1efe4;--dusk:#e8cfae;--night:#13182d;
+  --shadow:0 22px 70px rgba(36,39,31,.15);--soft-shadow:0 14px 38px rgba(35,40,34,.09);
+  --serif:Georgia,"Times New Roman","Noto Serif SC",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#d9ddd5;font-family:var(--sans);color:var(--ink);padding:22px}.phone{width:390px;height:820px;border-radius:42px;overflow:hidden;position:relative;background:var(--morning);box-shadow:0 30px 90px rgba(28,34,31,.28),inset 0 0 0 1px rgba(255,255,255,.5)}.screen{position:absolute;inset:0;display:none;overflow:hidden}.screen.active{display:block}.bg{position:absolute;inset:0;background:radial-gradient(circle at 18% 12%,rgba(255,255,255,.96),transparent 33%),radial-gradient(circle at 86% 3%,rgba(212,205,236,.45),transparent 30%),linear-gradient(160deg,#e9eef0 0%,#f5f0df 58%,#dfe8dc 100%)}.bg.noon{background:radial-gradient(circle at 26% 10%,rgba(255,255,255,.98),transparent 34%),radial-gradient(circle at 90% 8%,rgba(240,213,139,.32),transparent 34%),linear-gradient(160deg,#f5f1e3 0%,#edf1df 62%,#d8e4d2 100%)}.bg.dusk{background:radial-gradient(circle at 20% 14%,rgba(255,246,225,.9),transparent 34%),radial-gradient(circle at 88% 8%,rgba(221,164,111,.42),transparent 36%),linear-gradient(160deg,#ead8be 0%,#f0e9d9 50%,#d8dfd3 100%)}.glow{position:absolute;border-radius:999px;filter:blur(2px);opacity:.7}.g1{width:220px;height:220px;background:rgba(255,255,255,.44);left:-60px;top:80px}.g2{width:190px;height:190px;background:rgba(240,213,139,.23);right:-48px;top:260px}.grain{position:absolute;inset:0;opacity:.08;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");mix-blend-mode:multiply}.stars{position:absolute;inset:0;pointer-events:none}.stars i{position:absolute;width:3px;height:3px;border-radius:50%;background:rgba(240,213,139,.72);box-shadow:0 0 14px rgba(240,213,139,.8);animation:twinkle 4s ease-in-out infinite}.stars i:nth-child(1){left:22%;top:18%;animation-delay:.1s}.stars i:nth-child(2){left:77%;top:25%;animation-delay:1.3s}.stars i:nth-child(3){left:58%;top:70%;animation-delay:2.1s}.stars i:nth-child(4){left:15%;top:62%;animation-delay:3s}@keyframes twinkle{50%{opacity:.22;transform:scale(.72)}}.page{position:relative;z-index:2;height:100%;padding:74px 22px 104px;display:flex;flex-direction:column}.appbar{position:absolute;z-index:5;left:22px;right:22px;top:30px;display:flex;justify-content:space-between;align-items:flex-start}.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-weight:800}.title{font-family:var(--serif);font-size:24px;font-weight:700;margin-top:4px}.icon{width:38px;height:38px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.36);display:grid;place-items:center;color:var(--soft);box-shadow:var(--soft-shadow)}.top-note{font-size:12px;color:var(--soft);line-height:1.8;margin-top:8px}.card{border:1px solid var(--line);background:var(--card);backdrop-filter:blur(20px);border-radius:32px;box-shadow:var(--shadow)}button{font-family:inherit;border:0;cursor:pointer}.primary{background:#17251f;color:#fff5dc;border-radius:22px;padding:14px 16px;font-size:13px;font-weight:800;box-shadow:0 18px 42px rgba(23,37,31,.24)}.secondary{background:rgba(255,255,255,.42);color:var(--ink);border:1px solid var(--line);border-radius:22px;padding:14px 16px;font-size:13px;font-weight:750}.chip{border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.38);padding:7px 10px;font-size:10px;color:var(--soft)}.progress{display:flex;gap:7px;margin-top:20px}.progress i{width:8px;height:8px;border-radius:50%;background:rgba(23,37,31,.14)}.progress i.on{width:26px;border-radius:999px;background:var(--star);box-shadow:0 0 18px rgba(240,213,139,.7)}
+/* shared spirit */
+.stage{position:relative;width:156px;height:178px;border-radius:38px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,.14));box-shadow:inset 0 1px rgba(255,255,255,.62),0 22px 56px rgba(49,57,52,.12);display:grid;place-items:center;overflow:hidden}.nest{position:absolute;bottom:20px;width:98px;height:34px;border-radius:50%;background:radial-gradient(ellipse at center,rgba(240,213,139,.4),rgba(95,130,108,.1) 68%,transparent);filter:blur(.4px)}.spirit{position:relative;width:76px;height:98px;border-radius:48% 52% 45% 55%/42% 44% 56% 58%;background:radial-gradient(circle at 35% 26%,rgba(255,255,255,.9),transparent 22%),linear-gradient(145deg,rgba(222,214,244,.96),rgba(238,217,152,.82) 70%,rgba(143,174,151,.45));box-shadow:inset -14px -18px 28px rgba(110,94,130,.16),inset 12px 12px 26px rgba(255,255,255,.44),0 18px 42px rgba(128,107,67,.22);animation:float 5.8s ease-in-out infinite}.spirit:before,.spirit:after{content:"";position:absolute;top:44px;width:7px;height:7px;border-radius:50%;background:#24312c;box-shadow:0 1px 0 rgba(255,255,255,.32)}.spirit:before{left:24px}.spirit:after{right:24px}.mouth{position:absolute;left:50%;top:58px;width:16px;height:8px;margin-left:-8px;border-bottom:2px solid rgba(36,49,44,.72);border-radius:0 0 999px 999px}.arm{position:absolute;width:28px;height:18px;border:3px solid rgba(255,255,255,.52);border-top:0;border-left:0;border-radius:0 0 22px 0;top:58px}.arm.l{left:-18px;transform:rotate(24deg)}.arm.r{right:-18px;transform:scaleX(-1) rotate(24deg)}.aura{position:absolute;width:122px;height:122px;border-radius:50%;background:radial-gradient(circle,rgba(240,213,139,.22),transparent 65%);animation:pulse 4.4s ease-in-out infinite}.antenna{position:absolute;width:40px;height:32px;border-top:2px solid rgba(240,213,139,.68);border-radius:50%;top:-17px;left:18px}.antenna:after{content:"";position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:var(--star);box-shadow:0 0 14px var(--star)}@keyframes float{50%{transform:translateY(-8px) rotate(-1.6deg)}}@keyframes pulse{50%{transform:scale(1.09);opacity:.52}}
+/* register */
+.register-hero{margin-top:36px}.register-hero h1{font-family:var(--serif);font-size:34px;line-height:1.12;margin:14px 0 10px}.seed-wrap{height:156px;display:grid;place-items:center;margin:22px 0 6px}.seed{width:88px;height:88px;border-radius:44% 56% 50% 50%;background:radial-gradient(circle at 35% 24%,#fff,transparent 24%),linear-gradient(145deg,#d9d0f0,#efd58b 72%);box-shadow:inset -12px -14px 24px rgba(110,94,130,.12),0 24px 60px rgba(128,107,67,.2);position:relative;animation:float 5.6s ease-in-out infinite}.seed:after{content:"";position:absolute;inset:-18px;border-radius:50%;background:radial-gradient(circle,rgba(240,213,139,.2),transparent 70%)}.form-card{padding:18px;margin-top:auto}.step-label{font-size:10px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase;font-weight:800}.form-card h2{font-family:var(--serif);font-size:23px;margin:8px 0 8px}.input{height:50px;border-radius:20px;border:1px solid var(--line);background:rgba(255,255,255,.56);padding:0 15px;font-size:14px;color:var(--ink);display:flex;align-items:center;margin-top:14px}.input.faint{color:var(--faint)}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hint{font-size:11px;color:var(--soft);line-height:1.65;margin-top:12px}.form-actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:16px}.privacy{display:flex;gap:8px;align-items:flex-start;margin-top:14px;color:var(--soft);font-size:10px;line-height:1.6}.privacy b{color:var(--ink)}
+/* awakening */
+.awake .page{justify-content:space-between}.orbit{height:258px;display:grid;place-items:center;margin-top:54px;position:relative}.orbit:before{content:"";position:absolute;width:236px;height:236px;border-radius:50%;border:1px dashed rgba(143,174,151,.28);animation:spin 18s linear infinite}.orbit:after{content:"";position:absolute;width:176px;height:176px;border-radius:50%;border:1px solid rgba(255,255,255,.42)}@keyframes spin{to{transform:rotate(360deg)}}.awake .stage{width:184px;height:206px}.awake-card{padding:20px}.awake-card h1{font-family:var(--serif);font-size:30px;line-height:1.18;margin:8px 0 10px}.steps{display:grid;gap:9px;margin-top:16px}.step{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;color:var(--soft)}.step b{color:var(--ink);font-weight:760}.awake-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:17px}
+/* home */
+.home .page{padding-bottom:112px}.date-row{display:flex;justify-content:space-between;align-items:center;color:var(--soft);font-size:11px;margin:20px 0 9px}.hero{display:grid;grid-template-columns:1fr 132px;gap:13px;align-items:end}.hero h1{font-family:var(--serif);font-size:30px;line-height:1.12;margin:9px 0 10px}.hero p{font-size:12px;color:var(--soft);line-height:1.8;margin:0}.home .stage{width:132px;height:164px;border-radius:34px}.home .spirit{width:66px;height:88px}.home-primary{display:grid;grid-template-columns:1fr auto;gap:9px;margin:12px 0}.wake-strip{display:flex;justify-content:space-between;gap:12px;align-items:center;border-radius:21px;padding:10px 12px;background:rgba(240,213,139,.12);border:1px solid var(--line);font-size:12px;color:var(--soft)}.wake-strip b{color:var(--ink);font-size:13px}.letter{padding:18px;margin-top:12px}.letter-k{font-size:9px;letter-spacing:.22em;color:var(--faint);font-weight:900}.letter h2{font-family:var(--serif);font-size:22px;margin:10px 0}.letter p{font-size:13px;line-height:1.9;color:var(--soft);margin:0}.letter-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}.actions{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px}.dash{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.mini{border-radius:23px;border:1px solid var(--line);background:rgba(255,255,255,.38);padding:14px;box-shadow:var(--soft-shadow)}.mini-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:900}.mini b{display:block;font-family:var(--serif);font-size:15px;margin:8px 0 6px}.mini p{font-size:11px;line-height:1.6;color:var(--soft);margin:0}.fragrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.fragrow span{font-size:10px;border-radius:999px;background:rgba(240,213,139,.2);padding:6px 8px;color:var(--soft)}.recall{margin-top:10px;display:flex;gap:10px;align-items:flex-start}.pulse-star{width:12px;height:12px;border-radius:50%;background:var(--star);box-shadow:0 0 20px rgba(240,213,139,.9);margin-top:4px;flex:0 0 auto}.evidence{padding:14px;margin-top:10px}.erow{display:grid;grid-template-columns:58px 1fr;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:11px;color:var(--soft)}.erow:first-of-type{border-top:0;margin-top:8px}.erow span{letter-spacing:.12em;text-transform:uppercase;font-size:9px;color:var(--faint)}.erow b{font-family:var(--serif);font-size:13px;color:var(--ink)}.bottom-nav{position:absolute;z-index:10;left:18px;right:18px;bottom:18px;height:64px;border-radius:26px;border:1px solid var(--line);background:rgba(255,253,247,.74);backdrop-filter:blur(20px);box-shadow:0 18px 54px rgba(36,39,31,.14);display:grid;grid-template-columns:repeat(5,1fr);align-items:center}.nav{display:grid;place-items:center;gap:2px;font-size:10px;color:var(--faint);position:relative}.nav b{font-size:16px}.nav.on{color:var(--ink)}.dot{position:absolute;top:5px;right:20px;width:7px;height:7px;border-radius:50%;background:#d66b5f;box-shadow:0 0 0 3px rgba(214,107,95,.14)}.switcher{position:absolute;z-index:20;left:18px;right:18px;top:8px;display:flex;justify-content:center;gap:8px}.switcher button{border:1px solid var(--line);background:rgba(255,253,247,.68);backdrop-filter:blur(14px);border-radius:999px;padding:8px 11px;font-size:11px;color:var(--soft)}.switcher button.on{background:#17251f;color:#fff5dc}.fab{position:absolute;right:24px;bottom:92px;width:54px;height:54px;border-radius:21px;background:linear-gradient(145deg,#f4dda2,#dcc27b);display:grid;place-items:center;color:#17251f;box-shadow:0 18px 46px rgba(240,213,139,.48);z-index:12;font-size:22px}.sheet{position:absolute;z-index:30;left:12px;right:12px;bottom:82px;border-radius:30px;padding:10px 15px 15px;background:rgba(17,27,24,.92);color:#fff8eb;box-shadow:0 24px 72px rgba(0,0,0,.3);display:none}.sheet.show{display:block}.handle{width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.22);margin:0 auto 12px}.sheet .se{font-size:9px;letter-spacing:.2em;color:rgba(255,248,235,.42);margin-bottom:5px}.sheet p{font-size:12px;line-height:1.75;color:rgba(255,248,235,.64)}.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.sheet-actions button{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.07);border-radius:16px;padding:10px 9px;font-size:11px;color:rgba(255,248,235,.78)}.sheet-actions button:first-child{background:#f3dfaa;color:#17251f;border:0}
+@media(max-width:430px){body{padding:0;background:#e1e1d9}.phone{width:100vw;height:100vh;border-radius:0}.switcher{top:env(safe-area-inset-top,8px)}}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="switcher"><button class="on" onclick="go('register',this)">注册</button><button onclick="go('awake',this)">欢迎</button><button onclick="go('home',this)">首页</button></div>
+
+  <section id="register" class="screen active">
+    <div class="bg"></div><div class="glow g1"></div><div class="glow g2"></div><div class="grain"></div><div class="stars"><i></i><i></i><i></i><i></i></div>
+    <div class="appbar"><div><div class="eyebrow">GARDEN SPIRIT</div><div class="title">第一颗星</div></div><div class="icon" onclick="toast('出生信息只用于生成星图；之后可导出或删除。')">?</div></div>
+    <div class="page">
+      <div class="register-hero">
+        <div class="eyebrow">ONBOARDING</div>
+        <h1>先为你点亮<br/>第一颗星。</h1>
+        <p class="top-note">注册不是填问卷，而是让花园知道怎么称呼你、怎么读你的星图。</p>
+      </div>
+      <div class="seed-wrap"><div class="seed"></div></div>
+      <div class="form-card card">
+        <div class="step-label">Step 1 / 4</div>
+        <h2>星灵要怎么称呼你？</h2>
+        <div class="input">小夏</div>
+        <div class="row"><div class="input faint">1998-08-21</div><div class="input faint">08:30</div></div>
+        <div class="input faint">出生城市 · 上海</div>
+        <div class="privacy"><span>✦</span><span><b>隐私提示：</b>你的数据只用于生成这座花园；可以在设置里导出或删除。</span></div>
+        <div class="form-actions"><button class="primary" onclick="go('awake')">走进花园</button><button class="secondary">为什么需要？</button></div>
+        <div class="progress"><i class="on"></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="awake" class="screen awake">
+    <div class="bg noon"></div><div class="glow g1"></div><div class="glow g2"></div><div class="grain"></div><div class="stars"><i></i><i></i><i></i><i></i></div>
+    <div class="appbar"><div><div class="eyebrow">AWAKENING</div><div class="title">星灵醒来</div></div><div class="icon">☾</div></div>
+    <div class="page">
+      <div class="orbit"><div class="stage"><div class="aura"></div><div class="nest"></div><div class="spirit"><div class="antenna"></div><div class="arm l"></div><div class="arm r"></div><div class="mouth"></div></div></div></div>
+      <div class="awake-card card">
+        <div class="eyebrow">TODAY'S COMPANION</div>
+        <h1>今天，月亮星灵<br/>先醒来了。</h1>
+        <p class="top-note">它会先从安全感、情绪和归属感的角度陪你看今天。</p>
+        <div class="steps">
+          <div class="step"><b>星图地形</b><span>已生成</span></div>
+          <div class="step"><b>今日星灵</b><span>Moon · top 1</span></div>
+          <div class="step"><b>第一封星信</b><span>正在等你打开</span></div>
+        </div>
+        <div class="awake-actions"><button class="primary" onclick="go('home')">进入花园</button><button class="secondary">先说句话</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="home" class="screen home">
+    <div class="bg dusk"></div><div class="glow g1"></div><div class="glow g2"></div><div class="grain"></div><div class="stars"><i></i><i></i><i></i><i></i></div>
+    <div class="appbar"><div><div class="eyebrow">GARDEN SPIRIT</div><div class="title">花园</div></div><div class="icon" onclick="toggleSheet()">?</div></div>
+    <div class="page">
+      <div class="date-row"><span>黄昏 · 星光回收</span><span>关系温度 · trusted</span></div>
+      <div class="hero">
+        <div><div class="eyebrow">PRIVATE ASTRO COMPANION</div><h1>今天，先把自己<br/>从解释里收回来。</h1><p>月亮星灵在星巢边等你。它记得你最近一直在练习：不立刻答应。</p></div>
+        <div class="stage"><div class="aura"></div><div class="nest"></div><div class="spirit"><div class="antenna"></div><div class="arm l"></div><div class="arm r"></div><div class="mouth"></div></div></div>
+      </div>
+      <div class="home-primary"><button class="primary">和今天醒来的星灵聊聊 →</button><button class="secondary" onclick="toggleSheet()">为什么是它</button></div>
+      <div class="wake-strip"><div><b>月亮星灵被唤醒</b><br/>行运月亮触发安全感 / 归属主题</div><span class="chip">top 1</span></div>
+      <article class="letter card"><div class="letter-k">PRIVATE TRANSIT LETTER</div><h2>今天，先温柔地醒来。</h2><p>你最近一直在练习“不立刻答应”。黄昏的月亮像一只小手，把那句话轻轻托起来：你可以慢一点回应，也可以先确认自己真正愿意什么。</p><div class="letter-meta"><span class="chip">今日来信 unread</span><span class="chip">月亮 · 四宫</span><span class="chip">记忆镜头：情绪日子优先</span></div><div class="actions"><button class="primary">继续这封信 →</button><button class="secondary">存入日记</button></div></article>
+      <div class="dash"><div class="mini"><div class="mini-label">继续昨天</div><b>“很难拒绝别人”</b><p>上一段对话还在这里，月灵可以接着陪你整理。</p></div><div class="mini"><div class="mini-label">今日碎片</div><b>亮起 3 颗星</b><div class="fragrow"><span>边界 +10</span><span>休息 +5</span></div></div></div>
+      <div class="mini"><div class="mini-label">我记得你</div><div class="recall"><i class="pulse-star"></i><div><b>你确认过：关系里最累的是反复解释自己。</b><p>这不是标签，只是一颗被你校准过的记忆星。</p></div></div></div>
+      <div class="evidence card"><div class="mini-label">Evidence Rows · 解释线索</div><div class="erow"><span>trigger</span><b>行运月亮触发安全感主题</b></div><div class="erow"><span>memory</span><b>记忆镜头优先取情绪 / 家庭 / 近期话题</b></div><div class="erow"><span>growth</span><b>今日碎片只代表聊过、被照见、做过</b></div></div>
+    </div>
+    <button class="fab">✦</button>
+    <div class="sheet" id="sheet"><div class="handle"></div><div class="se">WHY TODAY</div><b>为什么今天是月亮星灵？</b><p>来自 recommended-spirits top1：行运月亮触发本命安全感主题；recall 镜头优先取情绪、家庭、近期话题。首页只保留一个醒来的星灵和一封私人星信。</p><div class="sheet-actions"><button>和月灵聊聊</button><button>靠近倾听</button></div></div>
+    <nav class="bottom-nav"><div class="nav on"><b>✦</b>花园</div><div class="nav"><b>☾</b>星灵</div><div class="nav"><b>✉</b>信箱<span class="dot"></span></div><div class="nav"><b>◌</b>宇宙<span class="dot"></span></div><div class="nav"><b>·</b>我的</div></nav>
+  </section>
+</div>
+<script>
+function go(id,btn){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));document.querySelectorAll('.switcher button').forEach(b=>b.classList.toggle('on',btn?b===btn:b.textContent.includes(id==='register'?'注册':id==='awake'?'欢迎':'首页')));document.getElementById('sheet')?.classList.remove('show')}
+function toggleSheet(){document.getElementById('sheet')?.classList.toggle('show')}
+function toast(msg){alert(msg)}
+</script>
+</body>
+</html>

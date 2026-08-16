@@ -8,11 +8,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 from shared.enums import DignityState, Planet
 from shared.models import Chart
 
-from domain.astrology.common import house_lord
+from domain.astrology.common import assess_planet, house_lord
 from domain.astrology.knowledge import DignityEngine, ReceptionEngine
 from domain.astrology.knowledge.loader import KnowledgeBase
 from domain.astrology.interpretation.models import ConnectionFact, HouseSynapsis
@@ -70,6 +71,20 @@ def detect_synapsis(chart: Chart, kb: KnowledgeBase) -> list[HouseSynapsis]:
     return result
 
 
+@dataclass(frozen=True)
+class AllyFact:
+    """一条可审计的帮手链：谁在以何种接纳/互溶方式帮助目标星。"""
+
+    target: Planet
+    helper: Planet
+    kind: str                 # mutual / acceptance
+    strength: float           # mutual 4.0 > acceptance 3.0
+    dignity_type: DignityState
+    aspect_type: str | None
+    aspect_nature: str | None
+    detail: str
+
+
 class ConnectionClassifier:
     """两宫主之间的连接分级（返回全部适用的连接，由调用方按强度筛选）。"""
 
@@ -94,7 +109,7 @@ class ConnectionClassifier:
 
         # 互溶（双向尊严，最强）
         mutual = [
-            r for r in self._reception.detect(self._positions(chart), sect=chart.sect)
+            r for r in self._receptions(chart)
             if {r.planet_a, r.planet_b} == pair
         ]
         if mutual:
@@ -105,9 +120,7 @@ class ConnectionClassifier:
 
         # 激活接纳（单向尊严 + 相位）
         active = [
-            a for a in self._reception.detect_acceptance(
-                self._positions(chart), chart.aspects, sect=chart.sect
-            )
+            a for a in self._acceptances(chart)
             if {a.acceptor, a.accepted} == pair
         ]
         if active:
@@ -160,15 +173,13 @@ class ConnectionClassifier:
         无接纳 = 硬碰（惩罚重）。三王星/虚点不参与接纳 → 其刑克视为未接纳。
         """
         mutual = [
-            r for r in self._reception.detect(self._positions(chart), sect=chart.sect)
+            r for r in self._receptions(chart)
             if {r.planet_a, r.planet_b} == {a, b}
         ]
         if mutual:
             return True
         active = [
-            x for x in self._reception.detect_acceptance(
-                self._positions(chart), chart.aspects, sect=chart.sect
-            )
+            x for x in self._acceptances(chart)
             if {x.acceptor, x.accepted} == {a, b}
         ]
         return bool(active)
@@ -179,16 +190,57 @@ class ConnectionClassifier:
         被接纳/互溶 = 有帮手，是 assess_planet 关系轴的正向分量。
         三王星/虚点不参与（reception 引擎已排除）；互溶对不再重复计接纳。
         """
-        positions = self._positions(chart)
-        helpers: list[tuple[Planet, str]] = []
-        for r in self._reception.detect(positions, sect=chart.sect):
-            if planet in (r.planet_a, r.planet_b):
-                other = r.planet_b if r.planet_a == planet else r.planet_a
-                helpers.append((other, "mutual"))
-        for acc in self._reception.detect_acceptance(positions, chart.aspects, sect=chart.sect):
-            if acc.accepted == planet:
-                helpers.append((acc.acceptor, "acceptance"))
-        return helpers
+        return [(ally.helper, ally.kind) for ally in self.ally_timeline(chart, planet)]
+
+    def ally_timeline(self, chart: Chart, planet: Planet) -> list[AllyFact]:
+        """返回目标星的帮手链，按互溶/接纳强度降序排列。
+
+        这是产品层可消费的确定性结构：只记录出生盘已固化的互溶/激活接纳事实，
+        不把帮手解释成“问题消失”，也不替代 assess_planet 的本质弱项判断。
+        """
+        allies: list[AllyFact] = []
+        for r in self._receptions(chart):
+            if planet not in (r.planet_a, r.planet_b):
+                continue
+            helper = r.planet_b if r.planet_a == planet else r.planet_a
+            allies.append(AllyFact(
+                target=planet,
+                helper=helper,
+                kind="mutual",
+                strength=4.0,
+                dignity_type=r.dignity_type,
+                aspect_type=r.aspect_type.value if r.aspect_type else None,
+                aspect_nature=r.aspect_nature,
+                detail=r.description_zh or f"{self._kb.planet(planet).name_zh}↔{self._kb.planet(helper).name_zh}互溶",
+            ))
+        for acc in self._acceptances(chart):
+            if acc.accepted != planet:
+                continue
+            allies.append(AllyFact(
+                target=planet,
+                helper=acc.acceptor,
+                kind="acceptance",
+                strength=3.0,
+                dignity_type=acc.dignity_type,
+                aspect_type=acc.aspect_type.value,
+                aspect_nature=acc.aspect_nature,
+                detail=acc.description_zh or f"{self._kb.planet(acc.acceptor).name_zh}接纳{self._kb.planet(planet).name_zh}",
+            ))
+        return sorted(allies, key=lambda a: (-a.strength, a.helper.value))
+
+    def has_ally(self, chart: Chart, planet: Planet) -> bool:
+        """目标星是否有互溶/激活接纳帮手。"""
+        return bool(self.ally_timeline(chart, planet))
+
+    def debilitated_with_ally(self, chart: Chart, planet: Planet) -> bool:
+        """本质弱（陷/落陷等尊贵总分<0）但仍有帮手链。
+
+        用于话术：这颗星不是“没问题”，而是“有伤，但有人/某领域能托住”。
+        """
+        if planet not in chart.planets:
+            return False
+        assessment = assess_planet(chart, self._kb, planet)
+        return assessment.essential_neg > 0 and self.has_ally(chart, planet)
 
     def strong_count(self, chart: Chart, house_a: int, targets: list[int]) -> int:
         """house_a 与 targets 各宫的强连接数（用于事件条目收敛）。"""
@@ -201,6 +253,20 @@ class ConnectionClassifier:
         return count
 
     # -- 内部 -------------------------------------------------------------
+
+    def _receptions(self, chart: Chart):
+        """优先使用 Chart 内出生即定快照；旧图缺字段时才现场补算。"""
+        if chart.receptions:
+            return chart.receptions
+        return self._reception.detect(self._positions(chart), sect=chart.sect, aspects=chart.aspects)
+
+    def _acceptances(self, chart: Chart):
+        """优先使用 Chart 内出生即定快照；旧图缺字段时才现场补算。"""
+        if chart.acceptances:
+            return chart.acceptances
+        return self._reception.detect_acceptance(
+            self._positions(chart), chart.aspects, sect=chart.sect
+        )
 
     @staticmethod
     def _positions(chart: Chart) -> dict[Planet, tuple]:

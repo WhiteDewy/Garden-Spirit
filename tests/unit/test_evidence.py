@@ -138,6 +138,33 @@ def test_evidence_builder_detriment():
     assert es.negative_evidence[0].weight == pytest.approx(4.0)
 
 
+def test_evidence_builder_mixed_dignity_preserves_debility_polarity():
+    """混合本质尊贵走证据层时，不能让小尊贵的正净分盖掉失势/落陷。"""
+    kb = load_knowledge()
+    builder = EvidenceBuilder(kb)
+    fact = Fact(
+        id="f1", category=FactCategory.DIGNITY, chart_id="c1",
+        description="金星落在处女座，财务尊贵分+2（有支撑但受限）",
+        extracted_at=datetime.now(timezone.utc),
+        payload={
+            "planet": "venus",
+            "sign": "virgo",
+            "dignity": "triplicity",
+            "score": 2,
+            "raw_score": 2,
+            "essential_pos": 2.1,
+            "essential_neg": 1.4,
+        },
+    )
+    fs = FactSet(id="fs", chart_ids=["c1"], intent_domain="career", facts=[fact])
+    es = builder.build(fs, domain="career", query_context="换工作")
+
+    assert len(es.positive_evidence) == 0
+    assert len(es.negative_evidence) == 1
+    assert es.negative_evidence[0].polarity == EvidencePolarity.NEGATIVE
+    assert es.negative_evidence[0].weight > 0
+
+
 def test_evidence_builder_aspect_nature():
     kb = load_knowledge()
     builder = EvidenceBuilder(kb)

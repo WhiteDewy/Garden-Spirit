@@ -68,10 +68,10 @@
 ```
 对 (A, B)：
   A 落在 B 的尊贵星座内（单向）   # B 是接纳方（acceptor）
-  且 A、B 之间有主相位（activate）  # conjunction/opposition/trine/square/sextile/quincunx
+  且 A、B 之间有主相位（activate）  # conjunction/opposition/trine/square/sextile
   且该方向的尊贵满足严格度（与互溶同规则，见 §2.2）
   → 激活接纳，B 接纳 A
-无相位 → 不构成接纳（废弃"潜在接纳"）
+无相位或仅次要相位（半刑/八分/梅花等） → 不构成接纳（废弃"潜在接纳"）
 非庙/旺时，单个三分/界/面力度不够，需"有其二"（≥2 项弱尊贵）。
 ```
 

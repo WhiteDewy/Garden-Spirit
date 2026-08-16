@@ -10,8 +10,9 @@ import pytest
 
 from domain.astrology.calculation import NatalChartCalculator
 from domain.astrology.knowledge import ReceptionEngine, load_knowledge
-from shared.enums import DignityState, HouseSystem, Planet
-from shared.models import BirthData, GeoLocation, Person
+from shared.enums import AspectApplication, AspectType, DignityState, HouseSystem, Planet, Sect, Sign
+from shared.models import Aspect, BirthData, GeoLocation, Person
+from shared.models.chart_codec import chart_from_json, chart_to_json
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +52,28 @@ def _find_acceptance(accs, acceptor, accepted):
         if a.acceptor == acceptor and a.accepted == accepted:
             return a
     return None
+
+
+def test_natal_chart_persists_reception_snapshots(chart):
+    """本命盘计算时即固化互溶/接纳快照，后续读取不再现场重算。"""
+    sun_jupiter = _find_mutual(chart.receptions, Planet.SUN, Planet.JUPITER)
+    mars_sun = _find_acceptance(chart.acceptances, Planet.MARS, Planet.SUN)
+
+    assert sun_jupiter is not None
+    assert sun_jupiter.aspect_type is not None
+    assert sun_jupiter.aspect_nature == "HARMONIOUS"
+    assert mars_sun is not None
+    assert mars_sun.aspect_nature == "DYNAMIC"
+
+
+def test_reception_snapshots_roundtrip_in_chart_codec(chart):
+    """Chart codec 保存出生即定的互溶/接纳图谱。"""
+    restored = chart_from_json(chart_to_json(chart))
+
+    assert _find_mutual(restored.receptions, Planet.SUN, Planet.JUPITER) is not None
+    assert _find_acceptance(restored.acceptances, Planet.MARS, Planet.SUN) is not None
+    assert restored.receptions[0].dignities_of_a_at_b == chart.receptions[0].dignities_of_a_at_b
+    assert restored.acceptances[0].dignities == chart.acceptances[0].dignities
 
 
 def test_mutual_sun_jupiter_domicile(engine, positions, chart):
@@ -139,6 +162,28 @@ def test_acceptance_requires_aspect(engine, positions, chart):
         Planet.SUN, Planet.MERCURY,
     )
     assert a is None
+
+
+def test_acceptance_requires_major_aspect_not_quincunx(engine):
+    """梅花/次要相位不激活接纳：即使单向庙尊严成立，也不进入 helper/acceptance 链。"""
+    positions = {
+        Planet.SUN: (Sign.ARIES, 10.0),
+        Planet.MARS: (Sign.LEO, 10.0),  # 太阳庙接纳火星
+    }
+    aspects = [
+        Aspect(
+            Planet.SUN,
+            Planet.MARS,
+            AspectType.QUINCUNX,
+            150.0,
+            0.0,
+            AspectApplication.EXACT,
+        )
+    ]
+
+    accs = engine.detect_acceptance(positions, aspects, sect=Sect.DAY)
+
+    assert _find_acceptance(accs, Planet.SUN, Planet.MARS) is None
 
 
 def test_mutual_pair_not_duplicated_in_acceptance(engine, positions, chart):

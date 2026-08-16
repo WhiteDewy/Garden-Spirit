@@ -76,6 +76,9 @@ def build_healing_instruction() -> str:
     lines.append("- 压力不等于垮台：凶相位给压力，但入庙能扛、过程差不等于结局差。")
     lines.append("- 永远落在一句可执行的功课上（具体动词），不说'学会平衡'式正确废话。")
     lines.append("- 看到问题必须给出路，不给绝路、不添堵。")
+    from application.conversation.safety import medical_boundary_instruction
+
+    lines.append(f"- {medical_boundary_instruction()}")
     return "\n".join(lines)
 
 

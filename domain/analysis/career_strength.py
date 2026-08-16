@@ -16,7 +16,8 @@ from shared.constants import DIGNITY_STATE_ZH
 from shared.enums import DignityState, EvidencePolarity, FactCategory, Planet, Sign
 from shared.models import Chart, Fact, Person
 
-from domain.analysis.base import AnalysisModule
+from domain.analysis.base import AnalysisModule, focus_planets_from_enrichment
+from domain.astrology.common import assess_planet
 from domain.astrology.knowledge import DignityEngine, load_knowledge
 
 logger = get_logger("analysis.career_strength")
@@ -36,6 +37,17 @@ class CareerStrength(AnalysisModule):
     def analyze(self, chart: Chart, person: Person, params: dict) -> list[Fact]:
         facts: list[Fact] = []
 
+        career_planets = list(_CAREER_PLANETS)
+        for planet in focus_planets_from_enrichment(
+            chart,
+            self._kb,
+            params.get("_enrichment"),
+            include_house_lords=True,
+            include_focus_houses=True,
+        ):
+            if planet not in career_planets:
+                career_planets.append(planet)
+
         # 1. MC 守护星
         mc_ruler = self._mc_ruler(chart)
         if mc_ruler:
@@ -51,7 +63,7 @@ class CareerStrength(AnalysisModule):
             )
 
         # 2. 事业行星的先天尊贵
-        for planet in _CAREER_PLANETS:
+        for planet in career_planets:
             if planet not in chart.planets:
                 continue
             cp = chart.planets[planet]
@@ -61,7 +73,8 @@ class CareerStrength(AnalysisModule):
             # 只输出显著的尊贵状态
             significant = [s for s in states if self._dignity.score(s) != 0]
             if significant:
-                # 取最显著一档（按 |score|）
+                assessment = assess_planet(chart, self._kb, planet)
+                # 取最显著一档（按 |score|），但把 split-axis 一起写入，供证据层审计。
                 top = max(significant, key=lambda s: abs(self._dignity.score(s)))
                 facts.append(
                     Fact(
@@ -80,13 +93,17 @@ class CareerStrength(AnalysisModule):
                             "sign": cp.sign.sign.value,
                             "dignity": top.value,
                             "score": self._dignity.score(top),
+                            "raw_score": total,
+                            "essential_pos": assessment.essential_pos,
+                            "essential_neg": assessment.essential_neg,
                             "theme": "career_strength",
+                            "module": self.name,
                         },
                     )
                 )
 
         # 3. 事业行星落 10 宫（角宫强化）
-        for planet in _CAREER_PLANETS:
+        for planet in career_planets:
             if planet in chart.planets and chart.planets[planet].house.house == 10:
                 facts.append(
                     Fact(
@@ -103,7 +120,7 @@ class CareerStrength(AnalysisModule):
                 )
 
         # 4. 主题总结（聚合职业强度）
-        theme_fact = self._theme_summary(chart, mc_ruler)
+        theme_fact = self._theme_summary(chart, mc_ruler, career_planets)
         if theme_fact:
             facts.append(theme_fact)
 
@@ -119,30 +136,31 @@ class CareerStrength(AnalysisModule):
         mc_sign: Sign = chart.midheaven.sign
         return self._kb.sign(mc_sign).traditional_ruler
 
-    def _theme_summary(self, chart: Chart, mc_ruler: Planet | None) -> Fact | None:
+    def _theme_summary(
+        self, chart: Chart, mc_ruler: Planet | None, career_planets: list[Planet]
+    ) -> Fact | None:
         """聚合职业强度：分数 = Σ(事业行星尊贵分) + 落十宫加成。"""
         score = 0.0
         details: list[str] = []
 
-        for planet in _CAREER_PLANETS:
+        for planet in career_planets:
             if planet not in chart.planets:
                 continue
             cp = chart.planets[planet]
-            states, total = self._dignity.compute(
-                planet, cp.sign.sign, cp.sign.degree_in_sign, chart.sect
-            )
-            score += total
+            assessment = assess_planet(chart, self._kb, planet)
+            score += self._essential_theme_score(assessment)
             if cp.house.house == 10:
                 score += 2
                 details.append(f"{self._kb.planet(planet).name_zh}落十宫")
 
         if mc_ruler and mc_ruler in chart.planets:
-            mcr = chart.planets[mc_ruler]
-            states, total = self._dignity.compute(
-                mc_ruler, mcr.sign.sign, mcr.sign.degree_in_sign, chart.sect
+            assessment = assess_planet(chart, self._kb, mc_ruler)
+            essential_score = self._essential_theme_score(assessment)
+            score += essential_score
+            details.append(
+                f"十宫主{self._kb.planet(mc_ruler).name_zh}"
+                f"本质分{essential_score:+.1f}"
             )
-            score += total
-            details.append(f"十宫主{self._kb.planet(mc_ruler).name_zh}尊贵分{total}")
 
         if not details:
             return None
@@ -174,3 +192,10 @@ class CareerStrength(AnalysisModule):
                 "module": self.name,
             },
         )
+
+    @staticmethod
+    def _essential_theme_score(assessment) -> float:
+        """主题评分消费 split-axis：本质受克存在时优先保留受限，不让小尊贵净成正向。"""
+        if assessment.essential_neg > 0:
+            return -assessment.essential_neg
+        return assessment.essential_pos

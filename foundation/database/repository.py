@@ -31,10 +31,25 @@ CREATE TABLE IF NOT EXISTS persons (
     notes_encrypted TEXT DEFAULT '',
     birth_data_encrypted TEXT NOT NULL,
     house_system TEXT DEFAULT '',
+    chart_cache_encrypted TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 )
 """
+
+_PERSON_MIGRATIONS = (
+    ("chart_cache_encrypted", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _ensure_person_columns(conn: sqlite3.Connection) -> None:
+    """为已存在的 persons 表补齐缺失列（幂等）。"""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(persons)")}
+    for name, decl in _PERSON_MIGRATIONS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE persons ADD COLUMN {name} {decl}")
+            logger.info("persons 表迁移：新增列 %s", name)
+    conn.commit()
 
 
 def _iso(value: datetime | None) -> str:
@@ -83,6 +98,7 @@ class PersonRepository:
         self._conn.execute("PRAGMA journal_mode=WAL").fetchone()  # 消费返回行，避免残留游标
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.execute(_SCHEMA)
+        _ensure_person_columns(self._conn)
         self._conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -97,6 +113,9 @@ class PersonRepository:
         name_enc = self._encryptor.encrypt(person.name)
         gender_enc = self._encryptor.encrypt(person.gender or "")
         notes_enc = self._encryptor.encrypt(person.notes)
+        chart_cache_enc = self._encryptor.encrypt(
+            json.dumps(person.chart_cache or {}, ensure_ascii=False)
+        )
         created_at = _iso(person.created_at)
 
         with self._connect() as conn:
@@ -104,14 +123,15 @@ class PersonRepository:
                 """
                 INSERT INTO persons
                     (id, name_encrypted, gender_encrypted, notes_encrypted,
-                     birth_data_encrypted, house_system, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     birth_data_encrypted, house_system, chart_cache_encrypted, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name_encrypted = excluded.name_encrypted,
                     gender_encrypted = excluded.gender_encrypted,
                     notes_encrypted = excluded.notes_encrypted,
                     birth_data_encrypted = excluded.birth_data_encrypted,
                     house_system = excluded.house_system,
+                    chart_cache_encrypted = excluded.chart_cache_encrypted,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -121,6 +141,7 @@ class PersonRepository:
                     notes_enc,
                     birth_enc,
                     person.house_system.value if person.house_system else "",
+                    chart_cache_enc,
                     created_at,
                     now,
                 ),
@@ -140,6 +161,12 @@ class PersonRepository:
         name = self._encryptor.decrypt(row["name_encrypted"])
         gender = self._encryptor.decrypt(row["gender_encrypted"]) or None
         notes = self._encryptor.decrypt(row["notes_encrypted"])
+        chart_cache_raw = row["chart_cache_encrypted"] if "chart_cache_encrypted" in row.keys() else ""
+        chart_cache = (
+            json.loads(self._encryptor.decrypt(chart_cache_raw))
+            if chart_cache_raw
+            else {}
+        )
 
         return Person(
             id=row["id"],
@@ -148,6 +175,7 @@ class PersonRepository:
             gender=gender,
             notes=notes,
             house_system=HouseSystem(row["house_system"]) if row["house_system"] else None,
+            chart_cache=chart_cache,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )

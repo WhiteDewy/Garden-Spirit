@@ -444,7 +444,7 @@ def test_record_life_event_with_verification(client):
 
     pid = client.post("/person", json=_person_payload()).json()["id"]
     person = client.app.state.person_repo.get(pid)
-    chart = client.app.state.agent._calculator.compute(person)
+    chart = client.app.state.chart_cache.get_or_compute(person)
 
     event_date = datetime(2021, 9, 1, tzinfo=timezone.utc)
     period = compute_firdaria(chart.epoch_utc, chart.sect, reference=event_date)
@@ -560,6 +560,36 @@ def test_preferences_invalid_422(client):
 
     resp2 = client.put(f"/person/{pid}/preferences", json={"preferred_persona": "nope"})
     assert resp2.status_code == 422
+
+
+def test_personas_endpoint_returns_ten_planet_personas(client):
+    """GET /personas 暴露前端星灵选择器需要的 10 颗星灵。"""
+    resp = client.get("/personas")
+    assert resp.status_code == 200
+    personas = resp.json()
+    assert len(personas) == 10
+    assert [p["key"] for p in personas] == [
+        "sun", "moon", "mercury", "venus", "mars",
+        "jupiter", "saturn", "uranus", "neptune", "pluto",
+    ]
+    assert all(p["name"] and p["healing_name"] and p["style"] for p in personas)
+
+
+def test_chat_uses_preferred_persona_when_body_omits_persona(client):
+    """用户未显式传 persona 时，/chat 读取偏好人格并写入会话。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    client.put(f"/person/{pid}/preferences", json={"preferred_persona": "saturn"})
+
+    chat = client.post("/chat", json={
+        "person_id": pid,
+        "session_id": "sess_pref_saturn",
+        "message": "你好，今天随便聊聊",
+    })
+    assert chat.status_code == 200
+
+    ctx = client.app.state.agent.get_session_context("sess_pref_saturn")
+    assert ctx is not None
+    assert ctx.persona.value == "saturn"
 
 
 def test_garden_pending_verifications(client):

@@ -74,6 +74,43 @@ _CAUTION_PATTERNS = (
     "没有希望",
 )
 
+#: MEDICAL_BOUNDARY 级——医疗诊断/用药/寿命红线。
+#: 命中不阻断占星管线（避免误杀健康咨询），但最终输出必须补专业边界。
+_MEDICAL_BOUNDARY_PATTERNS = (
+    "确诊",
+    "诊断",
+    "癌症",
+    "肿瘤",
+    "怀孕",
+    "流产",
+    "手术",
+    "检查结果",
+    "吃药",
+    "用药",
+    "停药",
+    "药量",
+    "治疗方案",
+    "要不要去医院",
+    "去不去医院",
+    "会不会死",
+    "活多久",
+    "寿命",
+)
+
+_MEDICAL_BOUNDARY_MARKER = "健康和身体问题要以医生诊断为准"
+
+MEDICAL_BOUNDARY_CODA = (
+    f"\n\n{_MEDICAL_BOUNDARY_MARKER}。"
+    "星盘可以帮助你观察压力、节奏和心理感受，"
+    "但不能判断疾病、寿命、诊断结果、用药或治疗方案；"
+    "如果身体不适、症状加重或已有检查结果，请优先咨询医生。"
+)
+
+_MEDICAL_BOUNDARY_INSTRUCTION = (
+    "医疗边界：不能诊断疾病、预测寿命、判断检查结果、指导用药/停药或替代医生建议；"
+    "只可提示自我观察，并引导盘主咨询医生或其他专业人士。"
+)
+
 
 @dataclass(frozen=True)
 class SafetyResult:
@@ -111,7 +148,30 @@ def check_safety(message: str) -> SafetyResult:
             logger.info("safety: 检测到情绪低落信号「%s」（caution，不阻断）", keyword)
             return SafetyResult(level="caution")
 
+    for keyword in _MEDICAL_BOUNDARY_PATTERNS:
+        if keyword in message:
+            logger.info("safety: 检测到医疗边界信号「%s」（caution，不阻断）", keyword)
+            return SafetyResult(level="caution")
+
     return SafetyResult(level="safe")
+
+
+def medical_boundary_check(text: str) -> str | None:
+    """扫输入/输出：命中医疗诊断/用药/寿命红线 → 返回专业边界 coda。"""
+    if not text:
+        return None
+    if _MEDICAL_BOUNDARY_MARKER in text:
+        return None
+    for keyword in _MEDICAL_BOUNDARY_PATTERNS:
+        if keyword in text:
+            logger.warning("safety: 文本含医疗边界信号「%s」，追加专业边界", keyword)
+            return MEDICAL_BOUNDARY_CODA
+    return None
+
+
+def medical_boundary_instruction() -> str:
+    """LLM prompt 用医疗边界指令。"""
+    return _MEDICAL_BOUNDARY_INSTRUCTION
 
 
 # ---------------------------------------------------------------------------
@@ -121,5 +181,8 @@ __all__ = [
     "SafetyResult",
     "check_safety",
     "disclaimer_text",
+    "medical_boundary_check",
+    "medical_boundary_instruction",
+    "MEDICAL_BOUNDARY_CODA",
     "_DISCLAIMER",
 ]

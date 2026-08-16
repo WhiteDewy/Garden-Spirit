@@ -1,7 +1,7 @@
 """时机栈合成（TimingStack）：一次调用回答"当前处于什么时期"。
 
-合成六层推运 + 行运窗口：
-法达（章节）→ 年主星（当年）→ 日返（年度快照）→ 次限月亮（情绪季节）
+合成五层推运 + 行运窗口：
+法达（章节/子限）→ 日返（年度快照）→ 次限月亮（情绪季节）
 → 月返（当月）→ 三限月亮（细情绪）→ 行运窗口（触发月份）。
 确定性、无 LLM；to_dict() 出口（供 app 消费）。
 """
@@ -27,18 +27,23 @@ _TRANSIT_MONTHS = 6
 class TimingStack:
     """当前时期合成对象。"""
 
-    year_lord: str
     firdaria: FirdariaReading
     solar_return: SolarReturn
     lunar_return: LunarReturn
     progressed_moon: ProgressedMoon          # 次限
     tertiary_moon: ProgressedMoon            # 三限
+    transit_targets: list[str] = field(default_factory=list)  # 法达 + 问题目标星
+    helper_transit_targets: list[str] = field(default_factory=list)  # 互溶/接纳帮手星
+    scoring_transit_targets: list[str] = field(default_factory=list)  # 实际扫描目标星
     transits: list[dict] = field(default_factory=list)  # 月窗口
 
     def to_dict(self) -> dict:
         return {
             "type": "timing_stack",
-            "year_lord": self.year_lord,
+            "timing_authority": "firdaria",
+            "transit_targets": self.transit_targets,
+            "helper_transit_targets": self.helper_transit_targets,
+            "scoring_transit_targets": self.scoring_transit_targets,
             "firdaria": self.firdaria.to_dict(),
             "solar_return": self.solar_return.to_dict(),
             "lunar_return": self.lunar_return.to_dict(),
@@ -63,30 +68,46 @@ def build_timing_stack(
     if ref.tzinfo is None:
         ref = ref.replace(tzinfo=timezone.utc)
 
-    # 行运窗口（年主星 + 逐月扫描）
+    # 行运窗口（法达大限/子限 + 逐月扫描）
     timing = Timing(kb)
-    year_lord = timing._year_lord(chart, person, ref)
+    firdaria = firdaria_reading(chart, kb, ref)
+    targets = timing._timing_targets(
+        chart,
+        firdaria.period.major_lord,
+        firdaria.period.sub_lord,
+    )
+    helper_targets = timing._helper_targets(chart, targets)
+    scoring_targets = targets | helper_targets
+    sorted_targets = [p.value for p in sorted(targets, key=lambda p: p.value)]
+    sorted_helper_targets = [p.value for p in sorted(helper_targets, key=lambda p: p.value)]
+    sorted_scoring_targets = [p.value for p in sorted(scoring_targets, key=lambda p: p.value)]
     transits: list[dict] = []
     from dateutil.relativedelta import relativedelta
 
     for i in range(_TRANSIT_MONTHS):
         month = ref.replace(day=1) + relativedelta(months=i)
-        score = timing._month_score(chart, month, year_lord)
+        score = timing._month_score(chart, month, scoring_targets)
         transits.append({
             "month": month.strftime("%Y-%m"),
             "score": round(score, 2),
             "tag": "有利" if score >= 0.5 else ("不利" if score <= -0.5 else "中性"),
+            "timing_authority": "firdaria",
+            "target_planets": sorted_targets,
+            "helper_target_planets": sorted_helper_targets,
+            "scoring_target_planets": sorted_scoring_targets,
         })
 
     stack = TimingStack(
-        year_lord=year_lord.value,
-        firdaria=firdaria_reading(chart, kb, ref),
+        firdaria=firdaria,
         solar_return=SolarReturnCalculator().compute(chart, loc, ref, house_system=house_system,
                                                      birth_location=person.birth.location),
         lunar_return=LunarReturnCalculator().compute(chart, loc, ref, house_system=house_system,
                                                      birth_location=person.birth.location),
         progressed_moon=ProgressedMoonCalculator().compute(chart, birth_utc, ref),
         tertiary_moon=ProgressedMoonCalculator().compute(chart, birth_utc, ref, mode="tertiary"),
+        transit_targets=sorted_targets,
+        helper_transit_targets=sorted_helper_targets,
+        scoring_transit_targets=sorted_scoring_targets,
         transits=transits,
     )
     return stack

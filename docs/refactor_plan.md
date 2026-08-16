@@ -70,7 +70,7 @@
 
 【数据层 · 静态落库】 出生即定，注册算一次，永远读缓存
   Person.chart_cache
-    └ natal:{house_system}:{zodiac}   → 本命 Chart（含 receptions 互溶接纳表）
+    └ natal:v1:{house_system}:{zodiac}   → 本命 Chart（含 receptions 互溶接纳表）
   （法达不落库——纯函数运行时 O(9) 算，见 §6.1/§6.4）
 
 【计算层 · 唯一引擎】

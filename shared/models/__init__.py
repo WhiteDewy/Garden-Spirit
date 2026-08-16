@@ -6,7 +6,9 @@
 from shared.models.chart import (
     Aspect,
     Chart,
+    ChartAcceptance,
     ChartPlanet,
+    ChartReception,
     EclipticPosition,
     EssentialDignity,
     FixedStarConjunction,
@@ -48,7 +50,9 @@ __all__ = [
     "GeoLocation",
     # chart
     "Chart",
+    "ChartAcceptance",
     "ChartPlanet",
+    "ChartReception",
     "EclipticPosition",
     "SignPosition",
     "HousePosition",

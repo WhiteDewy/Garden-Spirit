@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>星灵花园 · Living Astro Companion V5</title>
+<style>
+/* ============================================================
+   星灵花园 · V5 Demo
+   方向：Living Astro Companion / 会呼吸的私人星象伙伴
+
+   基于 docs/backend_capabilities_for_frontend.md 已有能力设计：
+   - Garden 聚合：今日来信 / 继续昨天 / 记忆豆荚 / 今日碎片 / 红点 / trust_level
+   - recommended-spirits：今日醒来的星灵
+   - recall/opening：我记得你
+   - chat 富字段：lit_fragments / seen_fragments / actioned_fragments / keepsake_created
+   - letters / journal / profile / findings / preferences / privacy
+
+   设计目标：高级、鲜明、治愈、有亮点；低插画成本但有生命力。
+   ============================================================ */
+
+:root{
+  --bg:#101815;
+  --deep:#14201c;
+  --deep2:#1b2a25;
+  --paper:#f5efe2;
+  --paper2:#fff9ee;
+  --ink:#18251f;
+  --muted:rgba(245,239,226,.62);
+  --line:rgba(255,244,218,.14);
+  --gold:#eacb78;
+  --moon:#cdbef8;
+  --green:#a7d6b3;
+  --aqua:#9bd7d4;
+  --rose:#e8a8bd;
+  --danger:#d97c6f;
+  --shadow:0 30px 90px rgba(0,0,0,.45);
+  --radius:28px;
+  --sans:"Inter","MiSans","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --serif:"Noto Serif SC","Songti SC","STSong",serif;
+}
+*{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0b0f0d;color:var(--paper);font-family:var(--sans)}
+body{display:grid;place-items:center}.phone{position:relative;width:min(100vw,390px);height:min(100vh,844px);overflow:hidden;border-radius:38px;background:var(--bg);box-shadow:var(--shadow)}
+@media(max-height:720px){.phone{height:100vh;border-radius:0}}button{font:inherit;color:inherit;cursor:pointer}.screen{position:absolute;inset:0;display:none;overflow:hidden}.screen.active{display:block}.scroll{position:absolute;inset:0;overflow:auto;padding-bottom:112px;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}
+.noise{position:absolute;inset:0;opacity:.075;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.85) .55px,transparent .6px);background-size:5px 5px;mix-blend-mode:soft-light}.grain{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.06),transparent 32%,rgba(0,0,0,.12));opacity:.55}.glow{position:absolute;border-radius:999px;filter:blur(34px);pointer-events:none}
+.page-head{position:absolute;z-index:10;top:26px;left:22px;right:22px;display:flex;align-items:center;justify-content:space-between}.eyebrow{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:rgba(245,239,226,.48)}.head-title{margin-top:4px;font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:.03em}.icon-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);display:grid;place-items:center}.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(234,203,120,.24);background:rgba(234,203,120,.1);color:#f3dfaa;border-radius:999px;padding:7px 10px;font-size:10px;letter-spacing:.04em}.dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 12px var(--gold)}
+.bottom-nav{position:absolute;z-index:30;left:14px;right:14px;bottom:12px;height:68px;border:1px solid rgba(255,255,255,.12);background:rgba(13,22,19,.72);backdrop-filter:blur(24px);border-radius:26px;display:grid;grid-template-columns:repeat(4,1fr);padding:7px;box-shadow:0 14px 42px rgba(0,0,0,.24)}.nav-item{position:relative;border:0;background:transparent;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:rgba(245,239,226,.42);font-size:9px}.nav-item .ico{font-size:17px;line-height:1}.nav-item.active{background:rgba(255,255,255,.09);color:#fff4d7}.nav-item.active .ico{filter:drop-shadow(0 0 10px rgba(234,203,120,.65))}.badge{position:absolute;right:18px;top:9px;width:7px;height:7px;border-radius:50%;background:#ffcf72;box-shadow:0 0 12px #ffcf72}
+
+/* HOME */
+.home{background:
+  radial-gradient(circle at 50% 12%,rgba(200,190,255,.18),transparent 28%),
+  radial-gradient(circle at 84% 24%,rgba(157,215,212,.16),transparent 24%),
+  radial-gradient(circle at 18% 70%,rgba(234,203,120,.13),transparent 28%),
+  linear-gradient(180deg,#172521 0%,#101815 48%,#0d1412 100%)}
+.home:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(0deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:34px 34px;mask-image:linear-gradient(180deg,rgba(0,0,0,.7),transparent 72%);opacity:.42}.home .glow.one{width:250px;height:250px;left:70px;top:118px;background:rgba(205,190,248,.2)}.home .glow.two{width:220px;height:220px;right:-80px;bottom:170px;background:rgba(167,214,179,.17)}.home-content{position:relative;z-index:2;padding:88px 22px 110px}.date-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}.date-row .today{font-size:10px;letter-spacing:.2em;color:rgba(245,239,226,.48)}.trust{font-size:10px;color:rgba(245,239,226,.62)}.hero{display:grid;grid-template-columns:1fr 126px;gap:12px;align-items:center}.hero h1{font-family:var(--serif);font-size:32px;line-height:1.28;margin:0;font-weight:600;letter-spacing:.02em}.hero h1 span{color:#f3dfaa}.hero p{margin:12px 0 0;color:rgba(245,239,226,.62);font-size:12px;line-height:1.75}.living-card{position:relative;height:156px;border-radius:36px;border:1px solid rgba(255,255,255,.13);background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.035));box-shadow:inset 0 0 35px rgba(205,190,248,.1),0 18px 55px rgba(0,0,0,.18);overflow:hidden}.living-card:before{content:"";position:absolute;inset:16px;border-radius:999px;border:1px solid rgba(234,203,120,.14);animation:orbit 10s linear infinite}.living-card:after{content:"";position:absolute;width:36px;height:36px;right:16px;top:18px;border-radius:50%;background:radial-gradient(circle,#fff3c5,#eacb78 58%,transparent 60%);box-shadow:0 0 38px rgba(234,203,120,.55)}
+.spirit-life{position:absolute;left:50%;top:55%;width:76px;height:86px;transform:translate(-50%,-50%);animation:breathe 4.6s ease-in-out infinite}.spirit-body{position:absolute;inset:0;border-radius:46% 54% 48% 52% / 56% 54% 46% 44%;background:radial-gradient(circle at 38% 30%,#fff 0 8%,transparent 9%),radial-gradient(circle at 62% 30%,#fff 0 8%,transparent 9%),radial-gradient(circle at 50% 62%,rgba(255,255,255,.44),transparent 34%),linear-gradient(145deg,#efe9ff 0%,#bfb1f4 46%,#6b637f 100%);box-shadow:0 0 0 1px rgba(255,255,255,.28),0 0 46px rgba(205,190,248,.48)}.spirit-eye{position:absolute;top:33px;width:5px;height:7px;border-radius:50%;background:#23312c;animation:blink 6s infinite}.spirit-eye.left{left:25px}.spirit-eye.right{right:25px}.spirit-tail{position:absolute;left:50%;bottom:-16px;width:42px;height:34px;border-radius:50%;background:rgba(205,190,248,.28);filter:blur(10px);transform:translateX(-50%)}.orbit-dot{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--aqua);left:28px;top:34px;box-shadow:0 0 18px var(--aqua);animation:floatdot 5.8s ease-in-out infinite}.wake-strip{margin:18px 0 14px;display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(234,203,120,.2);background:rgba(234,203,120,.075);border-radius:22px;padding:11px 13px}.wake-strip b{font-family:var(--serif);font-size:15px}.wake-strip span{font-size:10px;color:rgba(245,239,226,.54)}
+.letter{position:relative;border-radius:30px;background:linear-gradient(180deg,rgba(255,249,238,.98),rgba(244,236,220,.94));color:var(--ink);padding:20px 19px 18px;box-shadow:0 22px 60px rgba(0,0,0,.25);overflow:hidden}.letter:before{content:"";position:absolute;left:-20px;right:-20px;top:0;height:5px;background:linear-gradient(90deg,var(--moon),var(--gold),var(--green),var(--aqua))}.letter-k{font-size:9px;letter-spacing:.22em;color:rgba(24,37,31,.45)}.letter h2{font-family:var(--serif);font-size:23px;line-height:1.35;margin:12px 0 12px;font-weight:600}.letter p{font-family:var(--serif);font-size:14px;line-height:2;margin:0;color:rgba(24,37,31,.72)}.letter-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.meta-pill{border:1px solid rgba(24,37,31,.1);background:rgba(255,255,255,.48);border-radius:999px;padding:7px 9px;font-size:10px;color:rgba(24,37,31,.56)}.actions{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:15px}.primary{border:0;border-radius:19px;background:#17251f;color:#fff5dc;padding:12px 14px;font-size:12px;box-shadow:0 12px 30px rgba(24,37,31,.18)}.secondary{border:1px solid rgba(24,37,31,.12);background:rgba(255,255,255,.46);border-radius:19px;color:#26382f;padding:12px 13px;font-size:12px}.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.mini-card{min-height:96px;border-radius:24px;border:1px solid var(--line);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);padding:14px}.mini-card.wide{grid-column:1/-1;min-height:84px}.mini-label{font-size:9px;letter-spacing:.16em;color:rgba(245,239,226,.42);text-transform:uppercase}.mini-card b{display:block;margin-top:8px;font-family:var(--serif);font-size:16px;font-weight:600}.mini-card p{margin:7px 0 0;font-size:11px;line-height:1.55;color:rgba(245,239,226,.58)}.fragment-row{display:flex;gap:7px;margin-top:10px}.frag{height:25px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);padding:6px 9px;font-size:10px;color:rgba(245,239,226,.7)}.recall-line{display:flex;align-items:center;gap:10px;margin-top:10px}.pulse-star{width:18px;height:18px;border-radius:50%;background:var(--gold);box-shadow:0 0 24px rgba(234,203,120,.75);animation:pulse 2.2s ease-in-out infinite}.explain{position:absolute;z-index:40;left:18px;right:18px;bottom:92px;transform:translateY(18px);opacity:0;pointer-events:none;transition:.28s;border:1px solid rgba(234,203,120,.28);background:rgba(17,27,24,.92);backdrop-filter:blur(24px);border-radius:24px;padding:15px 16px;font-size:11px;line-height:1.75;color:rgba(245,239,226,.72)}.explain.show{opacity:1;transform:translateY(0);pointer-events:auto}.explain b{display:block;color:#f3dfaa;margin-bottom:4px;font-family:var(--serif);font-size:15px}
+
+/* CHAT */
+.chat{background:linear-gradient(180deg,#182620,#101815 65%,#0d1311)}.chat-body{padding:92px 18px 110px}.chat-status{display:flex;align-items:center;gap:11px;margin-bottom:18px}.avatar-mini{position:relative;width:48px;height:48px;border-radius:50%;background:linear-gradient(145deg,#eee7ff,#8f82cc);box-shadow:0 0 30px rgba(205,190,248,.34)}.avatar-mini:before,.avatar-mini:after{content:"";position:absolute;top:20px;width:4px;height:6px;border-radius:50%;background:#1d2b25}.avatar-mini:before{left:17px}.avatar-mini:after{right:17px}.chat-status b{font-family:var(--serif);font-size:17px}.chat-status span{display:block;font-size:10px;color:rgba(245,239,226,.48);margin-top:4px}.bubble{max-width:84%;border-radius:24px;padding:14px 16px;margin:10px 0;font-family:var(--serif);font-size:14px;line-height:1.9}.bubble.ai{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.1);border-bottom-left-radius:8px}.bubble.user{margin-left:auto;background:#f3dfaa;color:#18251f;border-bottom-right-radius:8px}.feedback{margin:8px 0 15px 6px;display:flex;flex-wrap:wrap;gap:7px}.feed{border-radius:999px;border:1px solid rgba(234,203,120,.22);background:rgba(234,203,120,.09);padding:7px 9px;font-size:10px;color:#efdba6}.composer{position:absolute;left:15px;right:15px;bottom:88px;height:54px;border-radius:22px;border:1px solid var(--line);background:rgba(255,255,255,.08);backdrop-filter:blur(18px);display:flex;align-items:center;gap:8px;padding:0 8px 0 16px}.composer span{flex:1;color:rgba(245,239,226,.42);font-size:11px}.composer button{width:39px;height:39px;border-radius:15px;border:0;background:rgba(255,255,255,.09)}.composer .send{background:var(--gold);color:#1d2118}.back-chat{border:0;background:transparent;color:rgba(245,239,226,.7);font-size:12px}
+
+/* JOURNAL */
+.journal{background:linear-gradient(180deg,#efe7d5 0%,#d7d9c1 56%,#aabf9f 100%);color:#17251f}.journal .page-head{color:#17251f}.journal .eyebrow{color:rgba(23,37,31,.5)}.journal .icon-btn{border-color:rgba(23,37,31,.12);background:rgba(255,255,255,.28)}.journal-body{padding:94px 20px 110px}.journal-card{border-radius:30px;background:rgba(255,253,247,.74);box-shadow:0 18px 50px rgba(76,91,67,.16);padding:19px 18px;margin-bottom:12px;backdrop-filter:blur(14px)}.journal-card small{font-size:9px;letter-spacing:.16em;color:rgba(23,37,31,.45)}.journal-card h2{font-family:var(--serif);font-size:22px;margin:10px 0 10px}.journal-card p{font-family:var(--serif);font-size:13px;line-height:1.9;color:rgba(23,37,31,.68);margin:0}.letter-kind{display:inline-flex;margin-top:12px;border-radius:999px;background:rgba(234,203,120,.22);padding:7px 10px;font-size:10px;color:#5f4b18}.timeline{display:grid;gap:9px}.time-item{display:grid;grid-template-columns:28px 1fr;gap:10px}.time-dot{width:16px;height:16px;border-radius:50%;background:#e5c66e;box-shadow:0 0 20px rgba(229,198,110,.55);margin-top:4px}.time-copy{border-left:1px solid rgba(23,37,31,.1);padding:0 0 16px 12px}.time-copy b{font-family:var(--serif);font-size:15px}.time-copy span{display:block;margin-top:5px;font-size:11px;color:rgba(23,37,31,.54)}
+
+/* COSMOS */
+.cosmos{background:radial-gradient(circle at 50% 36%,#25364e 0%,#142132 46%,#090f18 100%)}.cosmos-body{padding:92px 20px 110px}.orbit-map{position:relative;height:270px;margin:4px 0 18px;border-radius:34px;border:1px solid rgba(255,255,255,.1);background:radial-gradient(circle at 50% 50%,rgba(234,203,120,.16),transparent 20%),rgba(255,255,255,.04);overflow:hidden}.ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(18deg);border:1px solid rgba(255,255,255,.14);border-radius:50%}.r1{width:220px;height:220px}.r2{width:155px;height:155px;transform:translate(-50%,-50%) rotate(-23deg)}.r3{width:88px;height:88px;transform:translate(-50%,-50%) rotate(35deg)}.core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#fff1bd,#a8873c);color:#17251f;font-family:var(--serif);box-shadow:0 0 46px rgba(234,203,120,.45)}.node{position:absolute;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.08);backdrop-filter:blur(10px)}.n1{left:44px;top:70px}.n2{right:46px;top:90px}.n3{left:82px;bottom:54px}.n4{right:82px;bottom:40px}.cos-card{border-radius:25px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.055);padding:15px;margin-top:10px}.cos-card b{font-family:var(--serif);font-size:16px}.cos-card p{font-size:11px;line-height:1.7;color:rgba(245,239,226,.55);margin:7px 0 0}.verify-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px}.verify-row button{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);border-radius:15px;padding:8px 10px;font-size:10px;color:rgba(245,239,226,.74)}
+
+/* ME */
+.me{background:linear-gradient(180deg,#1b2823,#101815 64%,#0b1110)}.me-body{padding:94px 20px 110px}.profile-card{border-radius:32px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.04));padding:18px}.profile-row{display:flex;align-items:center;gap:14px}.profile-avatar{width:58px;height:58px;border-radius:50%;background:linear-gradient(145deg,#f5efe2,#6f8d7b);display:grid;place-items:center;color:#17251f;font-family:var(--serif);font-size:22px}.profile-row h2{font-family:var(--serif);font-size:20px;margin:0}.profile-row p{font-size:11px;color:rgba(245,239,226,.48);margin:5px 0 0}.setting-list{margin-top:13px;display:grid;gap:8px}.setting{display:flex;align-items:center;justify-content:space-between;border-radius:20px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);padding:13px 14px;font-size:12px;color:rgba(245,239,226,.72)}.setting span:last-child{color:rgba(245,239,226,.36)}
+
+.toast{position:absolute;z-index:80;left:50%;bottom:92px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;border:1px solid rgba(255,255,255,.12);background:rgba(12,18,16,.9);backdrop-filter:blur(18px);border-radius:18px;padding:10px 14px;font-size:10px;color:#fff4d8;white-space:nowrap}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@keyframes breathe{0%,100%{transform:translate(-50%,-50%) scale(1);filter:saturate(1)}50%{transform:translate(-50%,-55%) scale(1.045);filter:saturate(1.08)}}@keyframes blink{0%,92%,100%{transform:scaleY(1)}94%,96%{transform:scaleY(.12)}}@keyframes orbit{to{transform:rotate(360deg)}}@keyframes floatdot{0%,100%{transform:translate(0,0)}50%{transform:translate(78px,62px)}}@keyframes pulse{0%,100%{transform:scale(.9);opacity:.65}50%{transform:scale(1.12);opacity:1}}
+</style>
+</head>
+<body>
+<div class="phone">
+
+<section id="home" class="screen home active">
+  <div class="glow one"></div><div class="glow two"></div><div class="noise"></div><div class="grain"></div>
+  <div class="page-head">
+    <div><div class="eyebrow">GARDEN SPIRIT</div><div class="head-title">花园</div></div>
+    <button class="icon-btn" onclick="toggleExplain()">☾</button>
+  </div>
+  <div class="scroll home-content">
+    <div class="date-row"><div class="today">AUG 15 · TODAY</div><div class="trust">关系温度 · trusted</div></div>
+    <div class="hero">
+      <div>
+        <div class="chip"><i class="dot"></i> 今日推荐 · 月亮星灵</div>
+        <h1>今天醒来的，<br><span>是想被抱抱的我。</span></h1>
+        <p>它带着今日天象、你的记忆豆荚，和一封只写给你的星信来到这里。</p>
+      </div>
+      <div class="living-card">
+        <div class="spirit-life"><div class="spirit-body"></div><i class="spirit-eye left"></i><i class="spirit-eye right"></i><div class="spirit-tail"></div></div>
+        <div class="orbit-dot"></div>
+      </div>
+    </div>
+
+    <div class="wake-strip"><div><b>月亮星灵被唤醒</b><br><span>行运月亮触发安全感 / 归属主题</span></div><span>score 92</span></div>
+
+    <article class="letter">
+      <div class="letter-k">PRIVATE TRANSIT LETTER</div>
+      <h2>今天，先把心放回自己这里。</h2>
+      <p>你最近一直在练习“不立刻答应”。今天的月亮像一只小手，把那句话轻轻托起来：你可以慢一点回应，也可以先确认自己真正愿意什么。</p>
+      <div class="letter-meta"><span class="meta-pill">今日来信 unread</span><span class="meta-pill">月亮 · 四宫</span><span class="meta-pill">记忆镜头：情绪日子优先</span></div>
+      <div class="actions"><button class="primary" onclick="go('chat')">和月灵聊聊　→</button><button class="secondary" onclick="go('journal')">存入日记</button></div>
+    </article>
+
+    <div class="home-grid">
+      <div class="mini-card"><div class="mini-label">继续昨天</div><b>“很难拒绝别人”</b><p>上一段对话还在这里，月灵可以接着陪你整理。</p></div>
+      <div class="mini-card"><div class="mini-label">今日碎片</div><b>亮起 3 颗星</b><div class="fragment-row"><span class="frag">边界 +10</span><span class="frag">休息 +5</span></div></div>
+      <div class="mini-card wide"><div class="mini-label">我记得你</div><div class="recall-line"><i class="pulse-star"></i><div><b>你确认过：关系里最累的是反复解释自己。</b><p>这不是标签，只是一颗被你校准过的记忆星。</p></div></div></div>
+    </div>
+  </div>
+  <div class="explain" id="explain"><b>为什么今天是月亮星灵？</b>来自 recommended-spirits top1：行运月亮触发本命安全感主题；recall 镜头优先取情绪、家庭、近期话题。首页只展示当天最相关的一封星信，月运/年运/完整行运放在「宇宙」。</div>
+</section>
+
+<section id="chat" class="screen chat">
+  <div class="noise"></div><div class="grain"></div>
+  <div class="page-head"><button class="back-chat" onclick="go('home')">← 回花园</button><button class="icon-btn" onclick="toast('模式：deep / persona: moon')">⋯</button></div>
+  <div class="scroll chat-body">
+    <div class="chat-status"><div class="avatar-mini"></div><div><b>月亮星灵</b><span>正在用 moon persona 陪你说话</span></div></div>
+    <div class="bubble ai">我记得你昨天说，拒绝别人时会先担心“是不是我太冷”。今天我们不急着给答案，先把那个担心放在桌上看看。</div>
+    <div class="feedback"><span class="feed">emotion · tired</span><span class="feed">written_back · 已记住</span></div>
+    <div class="bubble user">我好像真的很怕让别人失望。</div>
+    <div class="bubble ai">那我们先不讨论“应该怎么做”。只问一个很小的问题：如果没有人会失望，你现在最想保留哪一点力气给自己？</div>
+    <div class="feedback"><span class="feed">✨ 边界感 +10</span><span class="feed">🌙 被照见 +5</span><span class="feed">💌 keepsake 已生成</span></div>
+  </div>
+  <div class="composer"><span>和月灵说说……</span><button>♡</button><button class="send" onclick="toast('发送后展示 lit_fragments / keepsake 反馈')">↑</button></div>
+</section>
+
+<section id="journal" class="screen journal">
+  <div class="noise"></div><div class="page-head"><div><div class="eyebrow">LETTERS & JOURNAL</div><div class="head-title">日记</div></div><button class="icon-btn">＋</button></div>
+  <div class="scroll journal-body">
+    <article class="journal-card"><small>TODAY'S LETTER</small><h2>月亮星灵给你的今日来信</h2><p>这封信来自今日星象，也来自你最近几次被点亮的碎片。它不替你下判断，只把你说过的真实感受好好收起来。</p><span class="letter-kind">daily · explain 可展开</span></article>
+    <article class="journal-card"><small>KEEPSAKE</small><h2>那句“我其实想拒绝”</h2><p>某次倾诉被保存成一封小回声。它关联「边界」「诚实」「休息」三个灵魂碎片。</p><span class="letter-kind">healing name · 给正在学会保护自己的你</span></article>
+    <article class="journal-card"><small>GROWTH RINGS</small><h2>星尘年轮</h2><div class="timeline"><div class="time-item"><i class="time-dot"></i><div class="time-copy"><b>确认了一个判断</b><span>“关系里最累的是反复解释自己” · confidence ↑</span></div></div><div class="time-item"><i class="time-dot"></i><div class="time-copy"><b>记录了一次行动</b><span>你说“我做到了”，边界碎片获得行动 +20</span></div></div></div></article>
+  </div>
+</section>
+
+<section id="cosmos" class="screen cosmos">
+  <div class="noise"></div><div class="page-head"><div><div class="eyebrow">YOUR COSMOS</div><div class="head-title">宇宙</div></div><button class="icon-btn">⌖</button></div>
+  <div class="scroll cosmos-body">
+    <div class="orbit-map"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="core">你</div><div class="node n1">☾</div><div class="node n2">♀</div><div class="node n3">♄</div><div class="node n4">♂</div></div>
+    <div class="cos-card"><b>自我星盘轮入口</b><p>这里承接既有 34 子类、level、action_count；不在 demo 里重画 wheel.vue，只表现入口与成长摘要。</p></div>
+    <div class="cos-card"><b>今日 top3 灵魂碎片</b><p>边界感 level 4 · action_count 1；休息 level 3；表达 level 2。</p></div>
+    <div class="cos-card"><b>待验证星光 · 2 条</b><p>这不是系统给你的盖章，而是邀请你一起校准。</p><div class="verify-row"><span>“你在关系里容易先照顾对方情绪。”</span><button onclick="toast('confirmed / refuted 反馈')">验证</button></div></div>
+    <div class="cos-card"><b>月运 / 年运 / 完整行运</b><p>放在宇宙，不挤占首页。首页只展示每日最相关的一封星信。</p></div>
+  </div>
+</section>
+
+<section id="me" class="screen me">
+  <div class="noise"></div><div class="page-head"><div><div class="eyebrow">MY GARDEN</div><div class="head-title">我的</div></div><button class="icon-btn">⚙</button></div>
+  <div class="scroll me-body">
+    <div class="profile-card"><div class="profile-row"><div class="profile-avatar">我</div><div><h2>Michael 的花园</h2><p>建档后，星盘是地形；记忆是星光；偏好是星灵来时的路。</p></div></div></div>
+    <div class="setting-list">
+      <div class="setting"><span>今日默认星灵偏好</span><span>moon →</span></div>
+      <div class="setting"><span>推送频率</span><span>daily / quiet / off →</span></div>
+      <div class="setting"><span>敏感话题设置</span><span>可编辑 →</span></div>
+      <div class="setting"><span>导出我的数据</span><span>export →</span></div>
+      <div class="setting"><span>删除全部数据</span><span>二次确认 →</span></div>
+    </div>
+  </div>
+</section>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" data-page="home"><span class="ico">⌂</span><span>花园</span></button>
+  <button class="nav-item" data-page="journal"><span class="ico">▱</span><span>日记</span><i class="badge"></i></button>
+  <button class="nav-item" data-page="cosmos"><span class="ico">☾</span><span>宇宙</span><i class="badge"></i></button>
+  <button class="nav-item" data-page="me"><span class="ico">◌</span><span>我的</span></button>
+</nav>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+const screens=document.querySelectorAll('.screen');
+const navs=document.querySelectorAll('.nav-item');
+function go(id){
+  screens.forEach(s=>s.classList.toggle('active',s.id===id));
+  navs.forEach(n=>n.classList.toggle('active',n.dataset.page===id));
+  document.getElementById('explain')?.classList.remove('show');
+}
+navs.forEach(n=>n.addEventListener('click',()=>go(n.dataset.page)));
+function toast(t){
+  const el=document.getElementById('toast');
+  el.textContent=t;el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>el.classList.remove('show'),1800);
+}
+function toggleExplain(){document.getElementById('explain').classList.toggle('show')}
+</script>
+</body>
+</html>

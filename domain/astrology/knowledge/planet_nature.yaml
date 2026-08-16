@@ -194,7 +194,7 @@ planets:
       growth: neutral
       network: supporting  # 人际：关联 —— 社群/创新圈子
       self: supporting     # 自我：关联 —— 独立/挣脱/活出自己
-    relation_role: "关系里的'不常规'——天王落7或触7R，婚姻形态不走主流路线。不一定是离婚，可能是异地婚、开放式、年龄差、网络认识。"
+    relation_role: "关系里的'不常规'——天王落7或触7R，婚姻形态不走主流路线。可能体现为异地婚、开放式、年龄差、网络认识，或关系需要更多空间与弹性。"
     gender_diff: null
 
   neptune:

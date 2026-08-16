@@ -154,6 +154,14 @@ def test_decomposer_theme_prompt_uses_domain_signals_not_theme_core_planets():
     assert "planets(core)=['moon']" not in text
 
 
+def test_decomposer_house_prompt_hides_legacy_governors():
+    """R10：LLM 定位素材只给语义场/路由词，不再暴露 YAML 写死 governors。"""
+    dec = IntentDecomposer(llm_client=None)
+    text = dec._fmt_houses(IntentDomain.RELATIONSHIP)
+    assert "governors=" not in text
+    assert "伴侣" in text or "婚姻" in text
+
+
 # ---------------------------------------------------------------------------
 # LLM 校验
 # ---------------------------------------------------------------------------

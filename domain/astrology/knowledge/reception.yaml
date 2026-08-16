@@ -45,6 +45,7 @@ triplicity:
 
 # 接纳激活（详见 docs/astrology_reception.md §3）
 # require_aspect: 单向尊严必须有主相位才构成接纳（废弃"潜在接纳"类别）
+# active_aspects 只含传统主相位；梅花/半刑/八分等次要相位不激活接纳。
 acceptance:
   require_aspect: true
-  active_aspects: [conjunction, opposition, trine, square, sextile, quincunx]
+  active_aspects: [conjunction, opposition, trine, square, sextile]

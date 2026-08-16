@@ -17,14 +17,13 @@ from shared.enums import AspectType, DignityState, Planet, Sect, Sign
 from .dignity import DignityEngine
 from .loader import KnowledgeBase
 
-#: 接纳激活允许的主相位
+#: 接纳激活允许的主相位（梅花/半刑/八分等次要相位不激活接纳）
 _ACTIVE_ASPECT_DEFAULTS = (
     AspectType.CONJUNCTION,
     AspectType.OPPOSITION,
     AspectType.TRINE,
     AspectType.SQUARE,
     AspectType.SEXTILE,
-    AspectType.QUINCUNX,
 )
 
 

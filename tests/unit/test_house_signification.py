@@ -3,7 +3,7 @@
 用"夏天"真实盘（阿卡比特）验证引擎的通用性（技法通用，盘只作夹具）。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import zoneinfo
 
 import pytest
@@ -17,8 +17,50 @@ from domain.astrology.interpretation import (
 from domain.astrology.interpretation.synapsis import effective_house
 from domain.astrology.knowledge import load_knowledge
 from domain.astrology.calculation import NatalChartCalculator
-from shared.enums import HouseSystem, Planet
-from shared.models import BirthData, GeoLocation, Person
+from shared.enums import HouseSystem, Planet, PlanetSpeed, Sect, Sign, ZodiacType, ChartType
+from shared.models import BirthData, Chart, ChartPlanet, EclipticPosition, GeoLocation, HouseCusp, HousePosition, Person, SignPosition
+
+
+def _venus_virgo_5th_house_chart() -> Chart:
+    """金星处女 10.5°：五宫恋爱切片的 governor 混合尊贵回归盘。"""
+    now = datetime.now(timezone.utc)
+    return Chart(
+        id="house_venus_virgo_mixed",
+        person_id="p",
+        chart_type=ChartType.NATAL,
+        calculated_at_utc=now,
+        julian_day=0.0,
+        epoch_utc=now,
+        location="",
+        zodiac=ZodiacType.TROPICAL,
+        house_system=HouseSystem.WHOLE_SIGN,
+        planets={
+            Planet.VENUS: ChartPlanet(
+                planet=Planet.VENUS,
+                ecliptic=EclipticPosition(longitude=160.5),
+                sign=SignPosition(sign=Sign.VIRGO, degree_absolute=160.5, degree_in_sign=10.5),
+                house=HousePosition(house=5, cusp_degree=120.0, distance_from_cusp=40.5),
+                speed=PlanetSpeed.DIRECT,
+                speed_deg_per_day=1.0,
+            ),
+        },
+        house_cusps={
+            1: HouseCusp(house=1, degree=0.0, sign=Sign.ARIES),
+            2: HouseCusp(house=2, degree=30.0, sign=Sign.TAURUS),
+            3: HouseCusp(house=3, degree=60.0, sign=Sign.GEMINI),
+            4: HouseCusp(house=4, degree=90.0, sign=Sign.CANCER),
+            5: HouseCusp(house=5, degree=120.0, sign=Sign.LEO),
+            6: HouseCusp(house=6, degree=150.0, sign=Sign.VIRGO),
+            7: HouseCusp(house=7, degree=180.0, sign=Sign.LIBRA),
+            8: HouseCusp(house=8, degree=210.0, sign=Sign.SCORPIO),
+            9: HouseCusp(house=9, degree=240.0, sign=Sign.SAGITTARIUS),
+            10: HouseCusp(house=10, degree=270.0, sign=Sign.CAPRICORN),
+            11: HouseCusp(house=11, degree=300.0, sign=Sign.AQUARIUS),
+            12: HouseCusp(house=12, degree=330.0, sign=Sign.PISCES),
+        },
+        midheaven=SignPosition(sign=Sign.CAPRICORN, degree_absolute=270.0, degree_in_sign=0.0),
+        sect=Sect.DAY,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -82,11 +124,27 @@ def test_dual_track_good_bad_not_netted(chart, engine):
     assert any("考试运" in w or "费力" in w for w in words)  # 凶轨：受克
     gaoxue = next(i for i in learning if "深造" in i.word)
     kaoshi = next(i for i in learning if "考试运" in i.word or "费力" in i.word)
-    # 各论各的：吉轨证据带"尊贵+8"（土星庙），凶轨证据带"刑"（金星刑土星未接纳）
-    assert any("尊贵" in ev and "+" in ev for ev in gaoxue.evidence)
+    # 各论各的：吉轨证据带"尊贵"（土星庙），凶轨证据带"刑"（金星刑土星未接纳）
+    assert any("尊贵" in ev for ev in gaoxue.evidence)
     assert any("刑" in ev for ev in kaoshi.evidence)
     # 共振词不再承诺"学霸"
     assert not any("学霸" in r for r in gaoxue.resonance)
+
+
+def test_governor_mixed_debility_keeps_signification_tracks_split(engine):
+    """词级 governor 也必须吉凶分轨：金星处女不能把落陷证据塞进正向恋爱切片。"""
+    items = engine.interpret(_venus_virgo_5th_house_chart(), "relationship", houses=[5], max_items=20)
+    romance = next(i for i in items if "恋爱" in i.word or "浪漫" in i.word)
+
+    assert romance.polarity == "positive"
+    assert any("金星尊贵" in ev for ev in romance.evidence)
+    assert not any("受克" in ev or "落陷" in ev or "失势" in ev for ev in romance.evidence)
+
+    _gpos, gneg, _gov_pos_ev, gov_neg_ev = engine._governor_quality(
+        _venus_virgo_5th_house_chart(), ["venus"]
+    )
+    assert gneg > 0
+    assert any("金星受克" in ev for ev in gov_neg_ev)
 
 
 def test_mercury_affliction_drags_learning_houses(chart, engine):

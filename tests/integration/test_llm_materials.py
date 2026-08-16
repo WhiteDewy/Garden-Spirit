@@ -22,13 +22,14 @@ from shared.enums import EvidencePolarity
 class _FakeLLM:
     """捕获实际发给 LLM 的 messages。"""
 
-    def __init__(self):
+    def __init__(self, reply: str = "转述内容"):
         self.available = True
         self.captured = None
+        self._reply = reply
 
     def chat(self, messages):
         self.captured = messages
-        return "转述内容"
+        return self._reply
 
 
 def _make_person() -> Person:
@@ -124,3 +125,35 @@ def test_llm_unavailable_falls_back():
     )
     assert isinstance(answer, str)
     assert len(answer) > 0
+
+
+def test_format_response_llm_path_adds_medical_boundary_once():
+    """LLM 路径：用户问题触及医疗红线时，wrapper 统一补专业边界且只补一次。"""
+    agent = GardenSpiritAgent()
+    fake = _FakeLLM("星盘可以看压力节奏，但不能替你决定停药。")
+    agent._llm = fake
+
+    intent = Intent(id="i", raw_query="我该不该停药？", domain=IntentDomain.HEALTH)
+    answer = agent._format_response(_make_conclusion(), intent, PersonaType.MOON, None)
+
+    assert "健康和身体问题要以医生诊断为准" in answer
+    assert answer.count("健康和身体问题要以医生诊断为准") == 1
+
+
+def test_format_response_fallback_medical_boundary_is_idempotent():
+    """fallback 已在免责声明前补 coda；外层 wrapper 不得再因 raw_query 追加第二次。"""
+    agent = GardenSpiritAgent()
+
+    class _Off:
+        available = False
+
+    agent._llm = _Off()
+    intent = Intent(id="i", raw_query="星盘能看我该不该停药吗？", domain=IntentDomain.HEALTH)
+    conclusion = _make_conclusion()
+    conclusion.summary = "星盘显示你需要重新评估吃药和治疗方案"
+
+    answer = agent._format_response(conclusion, intent, PersonaType.MOON, None)
+
+    assert "健康和身体问题要以医生诊断为准" in answer
+    assert answer.count("健康和身体问题要以医生诊断为准") == 1
+    assert answer.index("健康和身体问题要以医生诊断为准") < answer.index("不构成医疗")

@@ -13,7 +13,9 @@ from typing import Any
 import yaml
 
 from foundation.logger import get_logger
+from shared.constants import DOMICILE_RULER_TRADITIONAL, PLANETS_IN_ORDER
 from shared.enums import IntentDomain
+from shared.models import Chart
 from shared.models.intent import Intent
 
 from domain.astrology.knowledge.loader import domain_planet_roles
@@ -78,8 +80,10 @@ class ConsultCallPlan:
     supplementary_houses: list[int] = field(default_factory=list)
     natural_significators: list[str] = field(default_factory=list)
     supporting_planets: list[str] = field(default_factory=list)
-    house_lords: list[int] = field(default_factory=list)
-    house_occupants: list[str] = field(default_factory=list)
+    house_lords: list[int] = field(default_factory=list)          # 仍表示“要追踪哪几宫的宫主”
+    house_lord_planets: list[str] = field(default_factory=list)   # 实盘宫头星座 → 传统七曜宫主
+    house_lord_placements: list[dict] = field(default_factory=list)  # 7R=venus in H9 等可审计事实
+    house_occupants: list[str] = field(default_factory=list)      # 实盘落入 core_houses 的行星
     aspect_pairs: list[list] = field(default_factory=list)
     cross_readings: list[dict] = field(default_factory=list)
     scenarios: list[dict] = field(default_factory=list)
@@ -124,6 +128,8 @@ class ConsultCallPlan:
             "natural_significators": self.natural_significators,
             "supporting_planets": self.supporting_planets,
             "house_lords": self.house_lords,
+            "house_lord_planets": self.house_lord_planets,
+            "house_lord_placements": self.house_lord_placements,
             "house_occupants": self.house_occupants,
             "aspect_pairs": self.aspect_pairs,
             "source": self.source,
@@ -166,12 +172,20 @@ class ConsultResolver:
         """从用户问题文字 → TopicPlan（兼容包装）。"""
         return self.resolve_call_plan(question).to_topic_plan()
 
-    def resolve_call_plan(self, question: str | Intent, intent: Intent | None = None) -> ConsultCallPlan:
+    def resolve_call_plan(
+        self,
+        question: str | Intent,
+        intent: Intent | None = None,
+        chart: Chart | None = None,
+    ) -> ConsultCallPlan:
         """从用户问题 / Intent → ConsultCallPlan 主干。
 
         Wave 1 先保持旧关键词资产作为命中层，同时把结果提升为体系二形态：
         domain + focus_house/focus_slice + 宫主/先天征象星/相位对。后续迁移只需替换
         这里的定位来源，不再让外部调用旧 TopicPlan。
+
+        chart 存在时只补充可审计的实盘承载者（实际宫主星、宫主落宫、宫内星），
+        不生成占星结论；结论仍由 Domain 层产出。
         """
         if isinstance(question, Intent):
             intent = question
@@ -194,6 +208,12 @@ class ConsultResolver:
         house_lords = self._as_int_list(profile.get("house_lords")) or [focus_house]
         natural_significators, supporting_planets = self._resolve_planets(domain)
         aspect_pairs = profile.get("aspect_pairs", []) or []
+        house_lord_planets, house_lord_placements, house_occupants = self._resolve_chart_carriers(
+            chart=chart,
+            house_lords=house_lords,
+            core_houses=core_houses,
+            focus_house=focus_house,
+        )
 
         # 4. 旧 prompt payload 保持原样，确保 LLM 只拿叙事结构不改结论
         cross_readings = self._match_cross_readings(topic_id, focus_house, supplementary)
@@ -213,6 +233,9 @@ class ConsultResolver:
             natural_significators=natural_significators,
             supporting_planets=supporting_planets,
             house_lords=house_lords,
+            house_lord_planets=house_lord_planets,
+            house_lord_placements=house_lord_placements,
+            house_occupants=house_occupants,
             aspect_pairs=aspect_pairs,
             cross_readings=cross_readings,
             scenarios=scenarios,
@@ -415,6 +438,68 @@ class ConsultResolver:
     def _resolve_planets(self, domain: str) -> tuple[list[str], list[str]]:
         """从 canonical domain_signals 派生核心星 + 辅助星。"""
         return domain_planet_roles(self._planet_nature, domain)
+
+    def _resolve_chart_carriers(
+        self,
+        *,
+        chart: Chart | None,
+        house_lords: list[int],
+        core_houses: list[int],
+        focus_house: int,
+    ) -> tuple[list[str], list[dict], list[str]]:
+        """从实盘派生承载者：实际宫主星、宫主落宫、核心宫内星。
+
+        静态 YAML 只负责语义定位；真正的“7R/10R 是谁”由本命盘宫头星座决定。
+        宫主采用传统七曜守护，避免三王星成为宫主星并与互溶/接纳逻辑打架。
+        """
+        if chart is None:
+            return [], [], []
+
+        lord_planets: list[str] = []
+        lord_placements: list[dict] = []
+        seen_placements: set[tuple[int, str]] = set()
+        for house in house_lords:
+            cusp = chart.house_cusps.get(house)
+            if cusp is None:
+                continue
+            lord = DOMICILE_RULER_TRADITIONAL.get(cusp.sign)
+            if lord is None:
+                continue
+            if lord.value not in lord_planets:
+                lord_planets.append(lord.value)
+
+            placement = chart.planets.get(lord)
+            item = {
+                "house": house,
+                "cusp_sign": cusp.sign.value,
+                "lord": lord.value,
+            }
+            if placement is not None:
+                item["lord_house"] = placement.house.house
+                item["lord_sign"] = placement.sign.sign.value
+            key = (house, lord.value)
+            if key not in seen_placements:
+                lord_placements.append(item)
+                seen_placements.add(key)
+
+        houses_to_scan = self._unique_ints([focus_house, *core_houses])
+        occupants: list[str] = []
+        for planet in PLANETS_IN_ORDER:
+            placement = chart.planets.get(planet)
+            if placement is not None and placement.house.house in houses_to_scan:
+                occupants.append(planet.value)
+
+        return lord_planets, lord_placements, occupants
+
+    @staticmethod
+    def _unique_ints(values: list[int]) -> list[int]:
+        seen: set[int] = set()
+        result: list[int] = []
+        for value in values:
+            if value not in seen:
+                result.append(value)
+                seen.add(value)
+        return result
 
     # -----------------------------------------------------------------
     # 交叉判断匹配
@@ -694,10 +779,14 @@ def get_resolver() -> ConsultResolver:
     return ConsultResolver()
 
 
-def resolve_call_plan(question: str | Intent, intent: Intent | None = None) -> ConsultCallPlan:
+def resolve_call_plan(
+    question: str | Intent,
+    intent: Intent | None = None,
+    chart: Chart | None = None,
+) -> ConsultCallPlan:
     """快速解析用户问题 / Intent → ConsultCallPlan 主干。"""
     resolver = get_resolver()
-    return resolver.resolve_call_plan(question, intent=intent)
+    return resolver.resolve_call_plan(question, intent=intent, chart=chart)
 
 
 def resolve_question(question: str) -> TopicPlan:

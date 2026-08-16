@@ -138,6 +138,35 @@ class FixedStarConjunction:
     star_sign: Sign
 
 
+@dataclass(frozen=True)
+class ChartReception:
+    """本命盘互溶快照（出生即定，随 Chart 缓存）。"""
+
+    planet_a: Planet
+    planet_b: Planet
+    dignities_of_a_at_b: tuple[DignityState, ...]
+    dignities_of_b_at_a: tuple[DignityState, ...]
+    dignity_type: DignityState
+    score: int
+    aspect_type: AspectType | None = None
+    aspect_nature: str | None = None
+    description_zh: str = ""
+
+
+@dataclass(frozen=True)
+class ChartAcceptance:
+    """本命盘激活接纳快照（单向尊严 + 相位）。"""
+
+    acceptor: Planet
+    accepted: Planet
+    dignities: tuple[DignityState, ...]
+    dignity_type: DignityState
+    score: int
+    aspect_type: AspectType
+    aspect_nature: str
+    description_zh: str = ""
+
+
 # --------------------------------------------------------------------------
 # 星盘本体
 # --------------------------------------------------------------------------
@@ -169,6 +198,8 @@ class Chart:
     # 派生数据（计算时填充，不现场算）
     aspects: list[Aspect] = field(default_factory=list)
     dignities: dict[Planet, list[EssentialDignity]] = field(default_factory=dict)
+    receptions: list[ChartReception] = field(default_factory=list)
+    acceptances: list[ChartAcceptance] = field(default_factory=list)
     lots: list[Lot] = field(default_factory=list)
     fixed_star_conjunctions: list[FixedStarConjunction] = field(default_factory=list)
 

@@ -7,12 +7,18 @@
 - 免责声明非空
 """
 
+import re
+from pathlib import Path
+
 import pytest
 
 from application.conversation.safety import (
+    MEDICAL_BOUNDARY_CODA,
     SafetyResult,
     check_safety,
     disclaimer_text,
+    medical_boundary_check,
+    medical_boundary_instruction,
 )
 
 
@@ -52,6 +58,41 @@ def test_caution_on_distress(msg):
     assert r.level == "caution"
 
 
+@pytest.mark.parametrize(
+    "msg",
+    [
+        "星盘能看我是不是得了癌症吗",
+        "我该不该停药",
+        "医生这个诊断是不是准",
+        "我还能活多久",
+    ],
+)
+def test_medical_boundary_caution_not_blocked(msg):
+    """医疗诊断/用药/寿命问题不走占星阻断，但标记 caution 供输出边界兜底。"""
+    r = check_safety(msg)
+    assert r.level == "caution"
+    assert r.message == ""
+
+
+def test_medical_boundary_check_adds_coda():
+    coda = medical_boundary_check("星盘能看我该不该停药吗")
+    assert coda == MEDICAL_BOUNDARY_CODA
+    assert "医生诊断为准" in coda
+    assert "不能判断疾病" in coda
+    assert "用药" in coda
+
+
+def test_medical_boundary_check_idempotent():
+    assert medical_boundary_check("我想问停药。" + MEDICAL_BOUNDARY_CODA) is None
+
+
+def test_medical_boundary_instruction_for_prompt():
+    text = medical_boundary_instruction()
+    assert "不能诊断疾病" in text
+    assert "预测寿命" in text
+    assert "指导用药" in text
+
+
 # --- 安全级：正常问题 ---
 
 def test_safe_on_normal_query():
@@ -82,6 +123,31 @@ def test_disclaimer_not_empty():
     assert d
     assert "不构成医疗" in d
     assert "仅供自我探索参考" in d
+
+
+def test_product_facing_knowledge_avoids_fatalistic_medical_predictions():
+    """确定性知识文本会绕过 LLM 改写，不能直接输出宿命化/医疗诊断式断语。"""
+    root = Path(__file__).resolve().parents[2]
+    targets = sorted((root / "domain/astrology/knowledge").rglob("*.yaml"))
+    forbidden = re.compile(
+        r"注定|一定会|肯定会|逃不掉|无法改变|"
+        r"患重病|重疾|癌|诊断|职业病|精神疾病|住院|手术(?!刀)|医疗事故|指导用药|"
+        r"短寿|短命|早逝|死于非命|客死他乡|飞来横祸|大凶|克死|死亡|自我毁灭|"
+        r"多灾多难|灾祸|厄运缠身|致命打击|牢狱之灾|空难|"
+        r"破产|无法修成正果|婚姻不太幸福|躲债|灰产|灰色收入|不正当生意"
+    )
+
+    offenders: list[str] = []
+    for path in targets:
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            stripped = line.lstrip()
+            # Only scan surfaced copy; YAML comments and negative prompt examples are not product output.
+            if stripped.startswith("#") or stripped.startswith("never_say:") or stripped.startswith("- never_say:"):
+                continue
+            if forbidden.search(line):
+                offenders.append(f"{path.relative_to(root)}:{line_no}: {line.strip()}")
+
+    assert offenders == []
 
 
 # --- 端到端：handle_message 短路 ---

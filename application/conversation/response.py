@@ -76,7 +76,7 @@ _SYSTEM_VOICE = """\
 - 被吉星互溶/接纳 = 不止一份技能：看到互溶/接纳，提醒盘主可能是多线发展，并请 TA 确认实际在做几件事。
 
 ## 咨询节奏（consult_method.md 编译）
-1. 本命基调优先：先讲盘主这个领域的长期结构（哪颗星管它、自己强不强、谁帮谁压），再讲当前走到哪一章（法达/年主星）。推运永远基于本命判断。
+1. 本命基调优先：先讲盘主这个领域的长期结构（哪颗星管它、自己强不强、谁帮谁压），再讲当前走到哪一章（法达大限/子限）。推运永远基于本命判断。
 2. 讲结构、请验证：讲完一条主线，请盘主说说现状来核对，而不是一次性抛五条结论。验证过了再深入。用户说"不对"就换链/换宫，不硬讲。
 3. 蓄力/发力讲清楚：宫主星落9宫/12宫等是蓄力期（深耕、积累），落10宫/1宫是发力期（显化、站上地位）。用户最关心"我现在在哪段"。
 4. 入庙能扛：凶相位给压力，但宫主星入庙/入旺时扛得住——压力不等于垮台，这是出路。
@@ -185,6 +185,7 @@ def _format_planet_profiles(profiles: list | None) -> str:
         d = p.to_dict()
         parts = [
             f"{p.planet.value}：{d['sign_style']}",
+            f"行为方式：{d['behavior_style']}",
             f"落宫{d['house_name']}（{d['dignity_label']}）",
         ]
         if d.get("house_domain"):
@@ -365,6 +366,14 @@ def _build_call_plan_injection(call_plan) -> str:
             lines.append("")
             lines.append("每个部分都要引用下面提供的具体星盘数据。结尾给一句温暖的落点，跟前面讲的内容挂钩，不说空泛的鸡汤。")
 
+    # 实盘承载者：只作为可审计事实，不让 LLM 自行断吉凶。
+    carriers = _format_call_plan_carriers(d)
+    if carriers:
+        lines.append("")
+        lines.append("## 实盘承载者（只作事实引用，不自行推断吉凶）")
+        lines.extend(carriers)
+        lines.append("这些承载者只是告诉你本轮咨询实际该看哪些星/宫；最终判断仍以领域分析结论和证据卡为准。")
+
     # 交叉判断提示
     cross = d.get("cross_readings", [])
     if cross:
@@ -394,6 +403,46 @@ def _build_call_plan_injection(call_plan) -> str:
 def _build_topic_injection(topic_plan) -> str:
     """兼容旧名称：TopicPlan 与 ConsultCallPlan 都走同一 prompt 注入协议。"""
     return _build_call_plan_injection(topic_plan)
+
+
+def _format_call_plan_carriers(d: dict) -> list[str]:
+    """格式化咨询主干里的实盘承载者；只输出可审计标识，不输出结论。"""
+    lines: list[str] = []
+
+    lord_placements = d.get("house_lord_placements") or []
+    if lord_placements:
+        chunks: list[str] = []
+        for item in lord_placements:
+            if not isinstance(item, dict):
+                continue
+            house = item.get("house")
+            lord = item.get("lord")
+            cusp_sign = item.get("cusp_sign")
+            placed = item.get("lord_house")
+            lord_sign = item.get("lord_sign")
+            if house and lord and cusp_sign:
+                desc = f"H{house} cusp={cusp_sign} → {house}R={lord}"
+                if placed:
+                    desc += f" in H{placed}"
+                if lord_sign:
+                    desc += f"/{lord_sign}"
+                chunks.append(desc)
+        if chunks:
+            lines.append("- 实际宫主星：" + "；".join(chunks[:6]))
+
+    occupants = d.get("house_occupants") or []
+    if occupants:
+        lines.append("- 核心宫内星：" + "、".join(str(p) for p in occupants[:10]))
+
+    natural = d.get("natural_significators") or []
+    if natural:
+        lines.append("- 领域先天征象星：" + "、".join(str(p) for p in natural[:10]))
+
+    supporting = d.get("supporting_planets") or []
+    if supporting:
+        lines.append("- 领域辅助星：" + "、".join(str(p) for p in supporting[:10]))
+
+    return lines
 
 
 # ---------------------------------------------------------------------------

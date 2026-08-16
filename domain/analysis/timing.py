@@ -1,7 +1,7 @@
 """Timing —— 时机分析模块。
 
-方法（v1 冻结）：年度推运（Annual Profection）定年主题，
-再对时间窗口按月扫描行运相位（木星/土星/天王星等对本命年主星与太阳）。
+方法（v3）：法达大限/子限定时期主轴，再对时间窗口按月扫描行运相位。
+行运只打到「当前时间领主 + 本轮问题相关征象星/宫主星」，不再用旧年度领主或固定太阳兜底。
 不做卜卦。
 
 产出：每个有利/不利时间窗口一条 THEME 事实。
@@ -14,11 +14,12 @@ from dateutil.relativedelta import relativedelta
 
 from foundation.logger import get_logger
 from foundation.utils import new_id
-from shared.enums import EvidencePolarity, FactCategory, Planet, Sign
+from shared.enums import EvidencePolarity, FactCategory, Planet
 from shared.models import Chart, Fact, Person
 
 from domain.analysis.base import AnalysisModule
 from domain.astrology.calculation import TransitCalculator
+from domain.astrology.common import house_lord
 from domain.astrology.knowledge import load_knowledge
 
 logger = get_logger("analysis.timing")
@@ -42,20 +43,32 @@ class Timing(AnalysisModule):
         start_offset = int(params.get("start_offset_months", 0))
 
         now = datetime.now(timezone.utc)
-        year_lord = self._year_lord(chart, person, now)
-        if year_lord is None:
-            logger.warning("无法确定年主星，Timing 模块跳过")
+        from domain.timeline.firdaria import compute_firdaria  # noqa: PLC0415
+
+        period = compute_firdaria(chart.epoch_utc, chart.sect, now)
+        targets = self._timing_targets(chart, period.major_lord, period.sub_lord, params.get("_enrichment"))
+        helper_targets = self._helper_targets(chart, targets)
+        scoring_targets = targets | helper_targets
+        if not scoring_targets:
+            logger.warning("无法确定法达/问题目标星，Timing 模块跳过")
             return facts
 
         # 逐月扫描
         monthly_scores: list[tuple[datetime, float]] = []
         for i in range(months):
             month_start = now.replace(day=1) + relativedelta(months=i + start_offset)
-            score = self._month_score(chart, month_start, year_lord)
+            score = self._month_score(chart, month_start, scoring_targets)
             monthly_scores.append((month_start, score))
 
         # 分组为窗口
-        windows = self._group_windows(monthly_scores, year_lord, chart)
+        windows = self._group_windows(
+            monthly_scores,
+            targets,
+            helper_targets,
+            period.major_lord,
+            period.sub_lord,
+            chart,
+        )
         for window in windows:
             facts.append(self._window_fact(chart, window))
 
@@ -64,33 +77,61 @@ class Timing(AnalysisModule):
 
     # ------------------------------------------------------------------
 
-    def _year_lord(self, chart: Chart, person: Person, reference: datetime) -> Planet | None:
-        """年度推运年主星。
+    def _timing_targets(
+        self,
+        chart: Chart,
+        major_lord: Planet,
+        sub_lord: Planet,
+        enrichment: dict | None = None,
+    ) -> set[Planet]:
+        """法达时间领主 + 本轮问题相关征象星/宫主星。"""
+        targets: set[Planet] = {major_lord, sub_lord}
+        enrich = enrichment or {}
+        for raw in enrich.get("focus_planets") or []:
+            planet = self._planet_from_value(raw)
+            if planet is not None:
+                targets.add(planet)
+        raw_houses = [*(enrich.get("focus_house_lords") or []), *(enrich.get("focus_houses") or [])]
+        for raw_house in raw_houses:
+            try:
+                house = int(raw_house)
+            except (TypeError, ValueError):
+                continue
+            lord = house_lord(chart, self._kb, house)
+            if lord is not None:
+                targets.add(lord)
+        return {planet for planet in targets if planet in chart.planets}
 
-        age = 已满周岁；推运宫位 = (age % 12) + 1；
-        年主星 = 该宫宫头星座的传统守护星。
-        """
-        birth = person.birth.datetime_utc
-        if birth.tzinfo is not None:
-            birth = birth.astimezone(timezone.utc).replace(tzinfo=None)
-        age = reference.year - birth.year - (
-            1 if (reference.month, reference.day) < (birth.month, birth.day) else 0
-        )
-        house_num = (age % 12) + 1
+    def _helper_targets(self, chart: Chart, targets: set[Planet]) -> set[Planet]:
+        """本命互溶/激活接纳里的帮手星，也作为行运触发观察对象。"""
+        from domain.astrology.interpretation.synapsis import ConnectionClassifier  # noqa: PLC0415
 
-        cusp = chart.house_cusps.get(house_num)
-        if cusp is None:
+        clf = ConnectionClassifier(self._kb)
+        helpers: set[Planet] = set()
+        for target in targets:
+            for ally in clf.ally_timeline(chart, target):
+                if ally.helper in chart.planets:
+                    helpers.add(ally.helper)
+        return helpers - targets
+
+    @staticmethod
+    def _planet_from_value(value: object) -> Planet | None:
+        """受控地把 enrichment 字符串转成 Planet。"""
+        if isinstance(value, Planet):
+            return value
+        if not isinstance(value, str):
             return None
-        sign: Sign = cusp.sign
-        return self._kb.sign(sign).traditional_ruler
+        try:
+            return Planet(value.lower())
+        except ValueError:
+            return None
 
     def _month_score(
-        self, chart: Chart, month_start: datetime, year_lord: Planet
+        self, chart: Chart, month_start: datetime, targets: set[Planet]
     ) -> float:
-        """某月的行运强度分：Σ(行运对年主星的相位权值) + 太阳信号。"""
+        """某月的行运强度分：Σ(行运对目标时间领主/问题征象星的相位权值)。"""
         aspects = self._transit.transit_aspects(chart, month_start)
         score = 0.0
-        targets = {year_lord, Planet.SUN}
         for aspect in aspects:
             if aspect.body2 not in targets:
                 continue
@@ -120,7 +161,10 @@ class Timing(AnalysisModule):
     def _group_windows(
         self,
         monthly_scores: list[tuple[datetime, float]],
-        year_lord: Planet,
+        targets: set[Planet],
+        helper_targets: set[Planet],
+        major_lord: Planet,
+        sub_lord: Planet,
         chart: Chart,
     ) -> list[dict]:
         """把连续同向的月份聚合成窗口。"""
@@ -151,7 +195,11 @@ class Timing(AnalysisModule):
                     "start": months[0][0],
                     "end": months[-1][0] + relativedelta(months=1) - timedelta(days=1),
                     "net_score": net,
-                    "year_lord": year_lord,
+                    "targets": sorted(targets, key=lambda p: p.value),
+                    "helper_targets": sorted(helper_targets, key=lambda p: p.value),
+                    "scoring_targets": sorted(targets | helper_targets, key=lambda p: p.value),
+                    "firdaria_major_lord": major_lord,
+                    "firdaria_sub_lord": sub_lord,
                 }
             )
         return result
@@ -169,7 +217,11 @@ class Timing(AnalysisModule):
         weight = min(4.0, max(0.5, abs(net)))
         confidence = 0.65
 
-        lord = self._kb.planet(window["year_lord"]).name_zh
+        major = self._kb.planet(window["firdaria_major_lord"]).name_zh
+        sub = self._kb.planet(window["firdaria_sub_lord"]).name_zh
+        target_names = "、".join(self._kb.planet(p).name_zh for p in window["targets"])
+        helper_names = "、".join(self._kb.planet(p).name_zh for p in window["helper_targets"])
+        target_phrase = target_names if not helper_names else f"{target_names}（含帮手星：{helper_names}）"
         label = f"{window['start'].strftime('%Y-%m')} 至 {window['end'].strftime('%Y-%m')}"
         quality = {
             "favorable": "有利",
@@ -181,7 +233,10 @@ class Timing(AnalysisModule):
             id=new_id("fact"),
             category=FactCategory.THEME,
             chart_id=chart.id,
-            description=f"时间窗口 {label}：行运对年主星{lord}总体{quality}（净分{net:+.1f}）",
+            description=(
+                f"时间窗口 {label}：法达{major}大限/{sub}子限，"
+                f"行运对{target_phrase}总体{quality}（净分{net:+.1f}）"
+            ),
             extracted_at=datetime.now(timezone.utc),
             payload={
                 "theme": "timing_window",
@@ -192,5 +247,11 @@ class Timing(AnalysisModule):
                 "window_end": window["end"].isoformat(),
                 "direction": direction,
                 "module": self.name,
+                "timing_authority": "firdaria",
+                "firdaria_major_lord": window["firdaria_major_lord"].value,
+                "firdaria_sub_lord": window["firdaria_sub_lord"].value,
+                "target_planets": [p.value for p in window["targets"]],
+                "helper_target_planets": [p.value for p in window["helper_targets"]],
+                "scoring_target_planets": [p.value for p in window["scoring_targets"]],
             },
         )

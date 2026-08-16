@@ -127,7 +127,7 @@ def compute_firdaria(
 
     sequence = _DAY_SEQUENCE if sect == Sect.DAY else _NIGHT_SEQUENCE
 
-    # 走大限（73 年后循环重来）
+    # 走大限（75 年后循环重来）
     cursor = birth
     idx = 0
     major_lord: Planet = sequence[0]

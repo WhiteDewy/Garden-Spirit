@@ -57,7 +57,7 @@ class Person:
     notes: str = ""
     #: 用户偏好的宫位制；None = 用全局默认（EphemerisConfig.default_house_system）
     house_system: HouseSystem | None = None
-    #: 图表缓存。key 需含宫位制（如 "natal:placidus"），避免跨系统串图
+    #: 图表缓存。key 需含版本/宫位制/黄道（如 "natal:v1:P:tropical"），避免跨算法或制式串图
     chart_cache: dict[str, str] = field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None

@@ -3,7 +3,7 @@
 同一宫位是多义词（语义场）。三步把控：
 ① 语境选择：问题域（domain）过滤 → 该宫位只激活相关含义（防关键词倾倒）
 ② per-signification 调制：每个含义按自己的 governors 主星状态算强度
-   （词级基础 × 主星净吉凶 × 宫结构加权贡献），不再"一宫一吉凶平摊"
+   （词级基础 × governor 对应正/负轴 × 宫结构加权贡献），不再"一宫一吉凶平摊"
 ③ 收敛门槛：event（事件预言）条目需强连接收敛数达标才发射；tendency 默认
 
 宫主飞宫（含宫头末度）→ 飞行增强；共振词挂在解读上（LLM 只转述，不发明）。
@@ -60,19 +60,19 @@ class HouseSignificationEngine:
             pos, neg, pos_ev, neg_ev = self._house_quality_dual(chart, house)
             conn_evidence = self._house_connection_evidence(chart, house)
             for e in eligible:
-                # per-signification 调制：每个含义按自己的 governors 单独算强度
-                gpos, gneg, gov_ev = self._governor_quality(chart, e.get("governors") or [])
+                # per-signification 调制：每个含义按自己的 governors 单独算强度，且按正/负/中性语义切片取对应轨道。
+                gpos, gneg, gov_pos_ev, gov_neg_ev = self._governor_quality(chart, e.get("governors") or [])
                 strength = self._strength(chart, house, e, pos, neg, gpos, gneg)
                 if strength is None or strength < _MIN_STRENGTH:
                     continue
-                # 各论各的：正向解读吃吉轨证据，负向解读吃凶轨证据
+                # 各论各的：正向解读吃吉轨证据，负向解读吃凶轨证据；中性同时展示两边。
                 pol = e.get("polarity", "neutral")
                 if pol == "positive":
-                    base_ev = pos_ev
+                    base_ev = pos_ev + gov_pos_ev
                 elif pol == "negative":
-                    base_ev = neg_ev
+                    base_ev = neg_ev + gov_neg_ev
                 else:
-                    base_ev = pos_ev + neg_ev
+                    base_ev = pos_ev + neg_ev + gov_pos_ev + gov_neg_ev
                 items.append(SignificationItem(
                     house=house,
                     word=e.get("word", ""),
@@ -80,7 +80,7 @@ class HouseSignificationEngine:
                     intensity=float(e.get("intensity", 2)),
                     strength=strength,
                     resonance=tuple(e.get("resonance", []) or []),
-                    evidence=tuple(base_ev + gov_ev + conn_evidence),
+                    evidence=tuple(base_ev + conn_evidence),
                     gated=e.get("gated", "tendency"),
                 ))
         items.sort(key=lambda i: i.strength, reverse=True)
@@ -152,10 +152,15 @@ class HouseSignificationEngine:
     @staticmethod
     def _polarity_evidence(evidence: tuple[str, ...], *, positive: bool) -> list[str]:
         """按证据语义拆正负轨，避免正向解读携带凶轨证据。"""
-        negative_markers = ("受", "刑", "冲", "燃烧", "日光下", "逆行", "失时", "为凶星")
+        negative_markers = ("受克", "受", "刑", "冲", "燃烧", "日光下", "逆行", "失时", "为凶星")
         positive_markers = ("尊贵", "和谐", "互溶", "接纳", "日核", "落角宫", "落续宫", "得时", "为吉星")
-        markers = positive_markers if positive else negative_markers
-        return [ev for ev in evidence if any(marker in ev for marker in markers)]
+        if positive:
+            return [
+                ev for ev in evidence
+                if any(marker in ev for marker in positive_markers)
+                and not any(marker in ev for marker in negative_markers)
+            ]
+        return [ev for ev in evidence if any(marker in ev for marker in negative_markers)]
 
     @staticmethod
     def _house_axis_evidence(
@@ -182,7 +187,7 @@ class HouseSignificationEngine:
         """per-signification 调制（领域引擎 v2 §5）。
 
         含义强度 = 词级基础(intensity)
-                 × (1 + 主星净吉凶 × 0.4，最低保 0.15)    # governors 状态（词级，占主导）
+                 × (1 + governor 对应正/负轴 × 0.4，最低保 0.15)  # governors 状态（词级，占主导）
                  × (1 + 宫极性贡献 × 0.25)                 # 宫结构只贡献一部分，不独占
                  + 飞宫增强
 
@@ -192,12 +197,14 @@ class HouseSignificationEngine:
         base = float(entry.get("intensity", 2))
         pol = entry.get("polarity", "neutral")
 
-        gov_factor = max(1 + (gpos - gneg) * 0.4, 0.15)
         if pol == "positive":
+            gov_factor = max(1 + gpos * 0.4, 0.15)
             house_contrib = pos
         elif pol == "negative":
+            gov_factor = max(1 + gneg * 0.4, 0.15)
             house_contrib = neg
         else:
+            gov_factor = max(1 + max(gpos, gneg) * 0.4, 0.15)
             house_contrib = max(pos, neg)
         s = base * gov_factor * (1 + house_contrib * 0.25)
 
@@ -217,15 +224,16 @@ class HouseSignificationEngine:
 
     def _governor_quality(
         self, chart: Chart, governors: list[str]
-    ) -> tuple[float, float, list[str]]:
-        """governors 主星状态 → (吉分量, 凶分量, 证据)。
+    ) -> tuple[float, float, list[str], list[str]]:
+        """governors 主星状态 → (吉分量, 凶分量, 吉证据, 凶证据)。
 
         展开 {n}th_lord 宫主引用为实际宫主星（传统守卫星，common.py 已实现）。
         天海冥可作次级关联（贡献自己的尊贵/相位），但引擎层面的掌宫/互溶排除
         仍由 house_lord/reception 保证——这里只读它们的状态做词级调制。
         """
         gpos, gneg = 0.0, 0.0
-        ev: list[str] = []
+        pos_ev: list[str] = []
+        neg_ev: list[str] = []
         for g in governors:
             pl = self._resolve_governor(chart, g)
             if pl is None or pl not in chart.planets:
@@ -233,8 +241,9 @@ class HouseSignificationEngine:
             assessment = assess_planet(chart, self._kb, pl, self._dignity, self._classifier)
             gpos += assessment.pos
             gneg += assessment.neg
-            ev.extend(assessment.evidence)
-        return gpos, gneg, list(dict.fromkeys(ev))
+            pos_ev.extend(self._polarity_evidence(assessment.evidence, positive=True))
+            neg_ev.extend(self._polarity_evidence(assessment.evidence, positive=False))
+        return gpos, gneg, list(dict.fromkeys(pos_ev)), list(dict.fromkeys(neg_ev))
 
     def _resolve_governor(self, chart: Chart, governor: str) -> Planet | None:
         """governor 取值 → 行星。'3rd_lord' → 3宫主星；具体行星名（'mercury'）→ 该行星。"""

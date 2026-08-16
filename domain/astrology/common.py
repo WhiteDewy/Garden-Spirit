@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from foundation.utils import new_id
 from shared.constants import SIGNS_IN_ORDER
-from shared.enums import AspectApplication, AspectType, FactCategory, Planet, PlanetSpeed, Sect, Sign
+from shared.enums import AspectApplication, AspectType, DignityState, FactCategory, Planet, PlanetSpeed, Sect, Sign
 from shared.models import Aspect, Chart, Fact
 
 from domain.astrology.knowledge import DignityEngine
@@ -83,6 +83,16 @@ ASPECT_ZH = {
     "sextile": "六合", "quincunx": "梅花", "semisextile": "半六合",
     "semisquare": "半刑", "sesquiquadrate": "八分相",
     "quintile": "五相", "biquintile": "倍五相",
+}
+
+DIGNITY_ZH = {
+    DignityState.DOMICILE: "入庙",
+    DignityState.EXALTATION: "旺相",
+    DignityState.TRIPLICITY: "三分",
+    DignityState.TERM: "界",
+    DignityState.FACE: "面",
+    DignityState.DETRIMENT: "失势",
+    DignityState.FALL: "落陷",
 }
 
 
@@ -243,7 +253,11 @@ def assess_planet(
 
     唯一状态评估入口（阶段 1 起逐步替代 4 套重复逻辑）。吉凶两论：三轴各带 pos/neg。
     """
-    key = (planet, dignity is None, classifier is None)
+    key = (
+        planet,
+        "default_dignity" if dignity is None else ("dignity", id(dignity)),
+        "default_classifier" if classifier is None else ("classifier", id(classifier)),
+    )
     cached = chart.planet_assessments.get(key)
     if cached is not None:
         return cached
@@ -277,13 +291,30 @@ def _assess_planet(
         return PlanetAssessment(planet, 0.0, 0.0, (), 0.0, 0.0, (), 0.0, 0.0, ())
 
     # —— 本质轴：尊贵（庙旺陷三分界面） ——
-    dt = dignity_total(chart, kb, planet, engine)
-    if dt > 0:
-        epos += dt * 0.35
-        eev.append(f"{name}尊贵{dt:+d}")
-    elif dt < 0:
-        eneg += abs(dt) * 0.35
-        eev.append(f"{name}受克（尊贵{dt:+d}）")
+    states, _dt = engine.compute(
+        planet,
+        chart.planets[planet].sign.sign,
+        chart.planets[planet].sign.degree_in_sign,
+        chart.sect,
+    )
+    positive_states: list[DignityState] = []
+    negative_states: list[DignityState] = []
+    negative_score_total = 0
+    for state in states:
+        score = engine.score(state)
+        if score > 0:
+            epos += score * 0.35
+            positive_states.append(state)
+        elif score < 0:
+            eneg += abs(score) * 0.35
+            negative_score_total += abs(score)
+            negative_states.append(state)
+    if positive_states:
+        tags = "、".join(DIGNITY_ZH.get(state, state.value) for state in positive_states)
+        eev.append(f"{name}尊贵（{tags}）")
+    if negative_states:
+        tags = "、".join(DIGNITY_ZH.get(state, state.value) for state in negative_states)
+        eev.append(f"{name}受克（尊贵{-negative_score_total:+d}；{tags}）")
 
     # —— 境遇轴：燃烧/日核 ——
     cb_score, cb_tag = combustion_state(chart, planet)

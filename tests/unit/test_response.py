@@ -109,6 +109,8 @@ def test_system_prompt_contains_iron_rules():
     assert "不能发明" in system
     assert "极性" in system
     assert "证据链" in system
+    assert "不能诊断疾病" in system
+    assert "指导用药" in system
 
 
 def test_user_prompt_contains_domain_data():
@@ -191,6 +193,37 @@ def test_call_plan_injection_uses_canonical_parameter():
     assert "当前话题：事业" in system
     assert "结构（聚焦：10宫主状态）" in system
     assert "不要脱离 Domain 结论" in system
+
+
+def test_call_plan_injection_includes_dynamic_carrier_facts_only():
+    """R10：prompt 只注入实盘承载者事实，不暴露静态 governors 或让 LLM 自断结论。"""
+
+    class Plan:
+        def to_dict(self):
+            return {
+                "topic_label": "感情",
+                "output_structure": {},
+                "cross_readings": [],
+                "guardrails": [],
+                "house_lord_placements": [{
+                    "house": 7,
+                    "cusp_sign": "libra",
+                    "lord": "venus",
+                    "lord_house": 9,
+                    "lord_sign": "sagittarius",
+                }],
+                "house_occupants": ["moon", "pluto"],
+                "natural_significators": ["venus", "mars", "moon"],
+                "supporting_planets": ["jupiter"],
+            }
+
+    system = _build_call_plan_injection(Plan())
+    assert "实盘承载者" in system
+    assert "H7 cusp=libra → 7R=venus in H9/sagittarius" in system
+    assert "核心宫内星：moon、pluto" in system
+    assert "领域先天征象星：venus、mars、moon" in system
+    assert "最终判断仍以领域分析结论和证据卡为准" in system
+    assert "governors=" not in system
 
 
 def test_topic_plan_remains_legacy_alias():

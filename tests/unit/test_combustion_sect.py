@@ -20,8 +20,10 @@ from domain.astrology.common import (
 )
 from domain.astrology.knowledge import load_knowledge
 from domain.astrology.interpretation.compositor import DomainCompositor
-from shared.enums import ChartType, HouseSystem, Planet, PlanetSpeed, Sect, Sign, ZodiacType
+from shared.enums import AspectApplication, AspectType, ChartType, DignityState, HouseSystem, Planet, PlanetSpeed, Sect, Sign, ZodiacType
 from shared.models import (
+    Aspect,
+    ChartAcceptance,
     Chart,
     ChartPlanet,
     EclipticPosition,
@@ -164,6 +166,26 @@ def test_assess_planet_two_axes_separate():
     assert "日光下" in "".join(merc.accidental_ev)
 
 
+def test_assess_planet_keeps_mixed_dignity_components_visible():
+    """本质轴内部也吉凶两论：失势/落陷不能净掉同度数上的界、面等小尊贵。"""
+    chart = _make_chart({Planet.MARS: 207.0})
+    chart.planets[Planet.MARS] = ChartPlanet(
+        planet=Planet.MARS,
+        ecliptic=EclipticPosition(longitude=207.0),
+        sign=SignPosition(sign=Sign.LIBRA, degree_absolute=207.0, degree_in_sign=27.0),
+        house=HousePosition(house=1, cusp_degree=0.0, distance_from_cusp=0.0),
+        speed=PlanetSpeed.DIRECT,
+        speed_deg_per_day=1.0,
+    )
+    mars = assess_planet(chart, load_knowledge(), Planet.MARS)
+    assert mars.essential_neg > 0                # 火星天秤失势
+    assert mars.essential_pos > 0                # 火星仍在自身埃及界内
+    ev = "".join(mars.essential_ev)
+    assert "受克" in ev
+    assert "界" in ev
+    assert "失势" in ev
+
+
 def test_assess_planet_retrograde_wired():
     """逆行进境遇轴凶轨。"""
     kb = load_knowledge()
@@ -236,6 +258,20 @@ def test_helpers_of_public_method():
     assert clf.helpers_of(chart, Planet.URANUS) == []
 
 
+def test_helpers_of_prefers_cached_reception_snapshots(monkeypatch):
+    """Chart 已有互溶/接纳快照时，helpers_of 不再调用 ReceptionEngine 重算。"""
+    from domain.astrology.interpretation.synapsis import ConnectionClassifier
+    chart = _summer_chart()
+    kb = load_knowledge()
+    clf = ConnectionClassifier(kb)
+
+    monkeypatch.setattr(clf._reception, "detect", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recompute")))
+    monkeypatch.setattr(clf._reception, "detect_acceptance", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recompute")))
+
+    mars_helpers = clf.helpers_of(chart, Planet.MARS)
+    assert any(p == Planet.MERCURY and k == "mutual" for p, k in mars_helpers)
+
+
 def test_assess_planet_memoized():
     """预计算查表：同一颗星第二次调用命中缓存（返回同一对象，不重算）。"""
     chart = _summer_chart()
@@ -244,6 +280,136 @@ def test_assess_planet_memoized():
     a2 = assess_planet(chart, kb, Planet.MARS)
     assert a1 is a2                 # 缓存命中，同一对象
     assert len(chart.planet_assessments) == 1  # 只算了一次
+
+
+def test_assess_planet_memoized_custom_dignity_identity_isolated():
+    """注入不同 dignity engine 时缓存不得串用：本质轴必须按本次尊贵表实算。"""
+    chart = _make_chart({Planet.MARS: 10.0})
+    kb = load_knowledge()
+
+    class _Dignity:
+        def __init__(self, state: DignityState):
+            self.state = state
+
+        def compute(self, *_args, **_kwargs):
+            return [self.state], self.score(self.state)
+
+        def score(self, state: DignityState):
+            return 5 if state == DignityState.DOMICILE else -4
+
+    strong = assess_planet(chart, kb, Planet.MARS, dignity=_Dignity(DignityState.DOMICILE))
+    weak = assess_planet(chart, kb, Planet.MARS, dignity=_Dignity(DignityState.FALL))
+
+    assert strong is not weak
+    assert strong.essential_pos > 0
+    assert strong.essential_neg == 0
+    assert weak.essential_neg > 0
+    assert weak.essential_pos == 0
+
+
+def test_assess_planet_memoized_custom_classifier_identity_isolated():
+    """注入不同 classifier 时缓存不得串用：关系轴接纳判断必须按本次依赖实算。"""
+    chart = _make_chart({Planet.MARS: 10.0, Planet.SATURN: 100.0})
+    chart.aspects = [
+        Aspect(
+            Planet.MARS,
+            Planet.SATURN,
+            AspectType.SQUARE,
+            90.0,
+            1.0,
+            AspectApplication.APPLYING,
+        )
+    ]
+    kb = load_knowledge()
+
+    class _Classifier:
+        def __init__(self, received: bool):
+            self.received = received
+
+        def is_received(self, *_args, **_kwargs):
+            return self.received
+
+        def helpers_of(self, *_args, **_kwargs):
+            return []
+
+    unreceived = assess_planet(chart, kb, Planet.MARS, classifier=_Classifier(False))
+    received = assess_planet(chart, kb, Planet.MARS, classifier=_Classifier(True))
+
+    assert unreceived is not received
+    assert unreceived.relational_neg > received.relational_neg
+    assert any("未接纳" in ev for ev in unreceived.relational_ev)
+    assert any("磨合" in ev for ev in received.relational_ev)
+
+
+def test_ally_timeline_public_method_is_auditable():
+    """帮手链产品化：返回可审计结构，而不只是 tuple。"""
+    from domain.astrology.interpretation.synapsis import ConnectionClassifier
+    chart = _summer_chart()
+    kb = load_knowledge()
+    clf = ConnectionClassifier(kb)
+
+    allies = clf.ally_timeline(chart, Planet.MARS)
+    mercury = next(a for a in allies if a.helper == Planet.MERCURY)
+    assert mercury.target == Planet.MARS
+    assert mercury.kind == "mutual"
+    assert mercury.strength == 4.0
+    assert mercury.dignity_type.value == "domicile"
+    assert mercury.aspect_type == "sextile"
+    assert mercury.detail
+    assert clf.has_ally(chart, Planet.MARS) is True
+    assert clf.has_ally(chart, Planet.URANUS) is False
+
+
+def test_debilitated_with_ally_keeps_weakness_visible():
+    """有帮手不抹掉本质弱项：受克星可被托住，但仍标记为弱而有援。"""
+    from domain.astrology.interpretation.synapsis import ConnectionClassifier
+    chart = _make_chart({Planet.MARS: 190.0, Planet.VENUS: 195.0})
+    chart.planets[Planet.MARS] = ChartPlanet(
+        planet=Planet.MARS,
+        ecliptic=EclipticPosition(longitude=190.0),
+        sign=SignPosition(sign=Sign.LIBRA, degree_absolute=190.0, degree_in_sign=10.0),
+        house=HousePosition(house=1, cusp_degree=0.0, distance_from_cusp=0.0),
+        speed=PlanetSpeed.DIRECT,
+        speed_deg_per_day=1.0,
+    )
+    chart.planets[Planet.VENUS] = ChartPlanet(
+        planet=Planet.VENUS,
+        ecliptic=EclipticPosition(longitude=195.0),
+        sign=SignPosition(sign=Sign.LIBRA, degree_absolute=195.0, degree_in_sign=15.0),
+        house=HousePosition(house=1, cusp_degree=0.0, distance_from_cusp=0.0),
+        speed=PlanetSpeed.DIRECT,
+        speed_deg_per_day=1.0,
+    )
+    chart.acceptances = [ChartAcceptance(
+        acceptor=Planet.VENUS,
+        accepted=Planet.MARS,
+        dignities=(DignityState.DOMICILE,),
+        dignity_type=DignityState.DOMICILE,
+        score=5,
+        aspect_type=AspectType.CONJUNCTION,
+        aspect_nature="HARMONIOUS",
+        description_zh="金星接纳火星",
+    )]
+    kb = load_knowledge()
+    clf = ConnectionClassifier(kb)
+
+    assert clf.debilitated_with_ally(chart, Planet.MARS) is True
+    mars = assess_planet(chart, kb, Planet.MARS)
+    assert mars.essential_neg > 0
+    assert any("金星接纳火星" in a.detail for a in clf.ally_timeline(chart, Planet.MARS))
+
+
+def test_ally_timeline_prefers_cached_reception_snapshots(monkeypatch):
+    """Chart 已有快照时，产品化帮手链也不触发现场重算。"""
+    from domain.astrology.interpretation.synapsis import ConnectionClassifier
+    chart = _summer_chart()
+    kb = load_knowledge()
+    clf = ConnectionClassifier(kb)
+
+    monkeypatch.setattr(clf._reception, "detect", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recompute")))
+    monkeypatch.setattr(clf._reception, "detect_acceptance", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recompute")))
+
+    assert any(a.helper == Planet.MERCURY and a.kind == "mutual" for a in clf.ally_timeline(chart, Planet.MARS))
 
 
 # -- planet_strength 接线 ---------------------------------------------------

@@ -48,6 +48,8 @@ def test_build_instruction_has_guardrails():
     assert "判决书" in text
     assert "给出路" in text
     assert "压力不等于垮台" in text
+    assert "不能诊断疾病" in text
+    assert "指导用药" in text
 
 
 # --- 输出护栏检测 ---
