@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page gs-time-page" :class="phaseClass">
     <view class="sun-glow" aria-hidden="true"></view>
 
     <view class="head">
@@ -88,6 +88,8 @@
         </button>
       </view>
     </view>
+
+    <BottomNav active="mailbox" />
   </view>
 </template>
 
@@ -95,6 +97,8 @@
 import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import api, { type SoulFragmentOut } from "@/api/client";
+import BottomNav from "@/components/BottomNav.vue";
+import { useTimePhase } from "@/utils/timeTheme";
 
 const PERSON_KEY = "gs_person_id";
 const loading = ref(true);
@@ -112,6 +116,7 @@ const evidence = ref<{ trigger: string; memory: string }>({ trigger: "", memory:
 const writing = ref(false);
 const writeDraft = ref("");
 const saving = ref(false);
+const { phaseClass, refreshPhase } = useTimePhase();
 
 // §6.1 来信正文 = 星灵那段完整回复（+ 灵魂碎片脚注 + —— 疗愈名落款），
 // 前端把脚注/落款拆出来当独立卡片渲染（数据卡不是正文）。
@@ -163,6 +168,7 @@ async function saveJournal() {
 }
 
 onLoad(async () => {
+  refreshPhase();
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   if (!pid) return uni.redirectTo({ url: "/pages/index/index" });
   try {
@@ -252,7 +258,7 @@ onLoad(async () => {
 .empty.small { padding: 20rpx 0 40rpx; font-size: 23rpx; text-align: left; }
 
 /* 写下此刻 */
-.write-btn { position: fixed; right: 36rpx; bottom: calc(56rpx + env(safe-area-inset-bottom)); border: 0; border-radius: 44rpx; padding: 24rpx 34rpx; background: #526d60; color: #fff; font-size: 25rpx; box-shadow: 0 16rpx 50rpx rgba(51, 74, 62, 0.28); z-index: 5; line-height: 1.4; }
+.write-btn { position: fixed; right: 36rpx; bottom: calc(148rpx + env(safe-area-inset-bottom)); border: 0; border-radius: 44rpx; padding: 24rpx 34rpx; background: linear-gradient(135deg, #6b9179, #426552); color: #fff; font-size: 25rpx; box-shadow: 0 16rpx 50rpx rgba(51, 74, 62, 0.28); z-index: 5; line-height: 1.4; }
 .write-mask { position: fixed; inset: 0; z-index: 20; background: rgba(24, 36, 32, 0.35); }
 .write-sheet { position: fixed; left: 24rpx; right: 24rpx; bottom: calc(32rpx + env(safe-area-inset-bottom)); z-index: 21; border-radius: 40rpx; padding: 34rpx 30rpx; background: rgba(250, 248, 235, 0.97); color: #293b35; box-shadow: 0 24rpx 72rpx rgba(30, 45, 38, 0.35); display: grid; gap: 20rpx; }
 .write-title { font-family: Georgia, "Noto Serif SC", serif; font-size: 32rpx; font-weight: 600; color: #40534b; }

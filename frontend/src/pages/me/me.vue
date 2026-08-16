@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page gs-time-page" :class="phaseClass">
     <view class="me-glow" aria-hidden="true"></view>
 
     <view class="head">
@@ -26,7 +26,7 @@
     <text class="section-label">MY SPIRITS · 我的星灵</text>
     <view class="spirit-list">
       <view v-for="s in spirits" :key="s.glyph" :class="['spirit-card', { today: s.today }]">
-        <view class="tiny-orb">{{ s.glyph }}</view>
+        <view class="tiny-orb"><SpiritPortrait :planet="s.planet" /></view>
         <view>
           <text class="spirit-card-name">{{ s.name }}</text>
           <text class="spirit-card-sub">{{ s.healing }}</text>
@@ -41,6 +41,8 @@
       <view class="setting" @tap="comingSoon"><text>星灵关系</text><text class="arrow">→</text></view>
       <view class="setting" @tap="comingSoon"><text>隐私与安全</text><text class="arrow">→</text></view>
     </view>
+
+    <BottomNav active="me" />
   </view>
 </template>
 
@@ -48,12 +50,16 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import api, { type PersonOut } from "@/api/client";
+import BottomNav from "@/components/BottomNav.vue";
+import SpiritPortrait from "@/components/SpiritPortrait.vue";
+import { useTimePhase } from "@/utils/timeTheme";
 
 const PERSON_KEY = "gs_person_id";
 const person = ref<PersonOut | null>(null);
 const litCount = ref(0);
 const findingCount = ref(0);
 const todayPlanet = ref("");
+const { phaseClass, refreshPhase } = useTimePhase();
 
 // 10 星灵图鉴（疗愈名来自视觉定稿的星灵人设表）
 const SPIRITS: Array<{ glyph: string; name: string; healing: string; planet: string }> = [
@@ -84,6 +90,7 @@ const days = computed(() => {
 });
 
 onShow(async () => {
+  refreshPhase();
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   if (!pid) return uni.redirectTo({ url: "/pages/index/index" });
   api.getPerson(pid).then(p => (person.value = p)).catch(() => undefined);
@@ -103,8 +110,8 @@ function comingSoon() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: linear-gradient(170deg, #273c35 0%, #162722 55%, #0f1b18 100%);
-  padding: 48rpx 36rpx 60rpx;
+  background: radial-gradient(circle at 82% 12%, rgba(240, 210, 139, 0.1), transparent 28%), linear-gradient(170deg, #17362c 0%, #10271f 55%, #081613 100%);
+  padding: 48rpx 36rpx 170rpx;
   box-sizing: border-box;
   position: relative;
   color: #edf1e9;

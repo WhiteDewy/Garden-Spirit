@@ -1,9 +1,9 @@
 <template>
-  <view class="page">
+  <view class="page gs-time-page" :class="phaseClass">
     <view class="top-glow" aria-hidden="true"></view>
 
     <view class="header">
-      <view class="spirit-orb" aria-hidden="true"></view>
+      <view class="spirit-orb" aria-hidden="true"><SpiritPortrait :planet="spiritPlanet" /></view>
       <view class="header-copy">
         <text class="spirit-name">{{ spiritName }}</text>
         <text class="spirit-status">{{ thinking ? '正在翻看你的星图…' : '正在听你说' }}</text>
@@ -23,6 +23,7 @@
           <text class="msg-text">🌙 正在查看你的星图……</text>
         </view>
       </view>
+      <view v-if="feedbackNote" class="growth-note"><text>✦</text><text>{{ feedbackNote }}</text></view>
 
       <view v-if="!sentOnce && !thinking" class="quick-zone">
         <text class="quick-lead">不知道从哪开始，也可以：</text>
@@ -50,6 +51,8 @@
 import { ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import api, { ApiError } from "@/api/client";
+import SpiritPortrait from "@/components/SpiritPortrait.vue";
+import { useTimePhase } from "@/utils/timeTheme";
 
 const PERSON_KEY = "gs_person_id";
 const SESSION_KEY = "gs_session_id";
@@ -62,6 +65,10 @@ const trustLabel = ref("");
 const sentOnce = ref(false);
 const messages = ref<Array<{ role: "user" | "assistant"; text: string }>>([]);
 const quickOptions = ["我最近有点累", "想问问工作的事", "随便聊聊"];
+const persona = ref<string | undefined>();
+const feedbackNote = ref("");
+const spiritPlanet = ref("moon");
+const { phaseClass, refreshPhase } = useTimePhase();
 
 const todayStr = (() => {
   const d = new Date();
@@ -84,6 +91,7 @@ const PLANET_ZH: Record<string, string> = {
 };
 
 onLoad(() => {
+  refreshPhase();
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   if (!pid) {
     uni.redirectTo({ url: "/pages/index/index" });
@@ -91,29 +99,26 @@ onLoad(() => {
   }
 
   // 今日星灵（顶部身份与开场口吻与之对齐；失败安静回退默认人格）
-  let persona: string | undefined;
   api
     .recommendedSpirits(pid)
     .then((rec) => {
       const top = rec.spirits?.[0];
       if (!top) return;
-      persona = top.planet;
+      persona.value = top.planet;
+      spiritPlanet.value = top.planet.toLowerCase();
       spiritName.value = top.healing_name || top.name || PLANET_ZH[top.planet?.toLowerCase()] || "星灵";
+      return api.opening(pid, persona.value);
     })
-    .catch(() => undefined);
-
-  // A2 关系层：开场白由后端按信任等级生成（首次见面自我介绍 / 老用户欢迎回来）
-  api
-    .opening(pid)
     .then((o) => {
-      if (o.opening) messages.value.push({ role: "assistant", text: o.opening });
+      if (!o?.opening) return;
+      messages.value = [{ role: "assistant", text: o.opening }];
       trustLabel.value = TRUST_ZH[o.trust_level] || "";
     })
-    .catch(() => {
-      messages.value.push({
-        role: "assistant",
-        text: "今天想聊点什么？事业、感情、还是最近的心情？",
-      });
+    .catch(() => undefined)
+    .finally(() => {
+      if (!messages.value.length) {
+        messages.value.push({ role: "assistant", text: "今天想聊点什么？事业、感情、还是最近的心情？" });
+      }
     });
 });
 
@@ -129,9 +134,16 @@ async function send() {
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   const session = (uni.getStorageSync(SESSION_KEY) as string) || undefined;
   try {
-    const res = await api.chat({ person_id: pid, session_id: session, message: text });
+    const res = await api.chat({ person_id: pid, session_id: session, message: text, persona: persona.value });
     uni.setStorageSync(SESSION_KEY, res.session_id);
     messages.value.push({ role: "assistant", text: res.answer });
+    const parts: string[] = [];
+    if (res.lit_fragments?.length) parts.push(`点亮 ${res.lit_fragments.length} 个内在角落`);
+    if (res.seen_fragments?.length) parts.push("星灵记住了你的确认");
+    if (res.actioned_fragments?.length) parts.push("这次行动也被收进成长里");
+    if (res.keepsake_created) parts.push("一封新的记忆来信已放进信箱");
+    feedbackNote.value = parts.join(" · ");
+    if (feedbackNote.value) setTimeout(() => { feedbackNote.value = ""; }, 5200);
   } catch (e: any) {
     if (e instanceof ApiError && e.status === 404) {
       // 用户档案过期/被清（如后端数据重建）→ 回建档页重新开始
@@ -170,7 +182,7 @@ function sendQuick(q: string) {
 .header { display: flex; align-items: center; gap: 22rpx; padding: 34rpx 32rpx 26rpx; position: relative; z-index: 1; }
 .spirit-orb { width: 96rpx; height: 96rpx; flex-shrink: 0; border-radius: 50%;
   background: radial-gradient(circle at 38% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 62% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.8) 0 17%, transparent 18%), radial-gradient(circle at 50% 65%, rgba(224, 235, 222, 0.8) 0 28%, transparent 29%), linear-gradient(145deg, #e8ece0, #879f94);
-  box-shadow: 0 0 0 2rpx rgba(255, 255, 255, 0.25), 0 16rpx 50rpx rgba(0, 0, 0, 0.25); }
+  box-shadow: 0 0 0 2rpx rgba(255, 255, 255, 0.25), 0 16rpx 50rpx rgba(0, 0, 0, 0.25); overflow: hidden; }
 .spirit-name { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 34rpx; font-weight: 600; color: #edf1e9; }
 .spirit-status { display: block; margin-top: 6rpx; font-size: 21rpx; color: rgba(235, 241, 233, 0.4); }
 .trust-tag { margin-left: auto; flex-shrink: 0; color: rgba(165, 214, 167, 0.9); font-size: 21rpx; background: rgba(124, 179, 66, 0.16); border: 1rpx solid rgba(165, 214, 167, 0.22); border-radius: 999rpx; padding: 8rpx 18rpx; }
@@ -190,4 +202,5 @@ function sendQuick(q: string) {
 .composer-input { flex: 1; min-height: 96rpx; background: rgba(255, 255, 255, 0.09); border: 1rpx solid rgba(255, 255, 255, 0.1); border-radius: 44rpx; padding: 0 36rpx; color: #edf1e9; font-size: 27rpx; }
 .composer-send { width: 84rpx; height: 84rpx; flex-shrink: 0; border-radius: 30rpx; background: #b8c8b7; color: #253a36; font-size: 36rpx; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 1; }
 .composer-send[disabled] { opacity: 0.5; }
+.growth-note { display: flex; align-items: center; justify-content: center; gap: 10rpx; margin: 6rpx 32rpx 12rpx; padding: 14rpx 18rpx; border: 1rpx solid rgba(240, 210, 139, 0.2); border-radius: 999rpx; background: rgba(240, 210, 139, 0.08); color: rgba(240, 210, 139, 0.82); font-size: 20rpx; }
 </style>

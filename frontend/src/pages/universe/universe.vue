@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="page gs-time-page" :class="phaseClass">
     <view class="cosmos-glow" aria-hidden="true"></view>
 
     <!-- 星座散点 -->
@@ -59,6 +59,8 @@
     <text v-else-if="!litCount && !findingCount" class="hint">
       先去聊一次，花园才能开始认识你。
     </text>
+
+    <BottomNav active="universe" />
   </view>
 </template>
 
@@ -66,6 +68,8 @@
 import { ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import api from "@/api/client";
+import BottomNav from "@/components/BottomNav.vue";
+import { useTimePhase } from "@/utils/timeTheme";
 
 const PERSON_KEY = "gs_person_id";
 
@@ -75,6 +79,7 @@ const loaded = ref(false);
 
 const litLabel = ref("34 子类 · 3 星区");
 const findingLabel = ref("大领域 · 深度解读");
+const { phaseClass, refreshPhase } = useTimePhase();
 
 // 星座散点（固定伪随机，避免每次渲染跳位）
 const stars = Array.from({ length: 12 }, (_, i) => ({
@@ -83,6 +88,7 @@ const stars = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 onShow(async () => {
+  refreshPhase();
   const personId = uni.getStorageSync(PERSON_KEY) as string;
   if (!personId) return uni.redirectTo({ url: "/pages/index/index" });
 
@@ -117,14 +123,14 @@ function goConsult() {
 <style scoped>
 .page {
   min-height: 100vh;
-  background: radial-gradient(circle at 50% 38%, #354d65 0%, #182638 52%, #0b111b 100%);
-  padding: 48rpx 36rpx 60rpx;
+  background: radial-gradient(circle at 50% 38%, #244b4d 0%, #102a2b 46%, #081613 100%);
+  padding: 48rpx 36rpx 170rpx;
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
   color: #eef1ea;
 }
-.cosmos-glow { position: absolute; width: 600rpx; height: 600rpx; border-radius: 50%; left: 90rpx; top: 280rpx; background: rgba(154, 177, 202, 0.12); filter: blur(60rpx); pointer-events: none; }
+.cosmos-glow { position: absolute; width: 600rpx; height: 600rpx; border-radius: 50%; left: 90rpx; top: 280rpx; background: rgba(154, 205, 186, 0.12); filter: blur(60rpx); pointer-events: none; }
 .constellation { position: absolute; inset: 0; opacity: 0.75; pointer-events: none; }
 .c-dot { position: absolute; width: 6rpx; height: 6rpx; border-radius: 50%; background: #eee7ce; box-shadow: 0 0 20rpx rgba(238, 231, 206, 0.7); animation: twinkle 4s ease-in-out infinite; }
 @keyframes twinkle { 50% { opacity: 0.3; } }

@@ -279,75 +279,14 @@
       </view>
     </view>
 
-    <view v-else class="screen garden-screen">
-      <view class="scene" aria-hidden="true">
-        <view class="scene-glow"></view>
-        <view class="scene-moon"></view>
-        <view class="scene-cloud a"></view>
-        <view class="scene-cloud b"></view>
-        <view class="scene-hill back"></view>
-        <view class="scene-hill front"></view>
-        <text class="scene-flower f1">✦</text>
-        <text class="scene-flower f2">✿</text>
-        <text class="scene-flower f3">·</text>
-      </view>
-
-      <view class="garden-date-row">
-        <text class="garden-date">{{ todayStr }}</text>
-        <text v-if="gardenState?.trust_level" class="garden-trust">{{ trustZh(gardenState.trust_level) }}</text>
-      </view>
-
-      <view class="garden-greeting">
-        <text class="greeting-main">{{ greetingLine }}</text>
-        <text class="greeting-sub">今天的你怎么样？</text>
-      </view>
-
-      <view class="spirit-buddy" @tap="goChat">
-        <view class="spirit-orb"></view>
-        <view class="spirit-buddy-copy">
-          <text class="spirit-buddy-name">{{ spiritName }}</text>
-          <text class="spirit-buddy-line">{{ spiritLine }}</text>
-        </view>
-      </view>
-
-      <view v-if="inviteText" class="garden-quote">“{{ inviteText }}”</view>
-
-      <button class="chat-cta" @tap="goChat">和{{ spiritName }}聊聊 →</button>
-
-      <view class="weather-card" @tap="goMailbox">
-        <view class="weather-main">
-          <text class="weather-label">INNER WEATHER · 今日来信</text>
-          <text class="weather-strong">{{ gardenState?.letter?.title || '今天，先温柔地醒来。' }}</text>
-          <text class="weather-desc">{{ weatherDesc }}</text>
-          <text class="weather-link" @tap.stop="goChat">继续这封信 →</text>
-        </view>
-        <view class="weather-side">
-          <text class="weather-icon">☁︎</text>
-          <view class="mini-stars">
-            <text v-for="n in 5" :key="n" :class="['mini-star', { lit: n <= (gardenState?.soul_fragments?.length || 0) }]"></text>
-          </view>
-        </view>
-      </view>
-
-      <view class="dust-band">
-        <view v-if="gardenState?.continue_from" class="dust-chip" @tap="goChat">
-          <text>继续昨天 · {{ continueTitle.replace(/[“”"]/g, "") }}</text>
-        </view>
-        <view class="dust-chip" @tap="goUniverse">
-          <text>今日碎片 · {{ fragmentTitle }}</text>
-        </view>
-        <view v-if="recallText" class="dust-chip" @tap="goUniverse">
-          <text>我记得你</text>
-        </view>
-      </view>
-
-      <view class="nav-bar">
-        <view class="nav-item active"><text>✦</text><text>花园</text></view>
-        <view class="nav-item" @tap="goMailbox"><text>✉</text><text>信箱</text><text v-if="gardenState?.letter_unread" class="nav-badge"></text></view>
-        <view class="nav-item" @tap="goUniverse"><text>◌</text><text>宇宙</text><text v-if="(gardenState?.pending_verifications ?? 0) > 0" class="nav-badge"></text></view>
-        <view class="nav-item" @tap="goMe"><text>☺</text><text>我的</text></view>
-      </view>
-    </view>
+    <GardenHome
+      v-else
+      :spirit-name="spiritName"
+      :spirit-planet="spiritPlanet"
+      :spirit-line="spiritLine"
+      :garden-state="gardenState"
+      @chat="goChat"
+    />
 
     <view v-if="overseasOpen" class="sheet-mask" @tap="overseasOpen = false"></view>
     <view v-if="overseasOpen" class="overseas-sheet">
@@ -388,8 +327,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import api, { ApiError, describeError, type GardenState, type SoulFragmentOut, type SpiritRecommendationOut } from "@/api/client";
+import api, { ApiError, describeError, type GardenState, type SpiritRecommendationOut } from "@/api/client";
 import { subscribePush } from "@/utils/push";
+import GardenHome from "@/components/GardenHome.vue";
 
 type HomeStage = "welcome" | "register" | "awakening" | "garden";
 
@@ -808,12 +748,14 @@ const PLANET_ZH: Record<string, string> = {
   pluto: "冥王星灵",
 };
 
-const nowHour = new Date().getHours();
-const phase = nowHour < 11 ? "morning" : nowHour < 16 ? "noon" : nowHour < 20 ? "dusk" : "night";
+const currentHour = ref(new Date().getHours());
+const phase = computed(() => {
+  const hour = currentHour.value;
+  return hour < 11 ? "morning" : hour < 16 ? "noon" : hour < 20 ? "dusk" : "night";
+});
 // 注册与绘制星图固定使用夜空主题，与欢迎页深空序章保持同一章视觉
-const phaseClass = computed(() => (stage.value === "register" || stage.value === "awakening" ? "phase-night" : `phase-${phase}`));
+const phaseClass = computed(() => (stage.value === "register" || stage.value === "awakening" ? "phase-night" : `phase-${phase.value}`));
 const stageClass = computed(() => `stage-${stage.value}`);
-const phaseLabel = computed(() => ({ morning: "清晨", noon: "中午", dusk: "黄昏", night: "夜晚" }[phase]));
 const appTitle = computed(() => stage.value === "welcome" ? "星灵花园" : stage.value === "register" ? "创建星图" : stage.value === "awakening" ? "绘制星图" : "花园");
 
 const registerPrompt = computed(() => [
@@ -842,25 +784,8 @@ const spiritName = computed(() => {
   const p = recommendedSpirit.value?.planet?.toLowerCase();
   return recommendedSpirit.value?.healing_name || recommendedSpirit.value?.name || (p ? PLANET_ZH[p] : "月亮星灵");
 });
+const spiritPlanet = computed(() => recommendedSpirit.value?.planet?.toLowerCase() || "moon");
 const spiritReason = computed(() => recommendedSpirit.value?.reason || "它会先从安全感、情绪和归属感的角度陪你看今天。");
-const shortSpiritReason = computed(() => spiritReason.value.length > 28 ? `${spiritReason.value.slice(0, 28)}…` : spiritReason.value);
-// 接引语：/opening 是多行回访话术（问候+信任称呼+缺口钩子+上次话题+记忆钩子），
-// 首行做问候行大标题，其余行做星灵下方的接引语；首见用户是单行自我介绍
-const openingText = ref("");
-const openingLines = computed(() => openingText.value.split("\n").map((s) => s.trim()).filter(Boolean));
-const greetingLine = computed(() => {
-  if (!openingLines.value.length) return `${phaseLabel.value === "夜晚" ? "夜深了" : phaseLabel.value === "黄昏" ? "晚上好" : "你好"}，${savedName.value || "你"}`;
-  return openingLines.value.length === 1 ? "欢迎来到花园" : openingLines.value[0];
-});
-const inviteText = computed(() => (openingLines.value.length <= 1 ? openingLines.value[0] || "" : openingLines.value.slice(1).join("\n")));
-
-// 首页实景版文案源：日期行 / 星灵伙伴一句话（前端过渡台词，后端 persona 台词出 API 后替换）/ 天气卡短述
-const todayStr = computed(() => {
-  const d = new Date();
-  const wd = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()} · ${p(d.getMonth() + 1)} · ${p(d.getDate())}  星期${wd}`;
-});
 const SPIRIT_LINES: Record<string, string> = {
   sun: "今天也值得被看见一点。",
   moon: "我会先听你说，不急着给答案。",
@@ -874,24 +799,10 @@ const SPIRIT_LINES: Record<string, string> = {
   pluto: "深一点的真相，我们慢慢挖。",
 };
 const spiritLine = computed(() => SPIRIT_LINES[recommendedSpirit.value?.planet?.toLowerCase() || "moon"] || SPIRIT_LINES.moon);
-const weatherDesc = computed(() => {
-  const body = (gardenState.value?.letter?.body || "今天适合慢一点回应别人。").replace(/\s+/g, " ").trim();
-  return body.length > 44 ? `${body.slice(0, 44)}…` : body;
-});
-const letterPreview = computed(() => {
-  const body = gardenState.value?.letter?.body || "第一封星信正在等你打开。如果你愿意，可以从今天的一句话开始，让星灵慢慢认识你。";
-  return body.length > 92 ? `${body.slice(0, 92)}…` : body;
-});
-const continueTitle = computed(() => gardenState.value?.continue_from ? `“${gardenState.value.continue_from.summary.slice(0, 12)}…”` : "从一句话开始");
-const continueCopy = computed(() => gardenState.value?.continue_from ? "上一段对话还在这里，星灵可以接着陪你整理。" : "还没有昨天的话题，也可以把今天的心情先放下来。");
-const fragmentTitle = computed(() => gardenState.value?.soul_fragments?.length ? `亮起 ${gardenState.value.soul_fragments.length} 颗星` : "等待点亮");
-const recallText = computed(() => {
-  const item = gardenState.value?.recall?.items?.[0];
-  return item?.summary || item?.title || item?.text || "";
-});
 const sheetCopy = computed(() => `${spiritReason.value}\n\n首页只保留一个醒来的星灵和一封私人星信；更细的解释放在这里，避免把陪伴变成数据面板。`);
 
 onShow(async () => {
+  currentHour.value = new Date().getHours();
   const pid = uni.getStorageSync(PERSON_KEY) as string;
   if (!pid) {
     // 只在「花园态却没有档案」时回欢迎页；注册/绘制中途切后台回来不清表单
@@ -942,17 +853,7 @@ async function loadGarden(pid: string, persona?: string) {
     gardenState.value = null;
     error.value = describeError(e);
   }
-  void loadOpening(pid, persona);
   stage.value = "garden";
-}
-
-async function loadOpening(pid: string, persona?: string) {
-  try {
-    const o = await api.opening(pid, persona);
-    openingText.value = o.opening;
-  } catch {
-    openingText.value = "";
-  }
 }
 
 async function loadAwakening(pid: string) {
@@ -966,7 +867,6 @@ async function loadAwakening(pid: string) {
     gardenState.value = null;
     error.value = describeError(e);
   }
-  void loadOpening(pid, recommendedSpirit.value?.planet);
 }
 
 // Web Push：延迟触发订阅（推送是增强能力，失败安静返回，绝不打断主页流程）。
@@ -1242,15 +1142,6 @@ function toggleSheet() {
 function goChat() {
   sheetOpen.value = false;
   uni.navigateTo({ url: "/pages/chat/chat" });
-}
-function goMailbox() {
-  uni.navigateTo({ url: "/pages/mailbox/mailbox" });
-}
-function goUniverse() {
-  uni.navigateTo({ url: "/pages/universe/universe" });
-}
-function goMe() {
-  uni.navigateTo({ url: "/pages/me/me" });
 }
 </script>
 
@@ -1681,9 +1572,9 @@ function goMe() {
 .os-note { font-size: 20rpx; color: rgba(255, 248, 235, 0.5); line-height: 1.6; }
 .overseas-sheet .sheet-actions { margin-top: 6rpx; }
 /* 首页 · 全屏晨雾花园（V2 demo 化）：场景铺满整页，元素长在场景上 */
-.stage-garden { background: linear-gradient(180deg, #87aeb8 0%, #adc4bf 38%, #d0d4bc 59%, #8da487 100%); color: #263d38; }
-.stage-garden.phase-dusk { background: linear-gradient(180deg, #9aa8b0 0%, #c3c3ab 40%, #d3cbaa 62%, #8f9b7f 100%); }
-.stage-garden.phase-night { background: linear-gradient(180deg, #16302e 0%, #1f4034 48%, #27503f 78%, #1d3a2e 100%); color: #f2eee0; }
+.stage-garden { background: linear-gradient(180deg, #a8c9c5 0%, #c8d8c4 38%, #d8d3b4 62%, #78966f 100%); color: #203d32; }
+.stage-garden.phase-dusk { background: linear-gradient(180deg, #788d91 0%, #b9b99f 40%, #d2c7a9 64%, #788c70 100%); }
+.stage-garden.phase-night { background: radial-gradient(circle at 68% 16%, rgba(240, 210, 139, 0.1), transparent 26%), linear-gradient(180deg, #0b1e26 0%, #10332d 48%, #1b4435 78%, #102a22 100%); color: #f2eee0; }
 .stage-garden .bg-glow, .stage-garden > .stars { display: none; }
 .stage-garden .eyebrow { color: rgba(35, 54, 51, 0.55); }
 .stage-garden .app-title { color: #263d38; }
@@ -1719,10 +1610,16 @@ function goMe() {
 .greeting-main { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 54rpx; font-weight: 600; letter-spacing: -0.02em; line-height: 1.4; color: #263d38; }
 .greeting-sub { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 54rpx; font-weight: 600; letter-spacing: -0.02em; line-height: 1.4; color: #263d38; }
 .phase-night .greeting-main, .phase-night .greeting-sub { color: #f2eee0; }
+.garden-context-row { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 22rpx; }
+.context-chip { display: inline-flex; align-items: center; gap: 8rpx; min-height: 44rpx; padding: 0 16rpx; border-radius: 999rpx; background: rgba(255, 255, 255, 0.18); border: 1rpx solid rgba(255, 255, 255, 0.24); color: rgba(32, 61, 50, 0.7); font-size: 20rpx; }
+.context-chip.warm { background: rgba(240, 210, 139, 0.18); border-color: rgba(240, 210, 139, 0.35); color: #735b29; }
+.context-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: #96bd83; box-shadow: 0 0 12rpx rgba(150, 189, 131, 0.75); }
+.phase-night .context-chip { background: rgba(255, 248, 235, 0.07); border-color: rgba(255, 248, 235, 0.13); color: rgba(255, 248, 235, 0.68); }
+.phase-night .context-chip.warm { background: rgba(240, 210, 139, 0.13); border-color: rgba(240, 210, 139, 0.3); color: #f0d28b; }
 .spirit-buddy { margin-top: 36rpx; display: flex; align-items: center; gap: 24rpx; }
 .spirit-orb { width: 112rpx; height: 112rpx; flex-shrink: 0; border-radius: 50%;
   background: radial-gradient(circle at 38% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 62% 34%, #fff 0 4%, transparent 5%), radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.8) 0 17%, transparent 18%), radial-gradient(circle at 50% 65%, rgba(224, 235, 222, 0.8) 0 28%, transparent 29%), linear-gradient(145deg, #e8ece0, #879f94);
-  box-shadow: 0 0 0 2rpx rgba(255, 255, 255, 0.3), 0 20rpx 70rpx rgba(45, 68, 58, 0.2); animation: orbBreath 4.6s ease-in-out infinite; transition: transform 0.18s ease; }
+  box-shadow: 0 0 0 2rpx rgba(255, 255, 255, 0.3), 0 20rpx 70rpx rgba(45, 68, 58, 0.2); animation: orbBreath 4.6s ease-in-out infinite; transition: transform 0.18s ease; overflow: hidden; }
 .spirit-buddy:active .spirit-orb { transform: scale(0.9); }
 .spirit-buddy-name { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 32rpx; font-weight: 600; color: #263d38; }
 .spirit-buddy-line { display: block; margin-top: 8rpx; font-size: 22rpx; color: rgba(38, 58, 52, 0.68); }
@@ -1752,7 +1649,7 @@ function goMe() {
 .dust-band { display: flex; gap: 16rpx; overflow-x: auto; margin-top: 24rpx; padding-bottom: 10rpx; }
 .dust-chip { flex-shrink: 0; border: 1rpx solid rgba(255, 255, 255, 0.3); background: rgba(245, 247, 236, 0.28); backdrop-filter: blur(12rpx); border-radius: 999rpx; padding: 16rpx 26rpx; font-size: 22rpx; color: #33503f; }
 .phase-night .dust-chip { background: rgba(255, 248, 235, 0.06); border-color: rgba(255, 248, 235, 0.14); color: rgba(255, 248, 235, 0.8); }
-.nav-bar { position: fixed; left: 24rpx; right: 24rpx; bottom: 24rpx; height: 112rpx; border-radius: 36rpx; border: 1rpx solid rgba(255, 255, 255, 0.12); background: rgba(20, 34, 30, 0.68); backdrop-filter: blur(24rpx); box-shadow: 0 18rpx 54rpx rgba(36, 39, 31, 0.14); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; z-index: 8; }
+.nav-bar { display: none; }
 .nav-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4rpx; font-size: 20rpx; color: rgba(235, 241, 233, 0.48); }
 .nav-item text:first-child { font-size: 30rpx; }
 .nav-item.active { background: rgba(255, 255, 255, 0.1); color: #f2eee0; border-radius: 21rpx; }
@@ -1760,6 +1657,89 @@ function goMe() {
 .nav-badge { position: absolute; top: 2rpx; right: 32rpx; width: 14rpx; height: 14rpx; background: #d66b5f; border-radius: 50%; box-shadow: 0 0 0 6rpx rgba(214, 107, 95, 0.14); }
 @keyframes cloudDrift { 50% { transform: translateX(36rpx); } }
 @keyframes orbBreath { 50% { transform: translateY(-6rpx) scale(1.03); } }
+
+/* ─────────────────────────────────────────────────────────────
+   首页花园态 V3：从“功能仪表盘”切换成“可以回来的地方”
+   欢迎/注册态不使用这些选择器，保持原有序章视觉。
+   ───────────────────────────────────────────────────────────── */
+.stage-garden { padding-bottom: 154rpx; overflow: hidden; }
+.stage-garden .scene {
+  opacity: 1;
+}
+.stage-garden .scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(233, 245, 244, 0.08) 0%, rgba(249, 239, 205, 0.01) 46%, rgba(71, 117, 76, 0.1) 100%);
+  z-index: 1;
+}
+.stage-garden.phase-morning { background: linear-gradient(180deg, #d7ecea 0%, #f6efd8 58%, #c5dcb8 100%); }
+.stage-garden.phase-noon { background: linear-gradient(180deg, #b6e0e8 0%, #f7edc5 55%, #a7ca91 100%); }
+.stage-garden.phase-dusk { background: linear-gradient(180deg, #8e91ac 0%, #d5b4a9 52%, #718776 100%); }
+.stage-garden.phase-night { background: linear-gradient(180deg, #26354b 0%, #3e5c67 54%, #547765 100%); }
+.stage-garden.phase-dusk .scene::before { background: linear-gradient(180deg, rgba(78, 65, 102, 0.28), rgba(242, 190, 147, 0.12) 45%, rgba(45, 71, 58, 0.36)); }
+.stage-garden.phase-night .scene::before { background: linear-gradient(180deg, rgba(7, 20, 37, 0.2), rgba(14, 48, 47, 0.08) 48%, rgba(8, 34, 27, 0.18)); }
+.stage-garden .scene-cloud,
+.stage-garden .scene-hill,
+.stage-garden .scene-flower { display: none; }
+.stage-garden .scene-glow { z-index: 2; width: 480rpx; height: 480rpx; right: -90rpx; top: 40rpx; background: rgba(255, 230, 165, 0.28); filter: blur(72rpx); }
+.stage-garden.phase-night .scene-glow { background: rgba(233, 211, 147, 0.12); }
+.stage-garden .scene-moon { z-index: 2; opacity: 0; transition: opacity 0.6s ease; }
+.stage-garden.phase-dusk .scene-moon,
+.stage-garden.phase-night .scene-moon { opacity: 1; right: 92rpx; top: 158rpx; width: 84rpx; height: 84rpx; background: #fff2c9; box-shadow: 0 0 90rpx rgba(255, 237, 181, 0.48); }
+.stage-garden.phase-night .scene-moon { background: #e9e3c7; }
+
+.garden-screen { min-height: calc(100vh - 164rpx); padding-bottom: 18rpx; }
+.garden-date-row { align-items: flex-start; }
+.garden-phase-label { display: block; font-size: 18rpx; letter-spacing: 0.12em; color: rgba(39, 70, 57, 0.5); }
+.garden-date { display: block; margin-top: 7rpx; font-size: 20rpx; letter-spacing: 0.08em; }
+.phase-night .garden-phase-label, .phase-night .garden-date, .phase-dusk .garden-phase-label, .phase-dusk .garden-date { color: rgba(255, 247, 231, 0.62); }
+.garden-trust { margin-top: 8rpx; padding: 9rpx 16rpx; border-radius: 999rpx; background: rgba(255, 255, 255, 0.2); border: 1rpx solid rgba(255, 255, 255, 0.24); }
+.phase-night .garden-trust, .phase-dusk .garden-trust { background: rgba(255, 247, 231, 0.08); border-color: rgba(255, 247, 231, 0.14); color: rgba(255, 247, 231, 0.72); }
+.garden-greeting { margin-top: 30rpx; }
+.greeting-main { font-size: 48rpx; line-height: 1.28; }
+.greeting-sub { margin-top: 2rpx; font-size: 34rpx; line-height: 1.35; opacity: 0.72; }
+
+.garden-spirit-hero { position: relative; margin-top: 22rpx; min-height: 350rpx; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; cursor: pointer; }
+.garden-spirit-hero:active .spirit-hero-stage { transform: translateY(5rpx) scale(0.97); }
+.spirit-hero-halo { position: absolute; top: 8rpx; width: 286rpx; height: 286rpx; border-radius: 50%; background: radial-gradient(circle, rgba(255, 248, 219, 0.72) 0%, rgba(240, 210, 139, 0.22) 38%, transparent 72%); filter: blur(6rpx); animation: spiritHalo 5.2s ease-in-out infinite; }
+.spirit-hero-stage { position: relative; z-index: 1; width: 226rpx; height: 226rpx; border-radius: 50% 50% 44% 44%; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 26%, rgba(255, 255, 255, 0.68), transparent 32%), linear-gradient(180deg, rgba(255, 252, 228, 0.34), rgba(144, 178, 143, 0.28)); border: 1rpx solid rgba(255, 255, 255, 0.42); box-shadow: inset 0 1rpx rgba(255, 255, 255, 0.54), 0 24rpx 70rpx rgba(45, 74, 55, 0.22); backdrop-filter: blur(8px); animation: spiritFloat 5.6s ease-in-out infinite; overflow: hidden; transition: transform 0.2s ease; }
+.spirit-hero-stage::after { content: ''; position: absolute; left: 28rpx; right: 28rpx; bottom: 16rpx; height: 26rpx; border-radius: 50%; background: rgba(61, 91, 66, 0.16); filter: blur(9rpx); }
+.spirit-hero-stage :deep(.portrait) { position: relative; z-index: 2; width: 78%; height: 78%; }
+.spirit-hero-stage :deep(.portrait-image) { filter: drop-shadow(0 18rpx 18rpx rgba(44, 68, 47, 0.2)); }
+.spirit-hero-stage :deep(.portrait-glyph) { font-size: 92rpx; color: rgba(255, 250, 225, 0.92); }
+.spirit-hero-copy { position: relative; z-index: 2; margin-top: 12rpx; text-align: center; }
+.spirit-hero-kicker { display: block; font-size: 17rpx; letter-spacing: 0.18em; color: rgba(43, 76, 59, 0.48); }
+.spirit-hero-copy .spirit-buddy-name { margin-top: 5rpx; font-size: 30rpx; }
+.spirit-hero-copy .spirit-buddy-line { margin-top: 5rpx; font-size: 21rpx; }
+.phase-night .spirit-hero-kicker, .phase-dusk .spirit-hero-kicker { color: rgba(255, 247, 231, 0.52); }
+.phase-night .spirit-hero-copy .spirit-buddy-name, .phase-dusk .spirit-hero-copy .spirit-buddy-name { color: #fff7e7; }
+.phase-night .spirit-hero-copy .spirit-buddy-line, .phase-dusk .spirit-hero-copy .spirit-buddy-line { color: rgba(255, 247, 231, 0.68); }
+.spirit-hero-spark { position: absolute; z-index: 3; color: #f5d792; text-shadow: 0 0 16rpx rgba(245, 215, 146, 0.88); animation: sparkFloat 3.8s ease-in-out infinite; }
+.spirit-hero-spark.spark-a { top: 68rpx; left: 28%; font-size: 28rpx; }
+.spirit-hero-spark.spark-b { top: 166rpx; right: 27%; font-size: 22rpx; animation-delay: -1.6s; }
+.garden-quote { max-width: 620rpx; align-self: center; margin-top: 0; text-align: center; font-size: 30rpx; line-height: 1.65; opacity: 0.78; }
+.home-action-row { display: flex; justify-content: center; align-items: center; gap: 16rpx; margin-top: 22rpx; }
+.chat-cta { margin-top: 0; min-height: 76rpx; padding: 18rpx 28rpx; border-radius: 999rpx; background: #496f59; box-shadow: 0 14rpx 42rpx rgba(44, 80, 56, 0.22); }
+.chat-cta text { margin-left: 8rpx; }
+.phase-night .chat-cta, .phase-dusk .chat-cta { background: #f0d28b; color: #234033; }
+.why-cta { min-height: 76rpx; padding: 18rpx 24rpx; border: 1rpx solid rgba(46, 79, 61, 0.24); border-radius: 999rpx; background: rgba(255, 255, 255, 0.2); color: rgba(39, 70, 57, 0.76); font-size: 22rpx; }
+.phase-night .why-cta, .phase-dusk .why-cta { border-color: rgba(255, 247, 231, 0.2); background: rgba(255, 247, 231, 0.07); color: rgba(255, 247, 231, 0.78); }
+.weather-card { margin-top: 30rpx; background: rgba(255, 251, 235, 0.34); border-color: rgba(255, 255, 255, 0.45); box-shadow: 0 16rpx 42rpx rgba(65, 91, 62, 0.12); }
+.phase-night .weather-card, .phase-dusk .weather-card { background: rgba(10, 29, 29, 0.36); border-color: rgba(255, 247, 231, 0.15); }
+.quiet-card { display: flex; align-items: center; gap: 18rpx; margin-top: 30rpx; padding: 24rpx 26rpx; border: 1rpx solid rgba(255, 255, 255, 0.3); border-radius: 28rpx; background: rgba(255, 251, 235, 0.2); backdrop-filter: blur(14px); }
+.quiet-card-mark { width: 58rpx; height: 58rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(240, 210, 139, 0.22); color: #b18b42; font-size: 28rpx; }
+.quiet-card-title { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 27rpx; color: #365743; }
+.quiet-card-copy { display: block; margin-top: 5rpx; font-size: 21rpx; color: rgba(53, 87, 67, 0.62); }
+.phase-night .quiet-card, .phase-dusk .quiet-card { background: rgba(10, 29, 29, 0.28); border-color: rgba(255, 247, 231, 0.14); }
+.phase-night .quiet-card-title, .phase-dusk .quiet-card-title { color: #fff7e7; }
+.phase-night .quiet-card-copy, .phase-dusk .quiet-card-copy { color: rgba(255, 247, 231, 0.62); }
+.garden-empty-note { display: flex; justify-content: center; align-items: center; gap: 10rpx; margin-top: 26rpx; color: rgba(46, 79, 61, 0.54); font-size: 21rpx; }
+.empty-note-mark { color: #c69e51; font-size: 28rpx; }
+.phase-night .garden-empty-note, .phase-dusk .garden-empty-note { color: rgba(255, 247, 231, 0.56); }
+@keyframes spiritHalo { 50% { transform: scale(1.08); opacity: 0.72; } }
+@keyframes spiritFloat { 50% { transform: translateY(-8rpx); } }
+@keyframes sparkFloat { 50% { transform: translateY(-10rpx) rotate(8deg); opacity: 0.62; } }
 @media (max-width: 360px) {
   .hero-row, .dash-grid, .field-row, .home-actions, .awake-actions, .letter-actions { grid-template-columns: 1fr; }
   .spirit-stage.small { width: 100%; }
