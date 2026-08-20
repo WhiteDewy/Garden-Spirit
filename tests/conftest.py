@@ -10,6 +10,12 @@
 
 import os
 
+# 在测试模块 import application.api.main 前就禁用外部依赖；autouse fixture 只在用例运行期生效，
+# 但 main.py 底部会创建默认 app，必须提前设置。
+os.environ["GS_LLM_DISABLE"] = "1"
+os.environ["GS_GEOCODE_OFFLINE"] = "1"
+os.environ.setdefault("GS_ENCRYPTION_KEY", "nql9NojMP-wCE9wjDUd6HJ7tdJmBHWFycQ1EikEi6mg=")
+
 import pytest
 
 

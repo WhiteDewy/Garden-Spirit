@@ -42,47 +42,30 @@ page, body {
   font-family: var(--gs-font-body);
 }
 
-/* 功能页四套真实光线：不是只换一层墨绿色，而是连天空、文字和玻璃层一起换。 */
-.gs-time-page.phase-morning {
-  background: radial-gradient(circle at 78% 8%, rgba(255, 251, 225, 0.92), transparent 28%),
-    linear-gradient(160deg, #d8eee7 0%, #f5f0dc 56%, #c8dbbd 100%) !important;
-  color: #29463a !important;
+/* 功能页只在这里领取昼夜变量；每个页面自己决定背景构图，避免全局样式抢控制权。 */
+.gs-time-page {
+  --gs-phase-text: #f6f0df;
+  --gs-phase-muted: rgba(255, 247, 231, 0.62);
+  --gs-phase-card: rgba(255, 255, 255, 0.06);
+  --gs-phase-line: rgba(255, 248, 224, 0.12);
+  --gs-phase-glow: rgba(232, 203, 130, 0.12);
 }
+.gs-time-page.phase-morning,
 .gs-time-page.phase-noon {
-  background: radial-gradient(circle at 76% 12%, rgba(255, 246, 188, 0.9), transparent 26%),
-    linear-gradient(160deg, #b9e0e5 0%, #f5edc9 48%, #a9cb91 100%) !important;
-  color: #29463a !important;
+  --gs-phase-text: #29463a;
+  --gs-phase-muted: rgba(41, 70, 58, 0.62);
+  --gs-phase-card: rgba(255, 255, 255, 0.32);
+  --gs-phase-line: rgba(41, 70, 58, 0.12);
+  --gs-phase-glow: rgba(255, 246, 188, 0.36);
 }
-.gs-time-page.phase-dusk {
-  background: radial-gradient(circle at 75% 16%, rgba(255, 208, 164, 0.7), transparent 24%),
-    linear-gradient(160deg, #9c9fb9 0%, #d8b4a7 44%, #526c66 100%) !important;
-  color: #fff7e7 !important;
-}
+.gs-time-page.phase-dusk,
 .gs-time-page.phase-night {
-  background: radial-gradient(circle at 70% 10%, rgba(232, 203, 130, 0.12), transparent 24%),
-    linear-gradient(160deg, #0b1628 0%, #102a31 52%, #12392d 100%) !important;
-  color: #f6f0df !important;
+  --gs-phase-text: #fff7e7;
+  --gs-phase-muted: rgba(255, 247, 231, 0.62);
+  --gs-phase-card: rgba(255, 255, 255, 0.06);
+  --gs-phase-line: rgba(255, 248, 224, 0.12);
+  --gs-phase-glow: rgba(232, 203, 130, 0.12);
 }
-.gs-time-page.phase-morning .eyebrow,
-.gs-time-page.phase-noon .eyebrow,
-.gs-time-page.phase-morning .sub,
-.gs-time-page.phase-noon .sub,
-.gs-time-page.phase-morning .copy-p,
-.gs-time-page.phase-noon .copy-p { color: rgba(41, 70, 58, 0.62) !important; }
-.gs-time-page.phase-morning .title,
-.gs-time-page.phase-noon .title,
-.gs-time-page.phase-morning .copy-h,
-.gs-time-page.phase-noon .copy-h { color: #29463a !important; }
-.gs-time-page.phase-dusk .eyebrow,
-.gs-time-page.phase-night .eyebrow,
-.gs-time-page.phase-dusk .sub,
-.gs-time-page.phase-night .sub,
-.gs-time-page.phase-dusk .copy-p,
-.gs-time-page.phase-night .copy-p { color: rgba(255, 247, 231, 0.62) !important; }
-.gs-time-page.phase-dusk .title,
-.gs-time-page.phase-night .title,
-.gs-time-page.phase-dusk .copy-h,
-.gs-time-page.phase-night .copy-h { color: #fff7e7 !important; }
 
 button, input, textarea {
   font-family: inherit;

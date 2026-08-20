@@ -114,8 +114,14 @@ def test_moon_profile(chart, kb):
 
 
 def test_mars_profile(chart, kb):
-    """火星双子1宫：破坏者不含次要相位（半刑/八分/梅花）。"""
+    """火星双子1宫：有界支撑，但不能误标成入旺；破坏者不含次要相位。"""
     ma = read_planet(chart, kb, Planet.MARS)
+    assert ma.house_name == "落1宫"
+    assert 6 in ma.rulings
+    assert 12 in ma.rulings
+    assert "界" in ma.dignity_label
+    assert not ma.dignity_label.startswith("入旺")
+    assert "入旺" not in ma.dignity_label
     # 火星的破坏者：火刑日（磨合）、火冲莉莉丝（外部压力）
     assert any("太阳" in u and "刑" in u for u in ma.underminers)
     # 不应含半刑/八分/梅花
@@ -161,6 +167,15 @@ def test_planet_profile_positive_net_fall_still_reads_as_limited(kb):
     assert "支撑" in venus.dignity_label
     assert "受限" in venus.dignity_label
     assert not venus.dignity_label.startswith("入旺")
+def test_planet_profile_term_only_is_minor_support(kb):
+    """小尊贵只显示有限支撑：火星双子23°在界，不是入旺/曜升。"""
+    chart = _minimal_chart_for_planet(Planet.MARS, 83.28688576501335, Sign.GEMINI, 23.286885765013352)
+
+    mars = read_planet(chart, kb, Planet.MARS)
+
+    assert mars.dignity_score == 2
+    assert mars.dignity_label == "在界"
+    assert "入旺" not in mars.dignity_label
 
 
 # -- 星座行为方式 --------------------------------------------------------

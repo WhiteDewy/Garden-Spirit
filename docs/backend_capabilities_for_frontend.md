@@ -13,7 +13,7 @@
 | 能力区 | 后端状态 | 前端设计价值 |
 |---|---|---|
 | 用户建档与星盘计算 | 已有建档、读取、删除、导出 | onboarding、档案卡、合规中心 |
-| 星盘咨询 Agent | 已有多模式字段、三层意图、宫位追问/深挖/确认闭环 | 咨询页、追问体验、证据链展示 |
+| 主题观星台 Agent | 已有多模式字段、三层意图、宫位追问/深挖/确认闭环 | 咨询页、追问体验、证据链展示 |
 | 随聊陪伴 | 已有情绪感知、请求类型、软牵引门控、记忆写回 | 聊天页可展示「被理解」和「轻邀请」 |
 | 10 星灵人格 | 10 行星人格已配置，支持 `/chat` persona 参数 | 星灵切换器、星灵主页、今日推荐 |
 | 记忆召回 | 已有 recall/opening/garden 记忆豆荚，支持 persona 镜头 | 首页「我记得你」、星灵开场白 |
@@ -61,7 +61,7 @@
 
 | 方法 | 路径 | 作用 | 前端页面 |
 |---|---|---|---|
-| `POST` | `/chat` | 星盘咨询 + 随聊陪伴 + 记忆写回 + 成长点亮 | chat / consult |
+| `POST` | `/chat` | 主题观星台 + 随聊陪伴 + 记忆写回 + 成长点亮 | chat / consult |
 
 `ChatIn`：
 
@@ -93,6 +93,8 @@
 | `actioned_fragments` | 用户行动回报 +20 | 展示「真的做到了」成长反馈 |
 
 前端最该接的不是更多文字，而是 `lit_fragments / seen_fragments / actioned_fragments / keepsake_created`。这些字段是成长复利现场反馈，能让用户看到「聊天正在点亮我的内在宇宙」。
+
+V8 边界：`intent_domain`、`domain_summaries`、`FindingOut.domain`、`TimelineEventOut.domain` 等字段是后端内部语义分类 / API metadata，用来做召回、排序、证据链和埋点；前端不要直接把 `career/wealth/relationship` 或旧中文「事业/财富/感情」渲染成用户入口。需要展示时统一经过 V8 copy 适配层，转成「成就与方向 / 资源与价值 / 亲密与连接」等内在主题语言。
 
 ---
 
@@ -220,9 +222,12 @@
 | 方法 | 路径 | 作用 | 前端页面 |
 |---|---|---|---|
 | `POST` | `/mailbox/today` | 获取/生成今日来信，按天幂等 | 信箱/首页 |
-| `GET` | `/person/{id}/letters` | 历史来信列表 | 信箱 |
+| `GET` | `/person/{id}/letters` | 历史来信分页（20 条一页） | 信箱 |
 | `POST` | `/person/{id}/letters/read-today` | 今日来信标记已读，消除首页红点 | 信箱 onLoad |
 | `POST` | `/chat` | 倾诉/ memorable 时可能生成 keepsake 来信 | 聊天页 |
+
+`GET /person/{id}/letters` 分页参数：`page`（默认 1）、`page_size`（默认 20）、`kind`（可选 `daily`=日推历史 / `keepsake`=记忆来信；省略=全部）。
+响应为信封：`{ items: LetterOut[], total, page, page_size, has_more }`。日推按 `letter_date` 倒序（同一天内按创建先后）。
 
 `LetterOut`：
 
@@ -249,7 +254,7 @@
 | 方法 | 路径 | 作用 | 前端页面 |
 |---|---|---|---|
 | `POST` | `/journal` | 创建日记，生成 AI 摘要，增加信任信号 | 日记页 |
-| `GET` | `/person/{id}/journal` | 读取日记列表 | 日记页 |
+| `GET` | `/person/{id}/journal` | 读取日记分页列表（20 条一页，`{ items, total, page, page_size, has_more }`） | 日记页 |
 | `PUT` | `/journal/{entry_id}` | 修改日记内容/心情 | 日记页 |
 
 `JournalIn`：`person_id/content/mood`。  

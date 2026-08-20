@@ -40,7 +40,7 @@ def test_create_saves_journal_and_life_event():
     assert entry.ai_summary  # 降级 = 原文截断，非空
 
     # 落库可读
-    assert service.list("p1")[0].content.startswith("今天认真想了想")
+    assert service.list("p1")[0][0].content.startswith("今天认真想了想")
     # 生成时间轴事件（kind=journal，关联日记）
     events = service._store.list_life_events("p1")
     assert len(events) == 1

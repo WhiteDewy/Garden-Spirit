@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -133,9 +134,21 @@ CREATE TABLE IF NOT EXISTS related_persons (
     person_id TEXT NOT NULL,
     name_enc TEXT NOT NULL,
     birth_data_enc TEXT NOT NULL,
+    gender_enc TEXT DEFAULT '',
+    notes_enc TEXT DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS phone_accounts (
+    id TEXT PRIMARY KEY,
+    phone_hash TEXT NOT NULL UNIQUE,
+    phone_enc TEXT NOT NULL,
+    self_person_id TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_phone_accounts_phone_hash ON phone_accounts(phone_hash);
+CREATE INDEX IF NOT EXISTS idx_phone_accounts_self ON phone_accounts(self_person_id);
 CREATE INDEX IF NOT EXISTS idx_letters_person_date ON letters(person_id, letter_date);
 CREATE INDEX IF NOT EXISTS idx_related_persons_owner ON related_persons(person_id);
 CREATE INDEX IF NOT EXISTS idx_fragment_lights_person_time ON fragment_lights(person_id, lit_at);
@@ -455,6 +468,12 @@ _LETTER_MIGRATIONS = (
     ("read_at", "TEXT DEFAULT NULL"),
 )
 
+#: related_persons 表增量迁移（档案编辑页需要展示/编辑性别备注）。
+_RELATED_PERSON_MIGRATIONS = (
+    ("gender_enc", "TEXT DEFAULT ''"),
+    ("notes_enc", "TEXT DEFAULT ''"),
+)
+
 
 def _ensure_profile_columns(conn: sqlite3.Connection) -> None:
     """为已存在的 profiles 表补齐缺失列（幂等）。"""
@@ -507,6 +526,100 @@ def _ensure_letter_columns(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _ensure_related_person_columns(conn: sqlite3.Connection) -> None:
+    """为已存在的 related_persons 表补齐档案编辑字段（幂等）。"""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(related_persons)")}
+    for name, decl in _RELATED_PERSON_MIGRATIONS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE related_persons ADD COLUMN {name} {decl}")
+            logger.info("related_persons 表迁移：新增列 %s", name)
+    conn.commit()
+
+
+def phone_hash(phone: str) -> str:
+    """手机号归一化后哈希：唯一约束用 hash，明文只以密文形式存储。"""
+    normalized = "".join(ch for ch in str(phone) if ch.isdigit())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _earliest_dt(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
+
+
+def _latest_dt(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(a, b)
+
+
+def _dedupe_by_id(items: list[Any]) -> list[Any]:
+    """按 id 去重保序；画像合并时保留已沉淀对象，不重复写回。"""
+    seen: set[str] = set()
+    out: list[Any] = []
+    for item in items:
+        item_id = str(getattr(item, "id", ""))
+        if item_id and item_id in seen:
+            continue
+        if item_id:
+            seen.add(item_id)
+        out.append(item)
+    return out
+
+
+def _merge_chart_profiles(
+    target: ChartProfile | None,
+    incoming: ChartProfile,
+    target_person_id: str,
+) -> ChartProfile:
+    """把旧 person 的画像沉淀合并到唯一本人档案。"""
+    if target is None:
+        incoming.person_id = target_person_id
+        return incoming
+
+    target.lord_states = {**incoming.lord_states, **target.lord_states}
+    target.verified_findings = _dedupe_by_id(
+        [*target.verified_findings, *incoming.verified_findings]
+    )
+    target.key_dates = _dedupe_by_id([*target.key_dates, *incoming.key_dates])
+    for domain, summary in incoming.domain_summaries.items():
+        current = target.domain_summaries.get(domain)
+        if current is None or summary.confidence >= current.confidence:
+            target.domain_summaries[domain] = summary
+    target.trust_score = max(float(target.trust_score or 0), float(incoming.trust_score or 0))
+    merged_signals = dict(incoming.trust_signals or {})
+    for key, value in (target.trust_signals or {}).items():
+        try:
+            merged_signals[key] = int(merged_signals.get(key, 0)) + int(value)
+        except (TypeError, ValueError):
+            merged_signals[key] = value
+    target.trust_signals = merged_signals
+    target.preferences = {**(incoming.preferences or {}), **(target.preferences or {})}
+    fragments = dict(incoming.fragments or {})
+    for key, value in (target.fragments or {}).items():
+        fragments[str(key)] = int(fragments.get(str(key), 0)) + int(value)
+    target.fragments = {str(k): int(v) for k, v in fragments.items()}
+    target.created_at = _earliest_dt(target.created_at, incoming.created_at)
+    target.updated_at = _latest_dt(target.updated_at, incoming.updated_at) or utc_now_aware()
+    return target
+
+
+def _replace_exact_string(value: Any, old: str, new: str) -> Any:
+    """递归替换 JSON 结构中等于旧 person_id 的字符串；不改消息正文里的自然语言。"""
+    if isinstance(value, str):
+        return new if value == old else value
+    if isinstance(value, list):
+        return [_replace_exact_string(v, old, new) for v in value]
+    if isinstance(value, dict):
+        return {k: _replace_exact_string(v, old, new) for k, v in value.items()}
+    return value
+
+
 class GardenStore:
     """跨会话数据仓库（SQLite + Fernet）。"""
 
@@ -527,11 +640,87 @@ class GardenStore:
         _ensure_life_event_columns(self._conn)  # 旧库补齐 life_events 新增列
         _ensure_fragment_light_columns(self._conn)  # 旧库补齐 fragment_lights 新增列
         _ensure_letter_columns(self._conn)    # 旧库补齐 letters 新增列（首页红点 read_at）
+        _ensure_related_person_columns(self._conn)  # 旧库补齐 related_persons 编辑字段
         self._conn.commit()
 
     # ------------------------------------------------------------------
-    # Conversations
+    # Phone accounts / self profile ownership
     # ------------------------------------------------------------------
+
+    def upsert_phone_account(self, phone: str, account_id: str | None = None) -> dict:
+        """按手机号创建/读取账户。手机号 hash 唯一，手机号明文仅加密存储。"""
+        normalized = "".join(ch for ch in str(phone) if ch.isdigit())
+        if not normalized:
+            raise ValueError("手机号不能为空")
+        h = phone_hash(normalized)
+        now = _iso(None)
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT * FROM phone_accounts WHERE phone_hash = ?", (h,)
+            ).fetchone()
+            if row is None:
+                aid = account_id or new_id("acct")
+                self._conn.execute(
+                    """
+                    INSERT INTO phone_accounts
+                        (id, phone_hash, phone_enc, self_person_id, created_at, updated_at)
+                    VALUES (?, ?, ?, '', ?, ?)
+                    """,
+                    (aid, h, self._encryptor.encrypt(normalized), now, now),
+                )
+            else:
+                aid = row["id"]
+                self._conn.execute(
+                    """
+                    UPDATE phone_accounts
+                    SET phone_enc = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (self._encryptor.encrypt(normalized), now, aid),
+                )
+        return self.get_phone_account_by_hash(h) or {}
+
+    def get_phone_account_by_phone(self, phone: str) -> dict | None:
+        normalized = "".join(ch for ch in str(phone) if ch.isdigit())
+        return self.get_phone_account_by_hash(phone_hash(normalized)) if normalized else None
+
+    def get_phone_account_by_hash(self, hashed_phone: str) -> dict | None:
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT * FROM phone_accounts WHERE phone_hash = ?", (hashed_phone,)
+            ).fetchone()
+        return self._account_from_row(row) if row is not None else None
+
+    def get_phone_account(self, account_id: str) -> dict | None:
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT * FROM phone_accounts WHERE id = ?", (account_id,)
+            ).fetchone()
+        return self._account_from_row(row) if row is not None else None
+
+    def set_account_self_person(self, account_id: str, person_id: str) -> bool:
+        now = _iso(None)
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                UPDATE phone_accounts
+                SET self_person_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (person_id, now, account_id),
+            )
+        return cur.rowcount > 0
+
+    def _account_from_row(self, row: sqlite3.Row) -> dict:
+        return {
+            "id": row["id"],
+            "phone": self._encryptor.decrypt(row["phone_enc"]) if row["phone_enc"] else "",
+            "phone_hash": row["phone_hash"],
+            "self_person_id": row["self_person_id"] or "",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
 
     def save_conversation(
         self,
@@ -798,18 +987,30 @@ class GardenStore:
             updated_at=_from_iso(row["updated_at"]),
         )
 
-    def list_journals(self, person_id: str, limit: int = 200) -> list[JournalEntry]:
+    def list_journals(
+        self, person_id: str, offset: int = 0, limit: int | None = None
+    ) -> list[JournalEntry]:
+        """手账列表（created_at 倒序）。limit=None → 全量（合规导出用，非分页路径）。"""
+        sql = "SELECT id FROM journal_entries WHERE person_id = ? ORDER BY created_at DESC"
+        params: list = [person_id]
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
         with self._conn:
-            rows = self._conn.execute(
-                "SELECT id FROM journal_entries WHERE person_id = ? ORDER BY created_at DESC LIMIT ?",
-                (person_id, limit),
-            ).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()
         out: list[JournalEntry] = []
         for row in rows:
             entry = self.get_journal(row["id"])
             if entry is not None:
                 out.append(entry)
         return out
+
+    def count_journals(self, person_id: str) -> int:
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE person_id = ?", (person_id,)
+            ).fetchone()
+        return int(row[0])
 
     # ------------------------------------------------------------------
     # Life events
@@ -901,6 +1102,24 @@ class GardenStore:
                 ),
             )
 
+    def update_letter(self, letter: Letter) -> None:
+        """更新已有来信正文/元数据；用于旧 daily 缓存升级，不改 id/read_at。"""
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE letters
+                SET sender = ?, title_enc = ?, body_enc = ?, metadata_json_enc = ?
+                WHERE id = ?
+                """,
+                (
+                    letter.sender,
+                    self._encryptor.encrypt(letter.title),
+                    self._encryptor.encrypt(letter.body),
+                    self._encryptor.encrypt(_dump(letter.metadata)),
+                    letter.id,
+                ),
+            )
+
     def get_letter(self, person_id: str, letter_date: str, kind: str = "daily") -> Letter | None:
         """按日期取信（每日一封的幂等键）。"""
         with self._conn:
@@ -910,13 +1129,39 @@ class GardenStore:
             ).fetchone()
         return self._letter_from_row(row) if row is not None else None
 
-    def list_letters(self, person_id: str, limit: int = 60) -> list[Letter]:
+    def list_letters(
+        self,
+        person_id: str,
+        kind: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[Letter]:
+        """信箱列表（letter_date 倒序，同日按创建先后）。limit=None → 全量（合规导出用）。
+
+        kind 可选："daily"（日推）/ "keepsake"（记忆来信）；None → 全部。
+        """
+        sql = "SELECT * FROM letters WHERE person_id = ?"
+        params: list = [person_id]
+        if kind is not None:
+            sql += " AND kind = ?"
+            params.append(kind)
+        sql += " ORDER BY letter_date DESC, created_at DESC"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
         with self._conn:
-            rows = self._conn.execute(
-                "SELECT * FROM letters WHERE person_id = ? ORDER BY letter_date DESC LIMIT ?",
-                (person_id, limit),
-            ).fetchall()
+            rows = self._conn.execute(sql, params).fetchall()
         return [self._letter_from_row(r) for r in rows]
+
+    def count_letters(self, person_id: str, kind: str | None = None) -> int:
+        sql = "SELECT COUNT(*) FROM letters WHERE person_id = ?"
+        params: list = [person_id]
+        if kind is not None:
+            sql += " AND kind = ?"
+            params.append(kind)
+        with self._conn:
+            row = self._conn.execute(sql, params).fetchone()
+        return int(row[0])
 
     def _letter_from_row(self, row: sqlite3.Row) -> Letter:
         meta_raw = row["metadata_json_enc"]
@@ -1121,12 +1366,15 @@ class GardenStore:
             self._conn.execute(
                 """
                 INSERT INTO related_persons
-                    (id, person_id, name_enc, birth_data_enc, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (id, person_id, name_enc, birth_data_enc, gender_enc, notes_enc,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     person_id = excluded.person_id,
                     name_enc = excluded.name_enc,
                     birth_data_enc = excluded.birth_data_enc,
+                    gender_enc = excluded.gender_enc,
+                    notes_enc = excluded.notes_enc,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -1134,6 +1382,8 @@ class GardenStore:
                     person_id,
                     self._encryptor.encrypt(name),
                     self._encryptor.encrypt(birth_data_json),
+                    self._encryptor.encrypt(gender or ""),
+                    self._encryptor.encrypt(notes or ""),
                     now,
                     now,
                 ),
@@ -1164,6 +1414,36 @@ class GardenStore:
             return None
         return self._related_person_to_dict(row, include_birth=True)
 
+    def update_related_person(
+        self,
+        related_id: str,
+        person_id: str,
+        name: str,
+        birth_data_json: str,
+        gender: str = "",
+        notes: str = "",
+    ) -> bool:
+        """按 owner 更新合盘对象；防止跨用户覆盖。"""
+        now = _iso(None)
+        with self._conn:
+            cur = self._conn.execute(
+                """
+                UPDATE related_persons
+                SET name_enc = ?, birth_data_enc = ?, gender_enc = ?, notes_enc = ?, updated_at = ?
+                WHERE id = ? AND person_id = ?
+                """,
+                (
+                    self._encryptor.encrypt(name),
+                    self._encryptor.encrypt(birth_data_json),
+                    self._encryptor.encrypt(gender or ""),
+                    self._encryptor.encrypt(notes or ""),
+                    now,
+                    related_id,
+                    person_id,
+                ),
+            )
+        return cur.rowcount > 0
+
     def delete_related_person(self, related_id: str) -> bool:
         """删合盘对象（合规：用户可随时删除数据）。真的删了 → True。"""
         with self._conn:
@@ -1181,6 +1461,8 @@ class GardenStore:
                 "id": row["id"],
                 "person_id": row["person_id"],
                 "name": self._encryptor.decrypt(row["name_enc"]),
+                "gender": self._encryptor.decrypt(row["gender_enc"]) if row["gender_enc"] else "",
+                "notes": self._encryptor.decrypt(row["notes_enc"]) if row["notes_enc"] else "",
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
             }
@@ -1191,6 +1473,112 @@ class GardenStore:
         except Exception:  # noqa: BLE001 - 解密失败不炸整列表，跳过该行
             logger.warning("合盘对象解密失败，跳过: %s", row["id"])
             return None
+
+    # ------------------------------------------------------------------
+    # 身份归并 / 档案重置
+    # ------------------------------------------------------------------
+
+    def reset_person_business_data(self, person_id: str) -> dict[str, int]:
+        """本人档案出生信息变更后，清空旧解读/记忆数据但保留账号与合盘对象。"""
+        tables = (
+            "conversations", "memory_items", "profiles", "journal_entries",
+            "life_events", "letters", "fragment_lights", "push_subscriptions",
+        )
+        counts: dict[str, int] = {}
+        with self._conn:
+            for table in tables:
+                cur = self._conn.execute(
+                    f"DELETE FROM {table} WHERE person_id = ?", (person_id,)
+                )
+                counts[table] = cur.rowcount
+        return counts
+
+    def reassign_person_data(self, old_person_id: str, new_person_id: str) -> dict[str, int]:
+        """把误建旧 person 的业务数据归并到权威本人档案。"""
+        if old_person_id == new_person_id:
+            return {}
+
+        counts: dict[str, int] = {}
+        with self._conn:
+            source_profile = self.get_profile(old_person_id)
+            target_profile = self.get_profile(new_person_id)
+            if source_profile is not None:
+                merged = _merge_chart_profiles(target_profile, source_profile, new_person_id)
+                self.save_profile(merged)
+                cur = self._conn.execute(
+                    "DELETE FROM profiles WHERE person_id = ?", (old_person_id,)
+                )
+                counts["profiles"] = cur.rowcount
+            else:
+                counts["profiles"] = 0
+
+            for table in (
+                "memory_items", "journal_entries", "life_events", "letters",
+                "fragment_lights", "push_subscriptions", "related_persons",
+            ):
+                if table == "push_subscriptions":
+                    cur = self._conn.execute(
+                        """
+                        UPDATE OR IGNORE push_subscriptions
+                        SET person_id = ?
+                        WHERE person_id = ?
+                        """,
+                        (new_person_id, old_person_id),
+                    )
+                    ignored = cur.rowcount
+                    cleanup = self._conn.execute(
+                        "DELETE FROM push_subscriptions WHERE person_id = ?",
+                        (old_person_id,),
+                    )
+                    counts[table] = ignored + cleanup.rowcount
+                    continue
+                cur = self._conn.execute(
+                    f"UPDATE {table} SET person_id = ? WHERE person_id = ?",
+                    (new_person_id, old_person_id),
+                )
+                counts[table] = cur.rowcount
+
+            rows = self._conn.execute(
+                "SELECT id, body_json_enc, metadata_json_enc FROM conversations WHERE person_id = ?",
+                (old_person_id,),
+            ).fetchall()
+            moved = 0
+            for row in rows:
+                try:
+                    body = _load(self._encryptor.decrypt(row["body_json_enc"]))
+                    body = _replace_exact_string(body, old_person_id, new_person_id)
+                    metadata_raw = row["metadata_json_enc"]
+                    metadata = (
+                        _load(self._encryptor.decrypt(metadata_raw)) if metadata_raw else {}
+                    )
+                    metadata = _replace_exact_string(metadata, old_person_id, new_person_id)
+                    self._conn.execute(
+                        """
+                        UPDATE conversations
+                        SET person_id = ?, body_json_enc = ?, metadata_json_enc = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            new_person_id,
+                            self._encryptor.encrypt(_dump(body)),
+                            self._encryptor.encrypt(_dump(metadata)),
+                            row["id"],
+                        ),
+                    )
+                    moved += 1
+                except Exception as exc:  # noqa: BLE001 - 单条旧会话坏数据不阻断认领
+                    logger.warning("旧会话归并失败，跳过 %s: %s", row["id"], exc)
+            counts["conversations"] = moved
+
+            self._conn.execute(
+                """
+                UPDATE phone_accounts
+                SET self_person_id = ?, updated_at = ?
+                WHERE self_person_id = ?
+                """,
+                (new_person_id, _iso(None), old_person_id),
+            )
+        return counts
 
     # ------------------------------------------------------------------
     # 合规：全量删除 + 数据导出（PRD §8「可随时删除数据」）

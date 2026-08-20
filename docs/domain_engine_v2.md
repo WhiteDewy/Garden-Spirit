@@ -1,7 +1,7 @@
 # 领域引擎 v2 设计（Domain Engine v2）
 
-> 状态：**已实现 v1（2026-08-12）**，四步迁移全落地，707→716 测试全绿。
-> 实现记录：① 词汇合一（`shared/enums.py` IntentDomain 11 域 + 三套词汇对齐）；② 语义场（house_significations 全词条加 `governors`、signs.yaml 12 星座 `behavior_style`、planet_nature 天海冥只关联）；③ 领域定义数据化（intent_profiles 新增 growth/network/self 三域配方 + 反向点亮映射）；④ per-signification 调制（`signification.py::_strength` 改为"词级基础 × governor 对应正/负轴 × 宫结构加权贡献"）+ 三轨合成器（`interpretation/compositor.py::DomainCompositor`，轨A征象×轨B宫主×轨C互溶桥，§4.4 合读规则五档）。
+> 状态：**已实现 v1（2026-08-12）+ R10 动态承载者收口（2026-08-16）**，四步迁移已落地，静态主星字段已退为历史设计。
+> 实现记录：① 词汇合一（`shared/enums.py` IntentDomain 11 域 + 三套词汇对齐）；② 语义场（house_significations 词条保留 `domains/polarity/intensity/resonance/gated`，强度不再依赖静态主星字段，而由实盘宫主/宫内星/领域征象星动态展开；signs.yaml 12 星座 `behavior_style`、planet_nature 天海冥只关联）；③ 领域定义数据化（intent_profiles 新增 growth/network/self 三域配方 + 反向点亮映射）；④ per-signification 调制（`signification.py::_strength` 改为“词级基础 × 动态承载者对应正/负轴 × 宫结构加权贡献”）+ 三轨合成器（`interpretation/compositor.py::DomainCompositor`，轨A征象×轨B宫主×轨C互溶桥，§4.4 合读规则五档）。
 > 覆盖：语义场单一真相源 + 领域=精心挑选的子集 + 三轨合成器 + per-signification 调制 + 领域集合（11 域）+ 迁移路径。
 > 配套：`docs/self_map_design.md`（自我地图，本设计取代其中"9宫只挂学习 / 11宫被弱化"的旧表述）· `domain/astrology/knowledge/house_significations.yaml` · `domain/astrology/knowledge/planet_nature.yaml` · `domain/reasoning/intent/intent_profiles.yaml` · `domain/astrology/interpretation/compositor.py`
 
@@ -28,10 +28,10 @@
 
 ## 1. 核心原则（设计硬线）
 
-1. **语义场是唯一真相源**：12 宫 × 10 星 × 12 星座的"语义单位"（含 `domains` 标签 + `governors` 主星）是事实。领域**不是**事实，是**视图**。
-2. **领域 = 精心挑选的语义场子集（curated selection）**：你决定哪些语义单位属于"事业"，这份"属于"写成标签；引擎机械展开。定义是声明的、数据驱动的，不是每个领域一段手写 Python。
-3. **三轨分离，宫性优先**：论一个领域，三轨并出、结构轨优先——征象轨（星性/色彩）× 宫主轨（宫性/结构）× 互溶桥（通道）。"宫性大于星性"= 领域的成败以宫主星（宫性的代言人）为准，先天征象星只做色彩调制。
-4. **per-signification 调制**：每个语义含义带自己的 `governors`（主星），强弱 = 词级基础 × governor 对应正/负轴 × 宫结构贡献。**严禁**整个宫一份状态平摊给所有含义。
+1. **语义场是唯一真相源**：12 宫 × 10 星 × 12 星座的“语义单位”（含 `domains` 标签、语义极性、强度与门槛）是事实。领域**不是**事实，是**视图**。具体读哪些星不由词条静态写死，而由本轮问题动态解析承载者。
+2. **领域 = 精心挑选的语义场子集（curated selection）**：你决定哪些语义单位属于“事业”，这份“属于”写成标签；引擎机械展开。定义是声明的、数据驱动的，不是每个领域一段手写 Python。
+3. **三轨分离，宫性优先**：论一个领域，三轨并出、结构轨优先——征象轨（星性/色彩）× 宫主轨（宫性/结构）× 互溶桥（通道）。“宫性大于星性”= 领域的成败以宫主星（宫性的代言人）为准，先天征象星只做色彩调制。
+4. **per-signification 调制**：每个语义含义按本轮动态承载者（实盘宫主、宫内星、领域自然征象星、ConsultCallPlan enrichment）取状态，强弱 = 词级基础 × carrier 对应正/负轴 × 宫结构贡献。**严禁**整个宫一份状态平摊给所有含义。
 5. **三王星只做关联影响**：天王/海王/冥王不掌宫、不互溶接纳、无传统尊贵、刑冲算"外部压力"——只从星性 × 落座 × 落宫解读，做领域染色，不做结构判断。规则已实现（`reception.yaml:11-18` / `dignity.yaml:7` / `common.py:20-26` / `dispositor.py:86-90`）。
 6. **硬线不变**：占星结论全由 Domain 出，LLM 自由度只在"怎么疗愈 / 怎么陪伴"。
 
@@ -75,25 +75,27 @@
 
 语义单位 = 固定集合（宫位语义 + 行星征象 + 星座行为），标签只是映射。**收敛约束**：每个语义单位最多打 **2-3 个主域**，防信号稀释成"标签丛林"。
 
-### 3.1 宫位语义场（已有，需加 governors + 修 daily/self）
+### 3.1 宫位语义场（已落地，R10 改为动态承载者 + 修 daily/self）
 
-`house_significations.yaml` 现状：12 宫 × 多义词，每个词有 `domains`。改造：
+`house_significations.yaml` 现状：12 宫 × 多义词，每个词有 `domains/polarity/intensity/resonance/gated`。R10 口径：
 - **词汇对齐**：`self` 保留；无 `daily` 词条（daily 是跨域行运视图，不在此表）。
-- **加 `governors`**：每个含义声明"这顶帽子听谁的"。例（3 宫）：
+- **动态承载者**：词条不再声明“这顶帽子听谁的”静态主星；运行时按本轮语境展开：
 
 ```yaml
 3:
   - word: "沟通/表达/写作"
     domains: [career, learning, self]
-    governors: [mercury]          # 自己表达看水星 + 3宫主
+    polarity: positive
+    intensity: 3
     ...
   - word: "兄弟姐妹/邻里/熟人群"
     domains: [family]
-    governors: [3rd_lord]         # 手足看3宫结构 + 3宫主，不看水星
+    polarity: neutral
+    intensity: 2
     ...
 ```
 
-- **governors 取值**：具体行星（`mercury`）/ 宫主引用（`3rd_lord`）/ 多主星（`[mercury, jupiter]`）。`3rd_lord` 在运行时展开为实际宫主星（传统守卫星，`common.py` 已实现）。
+- **承载者来源**：① 当前语义宫实际宫主（如 `3rd_lord` → 实盘 3 宫主星）；② 当前语义宫宫内星；③ `planet_nature.domain_signals` 的领域自然/辅助征象星；④ `ConsultCallPlan` enrichment 带入的 `focus_houses/focus_house_lords/focus_planets/house_lord_planets/house_occupants/house_lord_placements`。这些只决定“读哪些星”，评分仍统一走 `assess_planet()`。
 
 ### 3.2 行星征象场（已有星性，缺领域标签）
 
@@ -122,7 +124,7 @@
 ### 3.4 标签防稀释规则
 
 - 每语义单位 **2-3 主域上限**；超过需裁剪。
-- `governors` 至少 1 颗主星；`governors` 不能是虚点/三王星（它们不掌宫），只能做次级关联。
+- 词条不再写静态主星；承载者由实盘宫主/宫内星/领域征象星/本轮 ConsultCallPlan 动态解析。三王星和虚点可作为关联影响或语义素材，但不掌传统宫、不参与传统接纳。
 
 ---
 
@@ -189,7 +191,7 @@
           ├─ 轨 B · 宫主轨：领域核心宫的宫主星尊贵/落宫/受克 → "结构与吉凶"（优先）
           └─ 轨 C · 互溶桥：A 与 B 是否互溶/接纳/飞宫 → "哪条通道兑现"
           │
-          ├─ per-word 调制：每个含义按 governors 单独算强度（§5）
+          ├─ per-word 调制：每个含义按动态承载者单独算强度（§5）
           └─→ 合读：结构轨定成败，色彩轨定表现，桥轨定路径
 ```
 
@@ -221,19 +223,19 @@
 
 ## 5. per-signification 调制（修复整宫状态平摊缺陷）
 
-**已修复口径**：每个语义词按自己的 `governors` 与 polarity-specific axes 单独调制，避免把同一宫位的一份状态平摊给所有含义 → 引擎可以表达“3宫结构强，但自己表达弱、手足旺”的分化。
+**已修复口径**：每个语义词按本轮动态承载者与 polarity-specific axes 单独调制，避免把同一宫位的一份状态平摊给所有含义 → 引擎可以表达“3宫结构强，但表达弱、手足旺”的分化。
 
-**改造**：每个含义按 `governors` 单独算强度。
+**当前实现**：承载者由实盘宫主、宫内星、领域自然/辅助征象星及本轮 enrichment 合并得到；所有承载者状态统一由 `assess_planet()` 提供。
 
 ```
 含义强度(word) = 词级基础(intensity)
-              × (1 + Σ governors 对应正/负轴调制)  # 词级主星状态
-              × (1 + 宫结构贡献 × 权重)              # 宫结构只贡献一部分，不独占
+              × (1 + 动态承载者对应正/负轴调制)  # 词级承载者状态
+              × (1 + 宫结构贡献 × 权重)             # 宫结构只贡献一部分，不独占
 ```
 
 **设计用例（验收标准）**——"3宫强，但沟通弱、手足旺"：
-- 3宫结构强 + 3宫主好 → `兄弟姐妹/邻里` 帽子的 governors(`3rd_lord`) 强 → 手足旺 ✅
-- `沟通/表达/写作` 帽子的 governors(`mercury`) 受克 → 自己表达弱 ✅
+- 3宫结构强 + 3宫主好 → `兄弟姐妹/邻里` 帽子的动态承载者包含实盘 `3rd_lord`，其状态强 → 手足旺 ✅
+- `沟通/表达/写作` 帽子的动态承载者包含水星，水星受克 → 自己表达弱 ✅
 - 两顶帽子各论各的，互不污染。引擎必须能同时输出这两个结论。
 
 > 这就是语义场必须 per-word 而非 per-house 的原因。这个案例写进测试当黄金夹具。
@@ -256,7 +258,7 @@ L1 数据层    YAML 知识库（单一真相源）
 | 步 | 内容 | 产物 |
 |---|---|---|
 | **1 合一词汇** | `IntentDomain` 扩到 11 域；`natal.py`/`house_significations`/`planet_nature` 词汇对齐到 11 域；删 `daily`/`self` 分裂 | `shared/enums.py` + 词汇表 |
-| **2 补语义场** | house_significations 加 `governors`；planet_nature domain_signals 对齐 + 天海冥确认"只关联"；signs.yaml 补 `behavior_style` | 三个 YAML |
+| **2 补语义场** | house_significations 保留语义字段并退场静态主星；planet_nature domain_signals 对齐 + 天海冥确认"只关联"；signs.yaml 补 `behavior_style` | 三个 YAML |
 | **3 领域定义数据化** | `intent_profiles.yaml` 保留 core_houses/house_lords 等结构配方；领域行星角色统一从 `planet_nature.domain_signals` 派生，`core_planets` 不再作为独立真相源；新增 growth/network/self 三域配方 | `intent_profiles.yaml` + `planet_nature.yaml` |
 | **4 合成器 + 模块转型** | 新建三轨合成器 + per-word 调制；现有 CareerStrength/Wealth/Risk 等**保留为"领域放大器"**，通用语义场读数为底，逐域迁移 | 新引擎 + 测试 |
 
@@ -267,7 +269,7 @@ L1 数据层    YAML 知识库（单一真相源）
 | 风险 | 对策 |
 |---|---|
 | 三轨合成变黑箱 | 每条结论带证据链（哪个语义单位+哪条规则），LLM 不参与合成（硬线） |
-| 标签丛林（一个单位打 10 个域） | 2-3 主域上限 + governors 至少 1 主星；超限裁剪 |
+| 标签丛林（一个单位打 10 个域） | 2-3 主域上限；动态承载者必须至少解析到实盘宫主、宫内星或领域征象星，超限裁剪 |
 | 专用模块丢调优 | 保留为放大器，逐域迁移，每步 707 全量回归 |
 | 天海冥误入结构判断 | `_participating()`/`house_lord`/`dignity` 已排除；合成器禁以天海冥为宫主 |
 | 感情加宽后与 11/4 域重叠 | 明确边界：恋爱/婚姻/亲密→relationship，朋友/社群→network，亲情/亲子→family |
@@ -372,8 +374,8 @@ FREE 下转占星）。API `_parse_mode` 已支持 "free"。
 
 ## 9. 参考文件
 
-- `shared/enums.py` —— IntentDomain（待扩 11 域）
-- `domain/astrology/knowledge/house_significations.yaml` —— 宫位语义场（加 governors）
+- `shared/enums.py` —— IntentDomain（已扩为 11 域）
+- `domain/astrology/knowledge/house_significations.yaml` —— 宫位语义场（保留语义字段，运行时动态解析承载者）
 - `domain/astrology/knowledge/planet_nature.yaml` —— 星性/domain_signals（词汇对齐）
 - `domain/astrology/knowledge/signs.yaml` + `planet_sign_style.yaml` —— 星座行为场
 - `domain/astrology/knowledge/reception.yaml` + `reception.py` —— 互溶接纳（天海冥排除已实现）

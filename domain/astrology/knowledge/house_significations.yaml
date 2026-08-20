@@ -7,9 +7,9 @@
 #   word        : 该含义（精确描述）
 #   domains     : 该含义激活的问题域（领域引擎 v2：career/relationship/wealth/health/emotion/
 #                 family/learning/growth/network/self；每词 2-3 主域上限，daily 是跨域行运视图不在此表）
-#   governors   : 该含义听谁的主星（v2 per-signification 调制）——具体行星（mercury）
-#                 或宫主引用（3rd_lord，运行时展开为传统守卫星）。天海冥只能做次级关联，
-#                 不掌宫、不做结构判断。governors 至少 1 颗主星。
+#   governors   : 历史字段/人工语义备注；运行时不把它当承载者权威。
+#                 当前承载者由实盘宫主、宫内星、planet_nature.domain_signals
+#                 与 ConsultCallPlan enrichment 动态解析。保留该字段只为迁移期可读性。
 #   polarity    : positive / negative / neutral（本身极性，结构调制后会倾斜）
 #   intensity   : 语义场基础强度 1-5
 #   resonance   : 通俗共鸣词（LLM 转述时锚点，确定性数据，不发明）

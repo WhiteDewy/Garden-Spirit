@@ -206,6 +206,55 @@ def test_chat_restores_related_person(client):
     assert resp.json()["needs_related_person"] is False
 
 
+def test_store_related_person_gender_notes_update(store):
+    """合盘对象编辑字段也要加密持久化，并支持 owner 更新。"""
+    store.save_related_person(
+        "rel_fields", "owner1", "小王", _birth_to_json(_birth()), gender="M", notes="同事"
+    )
+    got = store.get_related_person("rel_fields")
+    assert got is not None
+    assert got["gender"] == "M"
+    assert got["notes"] == "同事"
+
+    assert store.update_related_person(
+        "rel_fields", "owner1", "小李", _birth_to_json(_birth()), gender="F", notes="朋友"
+    ) is True
+    updated = store.get_related_person("rel_fields")
+    assert updated is not None
+    assert updated["name"] == "小李"
+    assert updated["gender"] == "F"
+    assert updated["notes"] == "朋友"
+    assert store.update_related_person(
+        "rel_fields", "other", "坏覆盖", _birth_to_json(_birth())
+    ) is False
+
+
+def test_api_related_detail_and_update(client):
+    """合盘档案页可读取/修改出生数据、性别与备注；跨 owner 仍 404。"""
+    pid = _create_owner(client)
+    payload = _related_payload()
+    payload.update({"gender": "M", "notes": "老同学"})
+    rel_id = client.post(f"/person/{pid}/related", json=payload).json()["id"]
+
+    detail = client.get(f"/person/{pid}/related/{rel_id}")
+    assert detail.status_code == 200
+    assert detail.json()["birth"]["location"]["place_name"] == "北京"
+    assert detail.json()["gender"] == "M"
+    assert detail.json()["notes"] == "老同学"
+
+    update_payload = _related_payload("小李")
+    update_payload.update({"gender": "F", "notes": "合盘对象"})
+    updated = client.put(f"/person/{pid}/related/{rel_id}", json=update_payload)
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "小李"
+    assert updated.json()["gender"] == "F"
+    assert updated.json()["notes"] == "合盘对象"
+
+    other = _create_owner(client)
+    assert client.get(f"/person/{other}/related/{rel_id}").status_code == 404
+    assert client.put(f"/person/{other}/related/{rel_id}", json=update_payload).status_code == 404
+
+
 def test_chat_invalid_related_id_silent(client):
     """不存在的 related_person_id → 静默跳过（不 500，走普通对话路径）。"""
     pid = _create_owner(client)

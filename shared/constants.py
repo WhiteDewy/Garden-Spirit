@@ -141,7 +141,7 @@ CADENT_HOUSES: tuple[int, ...] = (3, 6, 9, 12)
 
 # --- 全局默认（v1 冻结决策） ---
 DEFAULT_ZODIAC: ZodiacType = ZodiacType.TROPICAL
-DEFAULT_HOUSE_SYSTEM: HouseSystem = HouseSystem.PLACIDUS
+DEFAULT_HOUSE_SYSTEM: HouseSystem = HouseSystem.ALCABITIUS
 
 # 出生时间未知时默认用正午
 BIRTH_UNKNOWN_FALLBACK_HOUR: int = 12

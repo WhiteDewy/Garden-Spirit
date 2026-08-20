@@ -1,5 +1,20 @@
 /// <reference types="vite/client" />
 
+declare module 'province-city-china/dist/province.json' {
+  const value: any[]
+  export default value
+}
+
+declare module 'province-city-china/dist/city.json' {
+  const value: any[]
+  export default value
+}
+
+declare module 'province-city-china/dist/area.json' {
+  const value: any[]
+  export default value
+}
+
 declare module '*.vue' {
   import { DefineComponent } from 'vue'
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/ban-types

@@ -38,7 +38,7 @@
 		{
 			"path": "pages/universe/consult",
 			"style": {
-				"navigationBarTitleText": "星盘咨询",
+				"navigationBarTitleText": "主题观星台",
 				"navigationStyle": "custom"
 			}
 		},
@@ -46,6 +46,34 @@
 			"path": "pages/universe/fragment",
 			"style": {
 				"navigationBarTitleText": "子类介绍",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/auth/login",
+			"style": {
+				"navigationBarTitleText": "登录注册",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/onboarding/onboarding",
+			"style": {
+				"navigationBarTitleText": "创建星图",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/list",
+			"style": {
+				"navigationBarTitleText": "档案列表",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/edit",
+			"style": {
+				"navigationBarTitleText": "档案编辑",
 				"navigationStyle": "custom"
 			}
 		},

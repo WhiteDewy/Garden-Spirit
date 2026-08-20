@@ -106,8 +106,12 @@ class JournalService:
         self._store.save_journal(existing)
         return existing
 
-    def list(self, person_id: str) -> list[JournalEntry]:
-        return self._store.list_journals(person_id)
+    def list(self, person_id: str, *, page: int = 1, page_size: int = 20) -> tuple[list[JournalEntry], int]:
+        """分页列表 → (items, total)。"""
+        offset = max(0, page - 1) * page_size
+        items = self._store.list_journals(person_id, offset=offset, limit=page_size)
+        total = self._store.count_journals(person_id)
+        return items, total
 
 
 __all__ = ["JournalService", "JournalSummarizer"]

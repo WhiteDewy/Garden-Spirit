@@ -16,6 +16,7 @@ from foundation.utils import new_id, utc_now_aware
 from shared.models import Letter, Person
 
 from domain.analysis.daily import Daily
+from domain.analysis.daily_reminder import DailyReminder, DailyReminderDigest, DailyReminderEngine
 
 from application.conversation.fragments import FragmentService
 from application.mailbox.signature import LetterSignature, NeedClassifier
@@ -58,42 +59,80 @@ class LetterService:
         self._llm = llm_client
         self._chart_provider = chart_provider
         self._daily = Daily()
+        self._reminder = DailyReminderEngine()
         # 落款推导链（§6.2）：内容 → 情绪需求（主/次）→ 疗愈名
         self._signature = NeedClassifier(llm_client)
 
     # ------------------------------------------------------------------
 
     def get_or_create_daily(self, person: Person) -> Letter:
-        """取今天的信；没有则生成并落库（幂等按天）。"""
+        """取今天的信；没有则生成并落库。当天已有 daily 是稳定资产，不自动刷新。"""
         today = _local_date_str(person)
         existing = self._store.get_letter(person.id, today, "daily")
         if existing is not None:
             return existing
 
-        facts: list = []
-        if self._chart_provider is not None:
-            try:
-                chart = self._chart_provider(person)
-                facts = self._daily.analyze(chart, person, {})
-            except Exception as exc:  # noqa: BLE001 - 行运失败不阻断写信
-                logger.warning("每日行运计算失败，写信用空快照: %s", exc)
+        return self._build_daily(person, today=today)
 
-        body, sender, title = self._compose(facts, today, person)
+    def force_refresh_daily(self, person: Person) -> Letter:
+        """强制重算今天的 daily 来信（仅开发/管理员工具使用，不走普通用户路径）。"""
+        today = _local_date_str(person)
+        existing = self._store.get_letter(person.id, today, "daily")
+        return self._build_daily(person, today=today, existing=existing)
+
+    def _build_daily(self, person: Person, *, today: str, existing: Letter | None = None) -> Letter:
+        facts, reminder, digest = self._daily_inputs(person)
+        body, sender, title = self._compose(facts, today, person, reminder=reminder, digest=digest)
+        metadata = dict(existing.metadata) if existing is not None else {}
+        if reminder is not None:
+            metadata["daily_reminder"] = reminder.as_metadata()
+        if digest is not None:
+            metadata["daily_push"] = digest.as_metadata()
         letter = Letter(
-            id=new_id("letter"),
+            id=existing.id if existing is not None else new_id("letter"),
             person_id=person.id,
             letter_date=today,
             sender=sender,
             title=title,
             body=body,
             kind="daily",
-            created_at=utc_now_aware(),
+            created_at=existing.created_at if existing is not None else utc_now_aware(),
+            read_at=existing.read_at if existing is not None else None,
+            metadata=metadata,
         )
-        self._store.save_letter(letter)
+        if existing is not None:
+            self._store.update_letter(letter)
+        else:
+            self._store.save_letter(letter)
         return letter
 
-    def list(self, person_id: str) -> list[Letter]:
-        return self._store.list_letters(person_id)
+    def _daily_inputs(self, person: Person) -> tuple[list, DailyReminder | None, DailyReminderDigest | None]:
+        facts: list = []
+        reminder: DailyReminder | None = None
+        digest: DailyReminderDigest | None = None
+        if self._chart_provider is not None:
+            try:
+                chart = self._chart_provider(person)
+                facts = self._daily.analyze(chart, person, {})
+                digest = self._reminder.daily_digest(chart, person, {})
+                reminder = digest.items[0] if digest.items else self._reminder.top_reminder(chart, person, {})
+            except Exception as exc:  # noqa: BLE001 - 行运失败不阻断写信
+                logger.warning("每日行运计算失败，写信用空快照: %s", exc)
+        return facts, reminder, digest
+
+    def list(
+        self,
+        person_id: str,
+        *,
+        kind: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Letter], int]:
+        """分页列表 → (items, total)。kind 可选 daily/keepsake，默认全部。"""
+        offset = max(0, page - 1) * page_size
+        items = self._store.list_letters(person_id, kind=kind, offset=offset, limit=page_size)
+        total = self._store.count_letters(person_id, kind=kind)
+        return items, total
 
     # ------------------------------------------------------------------
     # 语境来信（§6.1 来信式日记 + §6.2 落款推导链）
@@ -229,11 +268,49 @@ class LetterService:
 
     # ------------------------------------------------------------------
 
-    def _compose(self, facts: list, today: str, person: Person) -> tuple[str, str, str]:
-        """(body, sender, title)。sender 取当日最显著行运的行星。"""
+    def _compose(
+        self,
+        facts: list,
+        today: str,
+        person: Person,
+        *,
+        reminder: DailyReminder | None = None,
+        digest: DailyReminderDigest | None = None,
+    ) -> tuple[str, str, str]:
+        """(body, sender, title)。优先用当日日推；无提醒时走旧行运快照。"""
         snapshot = self._snapshot(facts)
-        sender = self._dominant_planet(facts) if facts else "moon"
+        sender = reminder.sender if reminder is not None else (self._dominant_planet(facts) if facts else "moon")
         zh = SENDER_ZH.get(sender, sender)
+
+        if digest is not None:
+            body = self._digest_body(digest)
+            return body, sender, self._digest_title(today)
+
+        if reminder is not None:
+            reminder_snapshot = self._reminder_snapshot(reminder)
+            if self._llm is not None and self._llm.available:
+                try:
+                    body = self._llm.complete(
+                        prompt=(
+                            f"盘主：{person.name}\n\n"
+                            f"今日生活提醒：\n{reminder_snapshot}\n\n"
+                            "请把提醒写成一封短短的星灵来信。"
+                        ),
+                        system=_LETTER_SYSTEM,
+                        temperature=0.7,
+                        max_tokens=400,
+                    ).strip()
+                    if body:
+                        return body, sender, reminder.title or f"{zh}提醒"
+                except Exception as exc:  # noqa: BLE001 - 降级不阻断
+                    logger.warning("生活提醒来信 LLM 失败，降级模板: %s", exc)
+
+            body = (
+                f"今天有一封来自{zh}的提醒。\n\n"
+                f"{reminder.body}\n\n"
+                "不是说一定会发生什么，只是这块生活场景比较容易被点亮。"
+            )
+            return body, sender, reminder.title or f"{zh}提醒"
 
         if self._llm is not None and self._llm.available and snapshot:
             try:
@@ -265,10 +342,56 @@ class LetterService:
         return body, sender, f"{zh}来信"
 
     @staticmethod
+    def _digest_title(today: str) -> str:
+        try:
+            _, month, day = today.split("-")
+            return f"今日星灵日推 · {int(month)}月{int(day)}日"
+        except Exception:  # noqa: BLE001 - 日期异常时只降级标题
+            return "今日星灵日推"
+
+    @staticmethod
+    def _digest_body(digest: DailyReminderDigest) -> str:
+        if not digest.items:
+            return (
+                "今天没有特别强的日推提醒。\n\n"
+                "这不是空白的一天，只是星象没有特别需要打断你的地方。照着自己的节奏来，慢慢做手边重要的事。"
+            )
+
+        primary = digest.items[0]
+        actions = _daily_actions(digest.items)
+        lines = [
+            f"今日主提醒：{digest.summary}。",
+            "",
+            _primary_daily_sentence(primary),
+            "",
+            "今天只记这几件事：",
+        ]
+        for idx, action in enumerate(actions, start=1):
+            lines.append(f"{idx}. {action}")
+        lines.extend([
+            "",
+            "不是说一定会发生什么，只是这些生活场景今天更容易被点亮。",
+            "想看原因的话，点开「为什么提醒我」就好。",
+        ])
+        return "\n".join(lines).strip()
+
+    @staticmethod
     def _snapshot(facts: list) -> str:
         lines = []
         for f in facts[:4]:
             lines.append(f"- {f.description}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _reminder_snapshot(reminder: DailyReminder) -> str:
+        lines = [
+            f"- 触发：{reminder.reason}",
+            f"- 场景：{reminder.scene}",
+            f"- 建议：{reminder.advice}",
+            f"- 等级：L{reminder.level}（生活提醒，不是事件预言）",
+        ]
+        if reminder.reason_chain:
+            lines.append("- 原因链：" + " → ".join(reminder.reason_chain[:3]))
         return "\n".join(lines)
 
     @staticmethod
@@ -297,6 +420,32 @@ def _local_date_str(person: Person) -> str:
     except Exception:  # noqa: BLE001
         tz = ZoneInfo("Asia/Shanghai")
     return datetime.now(tz).strftime("%Y-%m-%d")
+
+
+def _primary_daily_sentence(item: DailyReminder) -> str:
+    """把第一条日推压成一行朋友式提醒。"""
+    label = (item.time_label or "今天").strip()
+    prefix = "今天" if label == "全天背景" else label
+    scene = item.scene.strip()
+    return f"{prefix}重点看{scene}：{item.advice.strip()}"
+
+
+def _daily_actions(items: list[DailyReminder], limit: int = 3) -> list[str]:
+    """取最多三条去重行动建议，给 daily letter 默认展示。"""
+    actions: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        advice = item.advice.strip()
+        if not advice:
+            continue
+        key = advice.replace("；", "，").replace("。", "").strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        actions.append(advice.rstrip("。") + "。")
+        if len(actions) >= limit:
+            break
+    return actions or ["照着自己的节奏来，重要的事慢一点确认。"]
 
 
 __all__ = ["LetterService", "SENDER_ZH"]

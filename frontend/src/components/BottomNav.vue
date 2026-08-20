@@ -17,28 +17,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
+import { useGardenBadges } from "@/utils/gardenBadges";
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   active: "garden" | "mailbox" | "universe" | "me";
   letterBadge?: boolean;
   universeBadge?: boolean;
-}>(), {
-  letterBadge: false,
-  universeBadge: false,
-});
+}>();
+
+const { letterBadge: fallbackLetterBadge, universeBadge: fallbackUniverseBadge, refreshGardenBadges } = useGardenBadges();
+
+const letterBadge = computed(() => props.letterBadge ?? fallbackLetterBadge.value);
+const universeBadge = computed(() => props.universeBadge ?? fallbackUniverseBadge.value);
 
 const items = computed(() => [
   { key: "garden" as const, label: "花园", glyph: "✦", path: "/pages/index/index", badge: false },
-  { key: "mailbox" as const, label: "信箱", glyph: "✉", path: "/pages/mailbox/mailbox", badge: props.letterBadge },
-  { key: "universe" as const, label: "宇宙", glyph: "◌", path: "/pages/universe/universe", badge: props.universeBadge },
+  { key: "mailbox" as const, label: "信箱", glyph: "✉", path: "/pages/mailbox/mailbox", badge: letterBadge.value },
+  { key: "universe" as const, label: "宇宙", glyph: "◌", path: "/pages/universe/universe", badge: universeBadge.value },
   { key: "me" as const, label: "我的", glyph: "◒", path: "/pages/me/me", badge: false },
 ]);
 
+onMounted(() => {
+  if (props.letterBadge !== undefined && props.universeBadge !== undefined) return;
+  void refreshGardenBadges();
+});
+
 function go(key: string, path: string) {
-  // 当前 pages.json 使用自定义导航而非 tabBar，所以所有入口都走统一的页面导航。
+  // 自定义主导航等价 tab 切换：不堆叠根页面，避免返回栈穿越多个主页面。
   if (key === props.active) return;
-  uni.navigateTo({ url: path });
+  uni.reLaunch({ url: path });
 }
 </script>
 

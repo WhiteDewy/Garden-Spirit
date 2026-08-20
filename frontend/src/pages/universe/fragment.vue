@@ -153,8 +153,7 @@ import {
   STATE_TEXT,
   type BallState,
 } from "@/utils/fragments";
-
-const PERSON_KEY = "gs_person_id";
+import { clearAccountCache, requireSelfPersonId } from "@/utils/account";
 
 const loading = ref(true);
 const error = ref(false);
@@ -174,8 +173,8 @@ onLoad((options) => {
 });
 
 async function load() {
-  const personId = uni.getStorageSync(PERSON_KEY) as string;
-  if (!personId) return uni.redirectTo({ url: "/pages/index/index" });
+  const personId = await requireSelfPersonId();
+  if (!personId) return;
 
   try {
     const res = await api.fragments(personId);
@@ -191,8 +190,9 @@ async function load() {
     // 为什么点亮它：来信式日记（§6.2 推导链）——keepsake 里含本子类的都是证据
     // 单独 try：来信读不到不影响看这颗星（空证据 ≠ 页面失败）
     try {
-      const letters = await api.letters(personId);
-      keepsakes.value = (letters || []).filter(
+      const res = await api.letters(personId);
+      const letters = res.items || [];
+      keepsakes.value = letters.filter(
         (l) =>
           l.kind === "keepsake" &&
           ((l.soul_fragments || []).includes(found.id) ||
@@ -203,10 +203,10 @@ async function load() {
     }
   } catch (e) {
     // person 已不存在（后端重置/换库）→ 清空本地身份，回首页重建
-    if (e instanceof ApiError && e.status === 404) {
-      uni.removeStorageSync(PERSON_KEY);
-      uni.showToast({ title: "这个花园已经找不到了", icon: "none" });
-      return uni.redirectTo({ url: "/pages/index/index" });
+    if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
+      clearAccountCache();
+      uni.showToast({ title: e.status === 410 ? "当前档案已无法解密，请重新登录建档" : "这个花园已经找不到了", icon: "none" });
+      return uni.redirectTo({ url: "/pages/auth/login" });
     }
     error.value = true;
     errorMsg.value = describeError(e);
@@ -229,7 +229,7 @@ function goChat() {
   uni.navigateTo({ url: "/pages/chat/chat" });
 }
 function openMailbox() {
-  uni.navigateTo({ url: "/pages/mailbox/mailbox" });
+  uni.reLaunch({ url: "/pages/mailbox/mailbox" });
 }
 /** 来信正文摘录：只取星灵那段完整回复（去掉"今日灵魂碎片"脚注），超长截断。 */
 function snippetOf(body: string): string {

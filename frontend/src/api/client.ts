@@ -49,6 +49,78 @@ export interface PersonOut {
   created_at?: string | null;
 }
 
+export interface AuthVerifyIn {
+  phone: string;
+  code: string;
+}
+
+export interface BirthOut {
+  datetime_local: string;
+  location: GeoIn;
+  time_known: boolean;
+}
+
+export interface SelfProfileOut extends PersonOut {
+  birth: BirthOut;
+  notes: string;
+}
+
+export interface AccountOut {
+  account_id: string;
+  phone: string;
+  self_person_id: string | null;
+  self_profile: SelfProfileOut | null;
+}
+
+export interface ProfileListItemOut {
+  id: string;
+  role: "self" | "related" | string;
+  name: string;
+  can_be_self: boolean;
+  created_at?: string | null;
+}
+
+export interface RelatedPersonIn {
+  name: string;
+  birth: BirthIn;
+  gender?: string;
+  notes?: string;
+}
+
+export interface RelatedPersonOut {
+  id: string;
+  person_id: string;
+  name: string;
+  created_at?: string | null;
+}
+
+export interface RelatedPersonDetailOut extends RelatedPersonOut {
+  birth: BirthOut;
+  gender?: string | null;
+  notes: string;
+  updated_at?: string | null;
+}
+
+export type ReportIntentShape =
+  | "single_topic"
+  | "cross_topic_influence"
+  | "topic_switch_suggested"
+  | "clarification_required"
+  | "unsupported";
+
+export type ReportType = "monthly" | "annual" | "life_rhythm" | "theme";
+
+export interface ReportIntentIn {
+  // 主题观星台入口上下文；只作为后端意图路由/澄清素材，不承载占星结论。
+  entry_source: "observatory";
+  entry_topic_key: string;
+  primary_topic?: string;
+  secondary_topics?: string[];
+  intent_shape?: ReportIntentShape;
+  report_type?: ReportType;
+  user_focus_text?: string;
+}
+
 export interface ChatIn {
   person_id: string;
   session_id?: string;
@@ -56,6 +128,7 @@ export interface ChatIn {
   persona?: string;
   mode?: "quick" | "deep" | "annual" | "chart" | "free";
   related_person_id?: string;
+  report_intent?: ReportIntentIn;
 }
 
 export interface ChatOut {
@@ -98,6 +171,20 @@ export interface SpiritRecommendationOut {
 export interface RecommendedSpiritsOut {
   spirits: SpiritRecommendationOut[];
   generated_at?: string;
+}
+
+export interface PersonaOut {
+  key: string;
+  name: string;
+  healing_name?: string;
+  style?: string;
+  tone?: string;
+  vocabulary?: string[];
+}
+
+export interface PreferencesOut {
+  preferred_persona?: string;
+  [key: string]: any;
 }
 
 export interface GardenRecallItem {
@@ -184,6 +271,7 @@ export class ApiError extends Error {
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.status === 0) return "连不上星灵花园，请确认后端服务已启动";
+    if (e.status === 410) return "当前档案已无法解密，请重新建档";
     return `星灵花园响应异常（${e.status}）`;
   }
   if (e instanceof Error) {
@@ -218,6 +306,12 @@ function request<T>(method: "GET" | "POST" | "PUT", path: string, data?: unknown
 
 export const api = {
   health: () => request<{ status: string; version: string }>("GET", "/health"),
+  verifyPhone: (body: AuthVerifyIn) => request<AccountOut>("POST", "/auth/phone/verify", body),
+  getAccount: (accountId: string) => request<AccountOut>("GET", `/account/${accountId}`),
+  createSelfProfile: (accountId: string, p: PersonIn) => request<AccountOut>("POST", `/account/${accountId}/self`, p, 60000),
+  updateSelfProfile: (accountId: string, p: PersonIn) => request<AccountOut>("PUT", `/account/${accountId}/self`, p, 60000),
+  listAccountProfiles: (accountId: string) => request<ProfileListItemOut[]>("GET", `/account/${accountId}/profiles`),
+  claimXiatianLegacyData: (accountId: string) => request<{ target_person_id: string; merged: Record<string, Record<string, number>> }>("POST", `/account/${accountId}/claim-xiatian`, undefined, 60000),
   createPerson: (p: PersonIn) => request<PersonOut>("POST", "/person", p),
   getPerson: (id: string) => request<PersonOut>("GET", `/person/${id}`),
   // chat 涉及 LLM（意图拆解+叙事），可能较慢，单独放宽超时
@@ -227,6 +321,7 @@ export const api = {
     request<OpeningOut>("GET", `/person/${personId}/opening${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
   recommendedSpirits: (personId: string) =>
     request<RecommendedSpiritsOut>("GET", `/person/${personId}/recommended-spirits`),
+  personas: () => request<PersonaOut[]>("GET", "/personas"),
   feedbackFinding: (personId: string, findingId: string, feedback: "confirmed" | "refuted") =>
     request<{ ok: boolean; user_feedback: string; trust_level: string; new_confidence: number }>(
       "POST", `/person/${personId}/findings/${findingId}/feedback`, { feedback }
@@ -234,16 +329,25 @@ export const api = {
   findings: (personId: string, pendingOnly = false) =>
     request<FindingOut[]>("GET", `/person/${personId}/findings?pending_only=${pendingOnly}`),
   getPreferences: (personId: string) =>
-    request<Record<string, any>>("GET", `/person/${personId}/preferences`),
+    request<PreferencesOut>("GET", `/person/${personId}/preferences`),
   updatePreferences: (personId: string, prefs: Record<string, any>) =>
-    request<Record<string, any>>("PUT", `/person/${personId}/preferences`, prefs),
+    request<PreferencesOut>("PUT", `/person/${personId}/preferences`, prefs),
   timeline: (personId: string) => request<TimelineEventOut[]>("GET", `/person/${personId}/timeline`),
-  journalList: (personId: string) => request<JournalOut[]>("GET", `/person/${personId}/journal`),
+  journalList: (personId: string, page = 1, page_size = 20) =>
+    request<JournalPage>("GET", `/person/${personId}/journal?page=${page}&page_size=${page_size}`),
   journalCreate: (body: { person_id: string; content: string; mood?: string }) =>
     request<JournalOut>("POST", "/journal", body, 30000),
   mailboxToday: (personId: string) =>
     request<LetterOut>("POST", "/mailbox/today", { person_id: personId }, 60000),
-  letters: (personId: string) => request<LetterOut[]>("GET", `/person/${personId}/letters`),
+  // 信箱信件分页（20 条一页；kind 可选 daily=日推历史 / keepsake=记忆来信）
+  letters: (personId: string, opts?: { page?: number; page_size?: number; kind?: "daily" | "keepsake" }) => {
+    const q: string[] = [];
+    if (opts?.page && opts.page > 1) q.push(`page=${opts.page}`);
+    if (opts?.page_size) q.push(`page_size=${opts.page_size}`);
+    if (opts?.kind) q.push(`kind=${opts.kind}`);
+    const qs = q.length ? `?${q.join("&")}` : "";
+    return request<LetterPage>("GET", `/person/${personId}/letters${qs}`);
+  },
   // 首页红点：打开信箱时把今日未读来信标记为已读（幂等）
   markLettersReadToday: (personId: string) =>
     request<{ ok: boolean; marked: number }>("POST", `/person/${personId}/letters/read-today`),
@@ -262,6 +366,14 @@ export const api = {
     request<{ ok: boolean }>("POST", "/push/subscribe", { person_id: personId, subscription }),
   pushUnsubscribe: (personId: string, endpoint: string) =>
     request<{ ok: boolean; deleted: number }>("POST", "/push/unsubscribe", { person_id: personId, endpoint }),
+  listRelatedPersons: (personId: string) =>
+    request<RelatedPersonOut[]>("GET", `/person/${personId}/related`),
+  createRelatedPerson: (personId: string, body: RelatedPersonIn) =>
+    request<RelatedPersonOut>("POST", `/person/${personId}/related`, body, 60000),
+  getRelatedPersonDetail: (personId: string, relatedId: string) =>
+    request<RelatedPersonDetailOut>("GET", `/person/${personId}/related/${relatedId}`),
+  updateRelatedPerson: (personId: string, relatedId: string, body: RelatedPersonIn) =>
+    request<RelatedPersonDetailOut>("PUT", `/person/${personId}/related/${relatedId}`, body, 60000),
 };
 
 export interface JournalOut {
@@ -273,6 +385,42 @@ export interface JournalOut {
   created_at?: string;
 }
 
+export interface JournalPage {
+  items: JournalOut[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
+export interface DailyPushItemOut {
+  level: number;
+  score?: number | null;
+  house?: number | null;
+  scene: string;
+  sender?: string | null;
+  reason: string;
+  advice: string;
+  trigger_planet?: string | null;
+  natal_planet?: string | null;
+  aspect?: string | null;
+  orb?: number | null;
+  role?: string | null;
+  confidence?: number | null;
+  reason_chain: string[];
+  time_label: string;
+  start_at?: string | null;
+  end_at?: string | null;
+}
+
+export interface DailyPushOut {
+  letter_date?: string | null;
+  timezone_name?: string | null;
+  summary: string;
+  items: DailyPushItemOut[];
+  disclaimer?: string | null;
+}
+
 export interface LetterOut {
   id: string;
   person_id: string;
@@ -282,6 +430,8 @@ export interface LetterOut {
   title: string;
   body: string;
   kind: string;
+  read_at?: string | null;
+  daily_push?: DailyPushOut | null;
   // 来信式日记（kind=keepsake）的落款推导链（§6.2）：显式可解释"为什么是这颗星"
   primary_need?: string;
   healing_name?: string;
@@ -289,6 +439,14 @@ export interface LetterOut {
   lit_fragments?: string[];
   explain?: string;
   entry?: boolean; // 词条式来信（§6.1 日常/正面分享时刻的诗化记忆词条）
+}
+
+export interface LetterPage {
+  items: LetterOut[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
 }
 
 export interface GardenState {

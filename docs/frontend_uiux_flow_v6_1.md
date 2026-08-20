@@ -556,7 +556,7 @@ export interface GardenState {
 - `pages/mailbox/mailbox`：信箱。
 - `pages/universe/universe`：宇宙枢纽。
 - `pages/universe/wheel`：自我星盘轮，不改。
-- `pages/universe/consult`：星盘咨询。
+- `pages/universe/consult`：主题观星台（旧文档曾称“星盘咨询”；V8 用户文案已迁移）。
 - `pages/universe/fragment`：碎片详情。
 
 短期建议：

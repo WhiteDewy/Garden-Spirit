@@ -268,6 +268,23 @@ def test_agent_consult_does_not_enter_companion():
     assert ctx.latest_conclusion is not None   # 真出了占星结论
 
 
+def test_agent_begin_turn_clears_consult_state_for_chat():
+    """咨询后的闲聊不能沿用上一轮 conclusion，避免 API 误报碎片/来信面板。"""
+    agent = GardenSpiritAgent()
+    person = _make_person()
+    agent.handle_message("sess_c3", "我该不该换工作", person)
+    ctx = agent.get_session_context("sess_c3")
+    assert ctx.latest_conclusion is not None
+
+    agent.handle_message("sess_c3", "你好", person)
+
+    assert ctx.last_was_chat is True
+    assert ctx.last_was_companion is False
+    assert ctx.latest_conclusion is None
+    assert ctx.emotion_result is None
+    assert ctx.fragments == []
+
+
 # ---------------------------------------------------------------------------
 # 接线：API /chat 递出口
 # ---------------------------------------------------------------------------

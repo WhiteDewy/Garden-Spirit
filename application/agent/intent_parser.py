@@ -60,6 +60,29 @@ def _build_context_block(context: dict | None) -> str:
 
     active_domain = context.get("active_domain")
     active_house = context.get("active_house")
+    report_intent = context.get("report_intent") or {}
+    if report_intent:
+        lines.append("\n## 入口上下文（主题观星台）")
+        lines.append("- 这只是用户从哪个主题入口进入，不是占星结论，也不能强行锁死领域。")
+        entry_topic = str(report_intent.get("entry_topic_key") or "").strip()
+        primary_topic = str(report_intent.get("primary_topic") or "").strip()
+        secondary_topics = report_intent.get("secondary_topics") or []
+        intent_shape = str(report_intent.get("intent_shape") or "").strip()
+        report_type = str(report_intent.get("report_type") or "").strip()
+        user_focus = str(report_intent.get("user_focus_text") or "").strip().replace("\n", " ")
+        if entry_topic:
+            lines.append(f"- 入口主题：{entry_topic}")
+        if primary_topic:
+            lines.append(f"- 入口建议主主题：{primary_topic}")
+        if secondary_topics:
+            lines.append(f"- 入口建议次主题：{', '.join(map(str, secondary_topics))}")
+        if intent_shape:
+            lines.append(f"- 入口意图形态：{intent_shape}")
+        if report_type:
+            lines.append(f"- 入口报告类型：{report_type}")
+        if user_focus:
+            lines.append(f"- 用户原始关注：{user_focus[:120]}")
+        lines.append("- 若用户文本跨主题，应按真实问题识别 primary/secondary；不要因为入口主题而忽略跨主题影响。")
     if active_domain or active_house:
         lines.append("\n## 活跃上下文（上一轮未完结）")
         if active_domain:

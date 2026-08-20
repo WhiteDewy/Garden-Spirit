@@ -16,11 +16,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from shared.enums import AspectType, Planet
+from shared.enums import AspectType, DignityState, Planet
 from shared.models import Chart
 
 from domain.astrology.common import aspects_to, assess_planet, house_rulers
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
+from domain.astrology.knowledge import DignityEngine
 from domain.astrology.knowledge.loader import KnowledgeBase
 
 #: 次要动态相位（半刑45°/八分相135°/梅花150°）不参与受克判定
@@ -53,7 +54,7 @@ class PlanetProfile:
     behavior_style: str          # 星座行为方式（供前端/转述消费）
     house_name: str              # "落X宫"
     house_domain: str            # 落宫领域解读
-    dignity_label: str           # 入庙/入旺/落陷/失势/游走（混合时可带括注）
+    dignity_label: str           # 入庙/曜升/三分/在界/在面/落陷/失势/游走（混合时可带括注）
     dignity_score: int
     supporters: tuple[str, ...]      # 谁在帮它
     underminers: tuple[str, ...]     # 谁在破坏它
@@ -110,7 +111,7 @@ def read_planet(
     # 尊贵（消费 assess_planet：本质轴内部也吉凶两论，不用净分抹掉混合态）
     assessment = assess_planet(chart, kb, planet, classifier=classifier)
     dignity_score = _dignity_score_from_assessment(assessment)
-    dignity_label = _dignity_label_from_assessment(assessment)
+    dignity_label = _dignity_label_from_states(chart, kb, planet, assessment)
 
     # 支持者 / 破坏者
     supporters, underminers = _aspect_partners(chart, kb, planet, classifier)
@@ -209,11 +210,18 @@ def _has_essential_fall(assessment) -> bool:
     return any("落陷" in ev for ev in assessment.essential_ev)
 
 
+_MINOR_DIGNITY_LABELS = {
+    DignityState.TRIPLICITY: "三分",
+    DignityState.TERM: "在界",
+    DignityState.FACE: "在面",
+}
+
+
 def _dignity_label(score: int) -> str:
     if score >= 5:
         return "入庙"
-    if score >= 2:
-        return "入旺"
+    if score >= 4:
+        return "曜升"
     if score <= -5:
         return "落陷"
     if score <= -2:
@@ -221,8 +229,41 @@ def _dignity_label(score: int) -> str:
     return "游走"
 
 
+def _dignity_label_from_states(chart: Chart, kb: KnowledgeBase, planet: Planet, assessment) -> str:
+    """尊贵标签：按真实 dignity state 输出，避免把三分/界/面说成入旺。"""
+    states: list[DignityState] = []
+    if planet in chart.planets:
+        cp = chart.planets[planet]
+        states, _total = DignityEngine(kb).compute(planet, cp.sign.sign, cp.sign.degree_in_sign, chart.sect)
+
+    has_fall = DignityState.FALL in states
+    has_detriment = DignityState.DETRIMENT in states
+    positive_minor = [state for state in states if state in _MINOR_DIGNITY_LABELS]
+
+    if has_fall:
+        base = "落陷"
+    elif has_detriment:
+        base = "失势"
+    elif DignityState.DOMICILE in states:
+        base = "入庙"
+    elif DignityState.EXALTATION in states:
+        base = "曜升"
+    elif positive_minor:
+        base = "、".join(_MINOR_DIGNITY_LABELS[state] for state in positive_minor)
+    else:
+        base = "游走"
+
+    if assessment.essential_pos > 0 and assessment.essential_neg > 0:
+        if assessment.essential_neg > assessment.essential_pos:
+            return f"{base}（有支撑）"
+        if assessment.essential_pos > assessment.essential_neg:
+            return f"{base}（有支撑但受限）"
+        return "游走（吉凶并见）"
+    return base
+
+
 def _dignity_label_from_assessment(assessment) -> str:
-    """尊贵标签：沿用旧字段，但混合本质尊贵优先暴露失势/落陷。"""
+    """兼容旧调用：仅保留净分兜底；新星档案应走 _dignity_label_from_states。"""
     base = _dignity_label(_dignity_score_from_assessment(assessment))
     if assessment.essential_pos > 0 and assessment.essential_neg > 0:
         if assessment.essential_neg > assessment.essential_pos:

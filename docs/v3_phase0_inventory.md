@@ -1,21 +1,21 @@
 # v3 阶段0：证据资产盘点清单
 
-> 状态：Draft。阶段0 只读盘点，不改实现。
-> 目标：在进入/收敛唯一 `assess_planet` 之前，把现有证据判断逻辑逐条列清，确认资产不丢、口径不混、删除项有明确替代。
+> 状态：已完成，持续维护（2026-08-16）。阶段0 的只读盘点已转化为当前实现索引，后续只记录口径变化与回归基线。
+> 目标：维护唯一 `assess_planet`、动态承载者、法达时机链、接纳/帮手星与静态缓存的当前事实，确认资产不丢、口径不混、删除项有明确替代。
 > 权威来源：`docs/refactor_plan.md`；本表按当前工作树核对，不采用隔离 worktree 的过期扫描结果。
 
 ---
 
-## 1. 阶段0验收标准
+## 1. 阶段0验收结果
 
-阶段0完成时，需要给出并确认以下内容：
+阶段0 已完成以下盘点，并将结果转化为持续维护索引：
 
 1. **状态评估逻辑**：公式、系数、阈值、门控、调用点、已有测试。
 2. **时机链现状**：年主星/profections 残留、法达大限/子限现状、行运触发点现状、Timing 是否按领域征象星化。
 3. **接纳/帮手星现状**：互溶、接纳、相位接纳、飞宫连接、帮手星链哪些已实现，哪些只是 YAML 声明。
 4. **静态盘缓存现状**：本命 `Chart` 是否落库、互溶接纳是否进缓存、运行时还有哪些 `compute(person)` 调用点。
 5. **可保留资产清单**：迁入 `assess_planet` / `ConnectionClassifier` / scenario map 的旧逻辑，不直接删除。
-6. **口径冲突清单**：阶段1必须统一的系数/相位/世代修正/净值化问题。
+6. **口径冲突清单**：阶段1 已统一的系数/相位/净值化边界，以及仍后置的世代修正细化、速度、劫夺、福点/月相等议题。
 7. **删除残留清单**：阶段5删除年主星时必须同步清理的代码、测试、文档。
 
 ---
@@ -32,7 +32,7 @@
 
 ## 3. 当前总评
 
-当前工作树已经不是“v3 从零开始”：核心轴、接纳链、时机链、静态缓存都已有大量提前落地。阶段1不应大拆重写，而应做**收敛、去重、定口径**。
+当前工作树已经完成 v3 核心轴：唯一 `assess_planet`、动态承载者、接纳链、法达时机链、静态缓存均已落地。本表继续维护剩余边界，防止后续重新引入第二套评分、静态 governors 或年主星 timing。
 
 | 模块 | 当前判断 | 阶段动作 |
 |---|---|---|
@@ -52,12 +52,12 @@
 |---|---|---|---|---|---|---|---|---|---|---|
 | A1 | `assess_planet` | `domain/astrology/common.py` | `Chart`, `KnowledgeBase`, `Planet`, 可选 `DignityEngine`, `ConnectionClassifier` | `PlanetAssessment`：essential/accidental/relational 三轴正负分与证据 | essential：尊贵正负 `×0.35`；accidental：燃烧/日核/日光下、sect 调制吉凶星、角续果、逆行、日月 sect light；relational：和谐相 `+0.3`、动态相未接纳 `+0.5`/有接纳 `+0.3`、互溶 `+0.5`、接纳 `+0.3` | 排除 minor aspects；chart.planet_assessments memo；自定义 dignity/classifier identity 隔离 | signification、dispositor、planet_profile、analysis 模块、兼容 wrapper | `tests/unit/test_combustion_sect.py` 覆盖双轴、混合尊贵、逆行、minor aspect 排除、接纳帮手、memo | 已是目标权威函数 | `compositor` 已消费公共评估；继续防止新增第二套状态评分 |
 | A2 | `planet_strength` | `domain/astrology/common.py` | 同 `assess_planet` | `(pos, neg, evidence)` | 直接调用 `assess_planet`，合并三轴 pos/neg/evidence | 无新增门控 | 旧调用兼容；个别历史模块可能仍依赖 tuple 形态 | 间接受 `assess_planet` 测试保护 | 作为过渡 facade；不再扩展新逻辑 | 名称容易误导为权威评分；阶段3后建议全量替换调用点 |
-| A3 | `_house_quality_dual` | `domain/astrology/interpretation/signification.py` | `Chart`, `house` | 宫结构 `(pos, neg, pos_ev, neg_ev)` | 宫主：`essential + accidental_pos*0.4 + relational_pos*0.3`；凶轨：`essential_neg + accidental_neg*0.8 + relational_neg*1.5`；宫内星贡献 `×0.5` | 吉凶分轨不净合；按 evidence marker 拆正负证据 | `HouseSignificationEngine.interpret`, `firdaria.time_lord_character` | `tests/unit/test_house_signification.py` + career modules 的 mixed dignity/house target 回归 | 保留为 house/scenario 层消费口径，不回写 `assess_planet` | `_strength` 已按 polarity-specific axes 消费 governor 与宫结构贡献，避免整宫状态平摊 |
-| A4 | `_governor_quality` / `_strength` | `domain/astrology/interpretation/signification.py` | 语义词 governors、宫结构分 | `SignificationItem.strength` 或 gated None | positive 吃 `gpos/pos`；negative 吃 `gneg/neg`；neutral 吃 `max`；`base * gov_factor * (1 + house_contrib*0.25) + flight_boost` | `_MIN_STRENGTH=0.3`；event 需 `strong_count >= requires_corroboration` | 宫位咨询、Domain conclusions、法达领主读宫 | `tests/unit/test_house_signification.py`，宫位咨询相关测试间接覆盖 | per-signification 资产必须保留 | 需要新增“同宫不同词不同强弱”的显式回归，防止退回整宫平摊 |
+| A3 | `_house_quality_dual` | `domain/astrology/interpretation/signification.py` | `Chart`, `house` | 宫结构 `(pos, neg, pos_ev, neg_ev)` | 宫主：`essential + accidental_pos*0.4 + relational_pos*0.3`；凶轨：`essential_neg + accidental_neg*0.8 + relational_neg*1.5`；宫内星贡献 `×0.5` | 吉凶分轨不净合；按 evidence marker 拆正负证据 | `HouseSignificationEngine.interpret`, `firdaria.time_lord_character` | `tests/unit/test_house_signification.py` + career modules 的 mixed dignity/house target 回归 | 保留为 house/scenario 层消费口径，不回写 `assess_planet` | `_strength` 已按 polarity-specific axes 消费动态承载者与宫结构贡献，避免整宫状态平摊 |
+| A4 | `_carrier_quality` / `_strength` | `domain/astrology/interpretation/signification.py` | 动态承载者、宫结构分 | `SignificationItem.strength` 或 gated None | positive 吃 `gpos/pos`；negative 吃 `gneg/neg`；neutral 吃 `max`；`base * carrier_factor * (1 + house_contrib*0.25) + flight_boost` | `_MIN_STRENGTH=0.3`；event 需 `strong_count >= requires_corroboration` | 宫位咨询、Domain conclusions、法达领主读宫 | `tests/unit/test_house_signification.py`，宫位咨询相关测试间接覆盖 | per-signification 资产必须保留 | 词条 `governors` 已退为迁移期备注；运行时只消费动态 carrier，并已有防回潮测试 |
 | A5 | `dispositor._quality` | `domain/astrology/interpretation/dispositor.py` | `Chart`, `KnowledgeBase`, lord, classifier | `jin` / `ke` | 动态相：有接纳 `+0.4`、outer/虚点压力 `+0.5`、实星硬碰 `+0.8`；`essential_neg>0` 加 `+1.0` | minor dynamic 排除；`hard>=1.5` 判 `ke` | `dispositor_interpretations` | `tests/unit/test_dispositor.py` | 阶段1纳入关系轴/scenario map 的“飞星质量”映射 | 与 `assess_planet.relational_neg` 存在重复系数；要决定保留为场景阈值还是合并为统一关系轴 |
 | A6 | `planet_profile` 相位/帮手判断 | `domain/astrology/interpretation/planet_profile.py` | `Chart`, `KnowledgeBase`, planet | `PlanetProfile`：尊贵标签、supporters、underminers、掌宫 | dignity score 从 `assessment.essential_pos/neg ÷0.35` 映射；supporters=和谐/有接纳；underminers=主动态相，接纳=磨合，outer=外部压力 | 排除 semisquare/sesquiquadrate/quincunx；混合本质尊贵优先暴露受限 | 全星档案、主题抓取、前端/LLM 转述素材 | `tests/unit/test_planet_profile.py` | 保留为解释素材层；不作为评分权威 | `dignity_score` 是旧字段兼容映射，不能重新扩散成 net score |
 | A7 | `compositor._assess_planet` | `domain/astrology/interpretation/compositor.py` | `Chart`, planet | 公共 `PlanetAssessment` | 直接调用 `assess_planet(chart, kb, planet, dignity, classifier)`；轨A/B 只读 essential/accidental/relational 三轴 | 轨强弱仍由 compositor 场景阈值 `_verdict_axes` 判读 | compositor 合成解释 | `tests/unit/test_domain_compositor.py` + `tests/unit/test_combustion_sect.py` 已回归 | 已完成阶段1首要迁移；局部 R9 评分与 helpers 已删除 | 需要继续防止后续重新引入第二套状态评分 |
-| A8 | analysis scalar adapters | `domain/analysis/career_strength.py`, `finance.py`, `opportunity.py`, `risk.py` | `Chart`, topic params, execution `_enrichment` | 领域事实/分数/标签；阶段2 首轮已合并 `ConsultCallPlan` 承载者（`focus_planets`/`focus_house_lords`/`focus_houses`） | 已消费 `assess_planet`；`finance.py` / `opportunity.py` 的 `_dignity_total` 重算 helper 已删除，展示用 `raw_score` 由本质轴反推；`focus_planets_from_enrichment` 只扩展本轮扫描目标，不改核心二/八宫或 MC 逻辑 | 领域内 threshold gates，如 strong/weak/negative polarity；无 enrichment 时保持旧默认目标 | Strategy/Planner 执行模块；runtime 已把 `ConsultCallPlan` carriers 注入每个 step params | `tests/unit/test_career_modules.py`, `tests/unit/test_runtime_call_plan.py` | 保留为领域 scenario map；定位层承载者只作为动态目标输入，不让 Application 计算占星 | 领域阈值仍可读 essential_pos/neg，但不得重新调用 `DignityEngine.compute` 生成第二套状态分；后续继续清 governors 前需确认 signification per-word 调制替代 |
+| A8 | analysis scalar adapters | `domain/analysis/career_strength.py`, `finance.py`, `opportunity.py`, `risk.py` | `Chart`, topic params, execution `_enrichment` | 领域事实/分数/标签；阶段2 首轮已合并 `ConsultCallPlan` 承载者（`focus_planets`/`focus_house_lords`/`focus_houses`） | 已消费 `assess_planet`；`finance.py` / `opportunity.py` 的 `_dignity_total` 重算 helper 已删除，展示用 `raw_score` 由本质轴反推；`focus_planets_from_enrichment` 只扩展本轮扫描目标，不改核心二/八宫或 MC 逻辑 | 领域内 threshold gates，如 strong/weak/negative polarity；无 enrichment 时保持旧默认目标 | Strategy/Planner 执行模块；runtime 已把 `ConsultCallPlan` carriers 注入每个 step params | `tests/unit/test_career_modules.py`, `tests/unit/test_runtime_call_plan.py` | 保留为领域 scenario map；定位层承载者只作为动态目标输入，不让 Application 计算占星 | 领域阈值仍可读 essential_pos/neg，但不得重新调用 `DignityEngine.compute` 生成第二套状态分；signification per-word 调制已改为动态承载者口径 |
 
 ---
 
@@ -69,7 +69,7 @@
 |---|---|---|---|
 | 吉凶两论，正负分开累积、不直接抵消 | `PlanetAssessment` 三轴；`_house_quality_dual`; signification polarity tracks | 保留为 axes，不退回单一极性轴 | `test_assess_planet_two_axes_separate`, mixed dignity tests |
 | 混合尊贵可见 | `assess_planet.essential_pos/neg`; `planet_profile._dignity_label_from_assessment` | 输出允许“有支撑但受限/吉凶并见”，不净值抹平 | `test_assess_planet_keeps_mixed_dignity_components_visible`, `test_planet_profile.py` |
-| per-signification 调制 | `HouseSignificationEngine._governor_quality/_strength` | 每个语义词单独按 governors 算强弱，不按整宫平摊 | 新增/保留 3宫表达 vs 手足差异断言 |
+| per-signification 调制 | `HouseSignificationEngine._carrier_quality/_strength` | 每个语义词单独按动态承载者算强弱，不按整宫平摊 | 新增/保留 3宫表达 vs 手足差异断言 |
 | 飞宫增强 | `effective_house`, `_flight_boost`, `ConnectionClassifier.classify(... flight)` | 作为结构/兑现路径证据保留 | `strong_count` / house signification / dispositors 回归 |
 | gated/event 门控 | `SignificationItem.gated`, `strong_count`, `requires_corroboration` | 强事件词仍需 strong connection 才出事件性判断 | gated 语义测试；宫位深挖不应倾倒事件词 |
 | 接纳三档 | `ConnectionClassifier.is_received`, `dispositor._quality`, `planet_profile._aspect_partners`, `assess_planet` relational axis | 统一为“有接纳=磨合 / outer=外部压力 / 无接纳实星=硬碰” | aspect reception tests、dispositor/planet profile tests |
@@ -80,16 +80,16 @@
 
 ---
 
-## 6. 阶段1口径冲突待确认
+## 6. 已统一口径与后续边界
 
-| 冲突点 | 现有分歧 | 建议口径 | 需要确认 |
+| 冲突点 | 历史分歧 | 当前口径 | 后续边界 |
 |---|---|---|---|
 | 尊贵权重 | `assess_planet` 用 `score*0.35`；旧字段通过 `/0.35` 还原；analysis 模块的 `_dignity_total` 重算 helper 已删除 | 唯一 dignity 轴保留原始正负分；领域模块只读 axis，不重算 dignity | 已完成 finance/opportunity 清理；后续禁止新增 `_dignity_total` |
-| 吉凶星系数 | `assess_planet` sect 调制；合成器 R9 有本地 `_benefic_malefic_scale` | 只保留 `assess_planet` 的 sect 调制；场景层不得重写 | 合成器迁移前后快照对比 |
+| 吉凶星系数 | `assess_planet` sect 调制；合成器 R9 曾有本地 `_benefic_malefic_scale` | 只保留 `assess_planet` 的 sect 调制；场景层不得重写 | 合成器已迁移；后续防止本地系数回潮 |
 | 刑冲惩罚 | `assess_planet` relational、`dispositor._quality` hard、`planet_profile` underminers 各自映射 | 行星状态只在 relational 轴算；飞星/档案只做标签或 scenario threshold | 保留 `dispositor._quality` 的 `1.5` 作为场景阈值，还是改为读 relational_neg |
 | 次要相位 | `assess_planet/dispositor/planet_profile` 已排除；ReceptionEngine active defaults/YAML 已移除 quincunx | 状态评分、飞星受克、档案破坏者、接纳激活均排除 minor dynamic；梅花/半刑/八分等只保留描述性/次要相位 | 阶段1已收敛：接纳只由 conjunction/opposition/trine/square/sextile 激活 |
 | 世代星 | 三王星可作关联/外部压力，但不掌传统宫、不参与传统接纳 | 三王星不掌宫、不传统尊贵、不硬克同权；作为 associative influence | affliction_quality YAML 与所有调用点一致化 |
-| 净值化 | `planet_strength` tuple 与部分旧字段仍可能诱导 `pos-neg` | 保留双轴/三轴，最后由 scenario map 判读 | 禁止新增 `net_score`；现有 `dignity_score` 标记为兼容展示字段 |
+| 净值化 | `planet_strength` tuple、旧 `dignity_score`/`raw_score`、Timeline/Reasoner 内部聚合字段仍可能诱导 `pos-neg` | 用户可见占星结论保留双轴/三轴与 opportunity/pressure 分轨；内部/legacy `net_score` 只可作为排序、兼容或通用 evidence aggregation 字段 | 禁止新增用户可见“净分/净吉凶”；现有内部字段需在输出契约中标明边界 |
 | 帮手星深度 | 当前 `helpers_of/ally_timeline` 是直接互溶/接纳；v3 目标提到最多2跳 | 阶段1先统一直接帮手；2跳等 scenario map 稳定后再加 | 是否真的需要2跳，避免解释过度扩散 |
 | 证据文案拆轨 | `_polarity_evidence` 靠中文 marker 拆正负 | 短期保留；长期考虑 evidence typed tags | marker 漏判会导致证据错挂正/负轨 |
 
@@ -170,19 +170,20 @@
 ## 12. 阶段0结论
 
 - **迁移完成**：合成器局部状态评分与局部 helper 链已迁入公共 `assess_planet` / `ConnectionClassifier` 消费链，合成器不再保留第二套状态评分。
-- **统一口径**：刑冲接纳三档、minor aspect、outer pressure、dignity 权重、净值字段兼容映射，需要阶段1定成唯一规则。
+- **统一口径**：刑冲接纳三档、minor aspect、outer pressure、dignity 权重、净值字段兼容边界已收口；速度、劫夺评分、福点/月相、外行星/虚点压力细化继续后置。
 - **已经落地**：`assess_planet`、接纳/互溶快照、`ally_timeline`、法达 major/sub、Timing targets/helpers、`NatalChartCache`。
 - **暂不迁移**：TimingStack 中 solar/lunar return、progressed moon 可继续作为背景层；不要与法达 authority 抢主轴。
 - **删除残留**：年主星/profection 的 active code 与活跃方法文档已退场；当前仅在历史计划/盘点说明与负向测试断言中保留删除背景。
-- **阶段6回归**：2026-08-16 已跑全量 `python -m pytest -q`，841 passed；阶段5时机链改动未引入回归失败。
+- **阶段6回归基线**：2026-08-16 已知全量 `python -m pytest -q` 结果为 **845 passed**；本轮文档收口后仍需重跑 planned targeted tests，不能把该历史基线写成当前回合已验证。阶段5时机链改动未引入已知回归失败。
 - **新增/保留测试建议**：合成器迁移快照、per-signification 差异词测试、禁止新增直接 `NatalChartCalculator().compute` 的接线测试。
 
 ---
 
-## 13. 建议阶段1执行顺序
+## 13. 后续维护与回归入口
 
 1. ✅ 已完成：迁移合成器局部状态评分到公共 `assess_planet`，删除局部 helper 链。
 2. ✅ 已完成：修正 signification/compositor/firdaria stale 注释，不改变行为。
 3. ✅ 已完成：扫描并分类 analysis 模块 `_dignity_total`；领域阈值保留，重复状态评分已删除。
 4. ✅ 已完成：固化 quincunx/minor aspect 与 outer pressure 文档口径。
-5. 跑 `pytest tests/unit/test_combustion_sect.py tests/unit/test_house_signification.py tests/unit/test_dispositor.py tests/unit/test_planet_profile.py tests/unit/test_career_modules.py tests/unit/test_storage.py` 做阶段1前基线。
+5. ✅ 已执行阶段1核心回归；后续回归入口固定为：
+   `python -m pytest -q tests/unit/test_combustion_sect.py tests/unit/test_house_signification.py tests/unit/test_dispositor.py tests/unit/test_planet_profile.py tests/unit/test_career_modules.py tests/unit/test_storage.py tests/unit/test_runtime_call_plan.py tests/unit/test_firdaria.py tests/unit/test_timing_stack.py`。

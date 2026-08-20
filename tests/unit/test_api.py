@@ -10,9 +10,13 @@
 """
 
 import pytest
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from foundation.config import AppConfig
+from foundation.database.encryption import _generate_key
+
+from shared.models import Letter
 
 from application.api.main import create_app
 
@@ -32,6 +36,40 @@ def client():
         yield c
 
 
+def test_persistent_db_requires_stable_encryption_key(monkeypatch, tmp_path):
+    """真实文件库缺少 GS_ENCRYPTION_KEY 时拒绝启动，避免写入随机密钥密文。"""
+    monkeypatch.delenv("GS_ENCRYPTION_KEY", raising=False)
+    config = AppConfig()
+    config.storage.db_path = str(tmp_path / "garden_spirit.db")
+    config.storage.encryption_key = ""
+
+    with pytest.raises(RuntimeError, match="GS_ENCRYPTION_KEY"):
+        create_app(config)
+
+
+def test_persistent_db_starts_with_configured_encryption_key(tmp_path):
+    """部署显式配置稳定密钥时，文件库正常启动。"""
+    config = AppConfig()
+    config.storage.db_path = str(tmp_path / "garden_spirit.db")
+    config.storage.encryption_key = _generate_key()
+
+    app = create_app(config)
+
+    assert app.state.config.storage.encryption_key == config.storage.encryption_key
+
+
+def test_memory_db_does_not_require_encryption_key(monkeypatch):
+    """:memory: 测试库不持久化，允许底层使用随机开发密钥。"""
+    monkeypatch.delenv("GS_ENCRYPTION_KEY", raising=False)
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    config.storage.encryption_key = ""
+
+    app = create_app(config)
+
+    assert app.state.config.storage.db_path == ":memory:"
+
+
 def _person_payload() -> dict:
     return {
         "name": "测试用户",
@@ -42,6 +80,56 @@ def _person_payload() -> dict:
         },
         "gender": "F",
     }
+
+
+def test_phone_auth_creates_single_self_profile():
+    """手机号是身份源：一个手机号只能绑定一个唯一本人档案。"""
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    config.debug = True
+    app = create_app(config)
+    with TestClient(app) as c:
+        login = c.post("/auth/phone/verify", json={"phone": "18513821306", "code": "000000"})
+        assert login.status_code == 200
+        account = login.json()
+        assert account["phone"] == "18513821306"
+        assert account["self_person_id"] is None
+
+        created = c.post(f"/account/{account['account_id']}/self", json=_person_payload())
+        assert created.status_code == 200
+        self_id = created.json()["self_person_id"]
+        assert self_id
+        assert created.json()["self_profile"]["birth"]["location"]["place_name"] == "上海"
+
+        repeated_login = c.post("/auth/phone/verify", json={"phone": "18513821306", "code": "000000"})
+        assert repeated_login.status_code == 200
+        assert repeated_login.json()["self_person_id"] == self_id
+
+        duplicate = c.post(f"/account/{account['account_id']}/self", json=_person_payload())
+        assert duplicate.status_code == 409
+
+
+def test_phone_auth_allows_any_debug_phone_with_dev_code():
+    """开发临时万能码开放任意手机号，方便注册流程手测。"""
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    config.debug = True
+    app = create_app(config)
+    with TestClient(app) as c:
+        resp = c.post("/auth/phone/verify", json={"phone": "13900000000", "code": "000000"})
+    assert resp.status_code == 200
+    assert resp.json()["phone"] == "13900000000"
+
+
+def test_phone_auth_rejects_wrong_dev_code():
+    """开发万能码仍限定 000000，避免任意验证码都能进。"""
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    config.debug = True
+    app = create_app(config)
+    with TestClient(app) as c:
+        resp = c.post("/auth/phone/verify", json={"phone": "13900000000", "code": "123456"})
+    assert resp.status_code == 403
 
 
 def test_health(client):
@@ -58,11 +146,82 @@ def test_person_roundtrip(client):
     assert data["name"] == "测试用户"
     assert data["place_name"] == "上海"
     assert data["time_known"] is True
+    assert data["house_system"] == "B"
 
     got = client.get(f"/person/{pid}")
     assert got.status_code == 200
     assert got.json()["id"] == pid
     assert got.json()["is_premium"] is False  # 会员位 v0.5 预留
+
+
+@pytest.mark.parametrize("house_system", ["B", "W", "P"])
+def test_person_accepts_registration_house_system_choice(client, house_system):
+    """注册页可在阿卡比特/整宫/普拉西德之间切换；后端按显式选择落库。"""
+    payload = _person_payload()
+    payload["house_system"] = house_system
+
+    resp = client.post("/person", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["house_system"] == house_system
+
+
+def test_person_rejects_unknown_house_system(client):
+    """非法宫制应明确 422，避免前端误传时变成服务端 500。"""
+    payload = _person_payload()
+    payload["house_system"] = "X"
+
+    resp = client.post("/person", json=payload)
+
+    assert resp.status_code == 422
+    assert "宫位制" in resp.json()["detail"]
+
+
+def test_person_creation_generates_today_letter(client):
+    """建档即生成当天来信；信箱读取只返回同一封，不再二次生成。"""
+    resp = client.post("/person", json=_person_payload())
+    assert resp.status_code == 200
+    pid = resp.json()["id"]
+
+    letters = client.get(f"/person/{pid}/letters")
+    assert letters.status_code == 200
+    data = letters.json()
+    assert len(data["items"]) == 1
+    assert data["total"] == 1
+    assert data["items"][0]["kind"] == "daily"
+    assert data["items"][0]["body"]
+
+    today = client.post("/mailbox/today", json={"person_id": pid})
+    assert today.status_code == 200
+    assert today.json()["id"] == data["items"][0]["id"]
+
+
+def test_mailbox_force_refresh_requires_debug(client):
+    """强刷入口只给开发/管理员工具；普通配置不可用。"""
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    config.debug = False
+    app = create_app(config)
+    with TestClient(app) as c:
+        pid = c.post("/person", json=_person_payload()).json()["id"]
+        resp = c.post("/mailbox/today/force-refresh", json={"person_id": pid})
+
+    assert resp.status_code == 403
+
+
+def test_debug_env_enables_mailbox_force_refresh(monkeypatch):
+    """本地设置 GS_DEBUG=1 后可调用强刷入口。"""
+    monkeypatch.setenv("GS_DEBUG", "1")
+    config = AppConfig()
+    config.storage.db_path = ":memory:"
+    app = create_app(config)
+    with TestClient(app) as c:
+        pid = c.post("/person", json=_person_payload()).json()["id"]
+        first = c.post("/mailbox/today", json={"person_id": pid}).json()
+        refreshed = c.post("/mailbox/today/force-refresh", json={"person_id": pid})
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["id"] == first["id"]
 
 
 def test_person_missing_datetime_422(client):
@@ -115,6 +274,31 @@ def test_chat_then_profile_writeback(client):
     assert events[0]["need"] in ("heard", "soothed", "sorted", "pushed")
 
 
+def test_chat_accepts_observatory_report_intent(client):
+    """主题观星台入口上下文可透传到 Chat；它只做路由/澄清素材，不改变基础合约。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    chat = client.post("/chat", json={
+        "person_id": pid,
+        "message": "我想看和母亲的关系对我事业的影响",
+        "report_intent": {
+            "entry_source": "observatory",
+            "entry_topic_key": "career",
+            "primary_topic": "career",
+            "secondary_topics": ["family"],
+            "intent_shape": "cross_topic_influence",
+            "report_type": "theme",
+            "user_focus_text": "我想看和母亲的关系对我事业的影响",
+        },
+    })
+
+    assert chat.status_code == 200
+    data = chat.json()
+    assert data["answer"]
+    assert data["session_id"]
+    assert data["mode"] == "deep"
+
+
 def test_chat_followup_same_session(client):
     """同一 session_id 多轮追问，仍能回答（会话延续）。"""
     pid = client.post("/person", json=_person_payload()).json()["id"]
@@ -161,8 +345,8 @@ def test_journal_create_list_update(client):
     # 列表
     lst = client.get(f"/person/{pid}/journal")
     assert lst.status_code == 200
-    assert len(lst.json()) == 1
-    assert lst.json()[0]["id"] == eid
+    assert len(lst.json()["items"]) == 1
+    assert lst.json()["items"][0]["id"] == eid
 
     # 编辑（用户改写成长记录后覆盖）
     upd = client.put(f"/journal/{eid}", json={"content": "改过的正文"})
@@ -198,7 +382,69 @@ def test_mailbox_today_and_list(client):
     # 列表
     lst = client.get(f"/person/{pid}/letters")
     assert lst.status_code == 200
-    assert len(lst.json()) == 1
+    assert len(lst.json()["items"]) == 1
+
+
+def _keepsake_letter(pid: str, idx: int) -> Letter:
+    """构造一封 keepsake 来信（供分页测试直接落库，避免依赖聊天情绪分支）。"""
+    return Letter(
+        id=f"ks-{idx}",
+        person_id=pid,
+        letter_date=f"2026-08-{idx:02d}",
+        sender="moon",
+        title="「想被抱抱的我」来信",
+        body=f"正文{idx}",
+        kind="keepsake",
+        created_at=datetime(2026, 8, idx, 12, 0, 0, tzinfo=timezone.utc),
+        metadata={},
+    )
+
+
+def test_letters_paginated_kind_filter(client):
+    """信箱分页：kind 过滤 + page_size 翻页 + has_more 正确（默认 20 条一页）。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    store = client.app.state.store
+    for i in range(1, 6):
+        store.save_letter(_keepsake_letter(pid, i))
+
+    # 默认全部：5 keepsake + 1 daily（建档生成）
+    all_ = client.get(f"/person/{pid}/letters").json()
+    assert all_["total"] == 6
+    assert len(all_["items"]) == 6
+    assert all_["has_more"] is False
+
+    # kind=keepsake / kind=daily 过滤
+    ks = client.get(f"/person/{pid}/letters", params={"kind": "keepsake"}).json()
+    assert ks["total"] == 5
+    assert all(l["kind"] == "keepsake" for l in ks["items"])
+    dy = client.get(f"/person/{pid}/letters", params={"kind": "daily"}).json()
+    assert dy["total"] == 1
+    assert dy["items"][0]["kind"] == "daily"
+
+    # page_size=2 翻页：第 3 页只剩 1 条，has_more 收敛
+    p1 = client.get(f"/person/{pid}/letters", params={"kind": "keepsake", "page": 1, "page_size": 2}).json()
+    assert len(p1["items"]) == 2
+    assert p1["total"] == 5
+    assert p1["has_more"] is True
+    p3 = client.get(f"/person/{pid}/letters", params={"kind": "keepsake", "page": 3, "page_size": 2}).json()
+    assert len(p3["items"]) == 1
+    assert p3["has_more"] is False
+
+
+def test_journal_paginated(client):
+    """手账分页：20 条一页，has_more 按 total 正确收敛。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    for i in range(3):
+        client.post("/journal", json={"person_id": pid, "content": f"日记{i}"})
+
+    page = client.get(f"/person/{pid}/journal", params={"page": 1, "page_size": 2}).json()
+    assert page["total"] == 3
+    assert len(page["items"]) == 2
+    assert page["has_more"] is True
+
+    page2 = client.get(f"/person/{pid}/journal", params={"page": 2, "page_size": 2}).json()
+    assert len(page2["items"]) == 1
+    assert page2["has_more"] is False
 
 
 def test_mailbox_today_unknown_person_404(client):

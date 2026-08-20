@@ -1,8 +1,8 @@
 # Garden-Spirit 重构规划（v3：唯一引擎 + 看盘范式 + 静态落库）
 
-> 状态：**定稿（待执行）**。本文档是本次重构的**唯一权威规划**。
-> 关系：演进 `docs/architecture.md`（四层不变，边界不变）与 `docs/domain_engine_v2.md`（语义场 v2 保留其"语义场唯一真相源"原则，本文档修正其"governors 写死"的实现方式）。
-> 硬线不变：**占星结论全由 Domain 出，LLM 自由度只在"怎么疗愈 / 怎么陪伴"，绝不在"占星对不对"。**
+> 状态：**定稿，核心阶段已落地（2026-08-16），剩余项按后续迭代管理**。本文档同时保留历史诊断与当前实现状态，阅读时以“当前实现”标注为准。
+> 关系：演进 `docs/architecture.md`（四层不变，边界不变）与 `docs/domain_engine_v2.md`（语义场 v2 保留其“语义场唯一真相源”原则，本文档修正其“governors 写死”的历史实现方式）。
+> 硬线不变：**占星结论全由 Domain 出，LLM 自由度只在“怎么疗愈 / 怎么陪伴”，绝不在“占星对不对”。**
 
 ---
 
@@ -13,6 +13,8 @@
 ---
 
 ## 1. 核心诊断（问题全清单，按根因排序）
+
+> **阅读口径**：本节保留重构启动时的历史基线，说明“为什么改”；删除线或“✅”表示已经迁移。当前运行时事实以 §10 阶段状态、`docs/v3_phase0_inventory.md` 与代码为准，不能把下表旧位置/旧公式当成 active implementation。
 
 ### 1.1 三大根因（用户核心批判，必须执行）
 
@@ -48,7 +50,7 @@
 |---|---|---|
 | R8 | 体系一（house_significations 语义场）与体系二（house_nature 路由）两套并行宫位体系 | ✅ 已合并：路由进 house_significations，转宫进 house_derived，house_nature 已删 |
 | R9 | `theme_map.core_planets` / `intent_profiles.core_planets` / `planet_nature.domain_signals` **三处**重复定义"领域核心星" | ✅ 已收口：`planet_nature.domain_signals` 为唯一角色源；`intent_profiles/theme_map` 不再保存或覆盖核心星 |
-| R10 | `house_significations` 写死 governors（婚姻→金星、合作→木星、对手→火星） | 改通用范式，动态解析承载者 |
+| R10 | ~~`house_significations` 写死 governors（婚姻→金星、合作→木星、对手→火星）~~ | ✅ 已改通用范式：运行时从实盘宫主、宫内星、领域征象星与 ConsultCallPlan enrichment 动态解析承载者 |
 | R11 | `signs.yaml` 的 `behavior_style`/`domains` 字段死数据（loader 不解析） | 补活，喂给落座方式 |
 | R12 | 互溶接纳每次现场重算（ReceptionEngine.detect 结果只打日志，未写进 Chart） | 算一次落库，动态层单独算 |
 
@@ -58,7 +60,7 @@
 
 ```
 【知识层 · 静态词典】 全部 YAML，只出"字典"不出"计算"
-  ├ 宫位主题 WHERE   house_significations.yaml  → 改：多义词切片 + 承载者引用（删写死 governors）
+  ├ 宫位主题 WHERE   house_significations.yaml  → 多义词切片（承载者由运行时动态解析，不写死 governors）
   ├ 行星角色 WHAT     planets.yaml（先天征象星+结构）+ planet_nature（domain_signals 唯一角色源）
   ├ 星座方式 HOW      signs.yaml（补活 behavior_style）
   ├ 数值表           dignity.yaml / reception.yaml / aspects.yaml / affliction_quality.yaml
@@ -151,26 +153,26 @@
 assess_planet(chart, planet) -> PlanetState
 ```
 
-**完整字段清单（数据来源都已存在于 Chart）**：
+**历史设计字段清单（保留阶段0权重讨论；当前实现以 `assess_planet` 与盘点索引为准）**：
 
-| 维度 | 判定（建议值） | 数据来源 | 系数来源（阶段0敲定） |
+| 维度 | 判定口径 | 数据来源 | 当前状态 / 后续边界 |
 |---|---|---|---|
 | 先天尊贵 | 庙+5/旺+4/三分+3/界+2/面+1；落陷-5/失势-4 | dignity.yaml + `DignityEngine.compute` | dignity.yaml scores（无争议，直接用） |
-| 吉凶星性 | 吉星(木金)+0.8 / 凶星(火土)-0.8 | `common.BENEFICS/MALEFICS` | 取自函数1 `planet_strength`（函数2 是 ±1.0，二选一，阶段0定） |
+| 吉凶星性 | 吉星(木金) / 凶星(火土)，按 sect 调制 | `common.BENEFICS/MALEFICS` + chart.sect | ✅ `assess_planet.accidental` 已接线；场景层不得另写系数 |
 | 掌宫 | 掌哪些宫（含劫夺） | `house_rulers`（非 house_lord） | 无系数，纯事实 |
 | 飞宫 | 落哪宫（含宫头末度） | `effective_house` | 无系数，纯事实 |
 | 落座 | 落哪个星座 | `cp.sign.sign` | 无系数，纯事实 |
-| 逆行 | 逆行 -0.5 | `cp.speed`（负值=逆行） | **新值**（传统占星：逆行=力量内收） |
-| 燃烧/日核 | 合日 8.5°内 -1.0；日核 17' 内 +1.0 | `cp.is_combust/is_cazimi/is_under_beams` | **新值**（传统占星：燃烧最强受克/日核最强得吉） |
-| 相位 | 和谐 +weight；刑冲 -weight×档位 | `aspects_to` + `aspect_score` + `is_received` | 档位采纳函数3 `_quality` 三档（接纳/世代/硬碰）；乘数语义阶段0统一 |
+| 逆行 | 逆行作为境遇压力/力量内收 | `cp.speed`（负值=逆行） | ✅ `assess_planet.accidental` 已接线 |
+| 燃烧/日核/日光下 | 燃烧/日光下为压力；日核为强支撑 | `cp.is_combust/is_cazimi/is_under_beams` | ✅ `assess_planet.accidental` 已接线 |
+| 相位 | 和谐/动态相位分轨；动态相看有无接纳 | `aspects_to` + `aspect_score` + `is_received` | ✅ `assess_planet.relational` 已接线；minor dynamic 已排除 |
 | 互溶接纳 | 是否被接纳/互溶（帮手星判定） | `ConnectionClassifier.is_received` + receptions | 无系数，布尔判定 |
-| 角续果宫 | 角宫+1.0 / 续宫+0.5 / 果宫 0 | houses.yaml angularity | **新值**（传统占星：角宫最强显化） |
-| 世代修正 | 天海冥/南北交/莉莉丝刑冲=外部压力(0.6)不硬碰 | affliction_quality.outer | 取自函数3/4（函数1/2 缺此修正，统一补上） |
-| 昼夜 sect | 昼夜生影响三分主/吉凶性质 | chart.sect | 无系数，纯事实 |
+| 角续果宫 | 角宫/续宫显化强，果宫弱 | houses.yaml angularity | ✅ `assess_planet.accidental` 已接线 |
+| 世代修正 | 天海冥/南北交/莉莉丝刑冲=外部压力，不按传统实星硬克同权 | affliction_quality.outer | ⚠️ 原则已定，部分场景层已消费；后续继续统一外行星/虚点压力映射 |
+| 昼夜 sect | 昼夜生影响三分主、吉凶星性、日月得时 | chart.sect | ✅ `assess_planet` 已消费吉凶星 sect 与日月 sect light；更细得时/失时权重后续只可在此处调整 |
 
-> **刑冲三档语义统一（阶段0 重点）**：函数1/2 的 0.3/0.5、0.4/0.8 是**乘数**（乘在 aspect_score 上）；函数3 的 0.4/0.5/0.8 是**加法累加值**（累加后阈值 1.5 判 ke）。两者语义不同，不能直接比大小。阶段0 需统一为一种语义（建议：乘数 × aspect_score × 档位系数，档位采纳函数3 的"接纳/世代/硬碰"三分）。
+> **刑冲三档语义统一（当前边界）**：active 口径把行星状态放在 `assess_planet.relational`；飞星、行星档案、场景层只做标签或 scenario threshold，不再形成第二套行星状态评分。
 
-**权重系数是唯一权威基线，写进本文档即生效**——之后所有代码以此为准。
+**权重系数的修改边界**：行星状态权重只允许在 `assess_planet` 一处变更；场景层可以保留阈值/标签映射，但不得重新计算“第二套行星状态分”。
 
 ---
 
@@ -181,7 +183,7 @@ assess_planet(chart, planet) -> PlanetState
 | 旧文件 | 旧字段 | 合并后字段名 | 去向 |
 |---|---|---|---|
 | `houses.yaml` | angularity / natural_sign / natural_planet / keywords_zh | （不变） | **保留**（结构属性，assess 用 angularity） |
-| `house_significations.yaml` | word / domains / governors / polarity / intensity / resonance / gated | word/domains/polarity/intensity/resonance/gated 保留；**governors 删除**；**新增 keywords** | 改造 |
+| `house_significations.yaml` | word / domains / polarity / intensity / resonance / gated | 字段保留；承载者不写进词条，由运行时动态解析；route keywords 继续承担定位 | 已改造 |
 | `house_nature.yaml` | label / themes / topic_keywords / as_derived | ✅ 已完成：route_keywords/route_secondary 并入 house_significations；as_derived 独立为 house_derived.yaml；label/themes 删除 | **已删文件** |
 
 **承载者引用格式**：无引用格式——承载者（宫主星 + 宫内星 + 先天征象星）由**看盘范式**（§3）统一决定，不写死在任何 YAML。先天征象星由 §3.1 静态词典按**子领域粒度**给出（婚姻→金星、对手→火星、合作→木星）。
@@ -242,49 +244,49 @@ assess_planet(chart, planet) -> PlanetState
 - **LLM 永远不直接读 Chart**——只收到程序格式化好的转述素材（结论+行星档案+证据卡）。
 - "prompt 调用"仅两处：①路由关键词进意图 prompt；②转述层叙事结构。占星结论内容永不进 prompt 让 LLM 决定。
 
-### 6.4 法达子限（用户确认的规则）
+### 6.4 法达子限与完整周期（用户确认的产品规则）
 
-子限 = 大限总年数 **÷7**（非 1 年 1 星），子限主从大限主开始按迦勒底序排。各段长度随大限主不同（太阳 10 年→~1.43 年/段、月亮 9 年→~1.29、木星 12 年→~1.71、火星 7 年→1.0）。
+- **非节点大运**：子限 = 大限总年数 **÷7**（非 1 年 1 星），子限主从大限主开始按迦勒底序排。各段长度随大限主不同（太阳 10 年→约 1.43 年/段、月亮 9 年→约 1.29 年、木星 12 年→约 1.71 年、火星 7 年→1 年）。
+- **节点大运例外**：北交点 3 年、南交点 2 年各自作为完整章节，**不切七段**；出口保持 `sub_lord == major_lord`、`sub_start == major_start`、`sub_end == major_end`。
+- **循环边界**：完整法达周期为 **75 年**（七颗传统行星 70 年 + 北交 3 年 + 南交 2 年），75 年后按产品方法循环；“100 年”只能是报告展示或查询范围，不是算法周期。
+- **夜生产品顺序**：月亮 → 土星 → 木星 → 火星 → 北交 → 南交 → 太阳 → 金星 → 水星；`NODES_AT_END` 仅保留为兼容 preset，本轮不改传统口径。
 
-**存储决策**：法达是**纯确定性时间函数**（`compute_firdaria(birth_utc, sect, reference)`），大限 O(9) + 子限 O(7) 循环，0.034ms 微秒级。**不落库、不预展开"840 段"表**——运行时直接算。birth_utc（Person 已存）+ sect（Chart 已存）就是全部输入；"某时刻处于哪个子限" O(1) 算出，无需二分查表。
-
----
-
-## 7. 帮手星 / 接纳链
-
-- **现状**：`timing_rules.yaml` 的 `ally_timeline`/`chain_tracking`、`natal_composition.yaml` 的 `has_ally`/`debilitated_with_ally` **只有声明，无 `.py` 实现**。
-- **动作**：实现接纳链——征象星受克 → 找互溶/接纳它的星（帮手星）→ 帮手星才是实际显化路径。最多 2 跳（援军的援军）。
-- **接线**：scenario_maps 的 `has_ally`/`debilitated_with_ally` 场景映射真正被引擎触发。
+**存储决策**：法达是**纯确定性时间函数**（`compute_firdaria(birth_utc, sect, reference)`），大限 O(9) + 非节点子限 O(7)，微秒级。**不落库、不预展开**——运行时直接算。birth_utc（Person 已存）+ sect（Chart 已存）就是全部输入；某时刻所处的大限/子限可直接求得，无需查表。
 
 ---
 
-## 8. 时机链重写（删年主星 + 子限 + 接纳链帮手星）
+## 7. 帮手星 / 接纳链（已落地）
 
-**新判断链**：
+- **当前实现**：`ConnectionClassifier.helpers_of()` / `ally_timeline()` 已把互溶与相位接纳整理为可审计的直接帮手链；`assess_planet` 关系轴和 `Timing._helper_targets()` 均已消费。
+- **时机接线**：Timing 把 direct targets 与 helper targets 分开记录，实际评分目标为二者并集；帮手星只表示“有托住/有兑现通道”，不得盖过直接征象星或抹去本质弱项。
+- **缓存**：优先使用本命 `Chart.receptions` / `Chart.acceptances` 快照；旧缓存缺字段或损坏时才懒计算并写回。
+- **后续边界**：当前稳定口径是直接帮手；最多 2 跳的 chain tracking 与更复杂 scenario map 属于独立增强，不阻塞 v3 核心收口，也不在本文假定已完成。
+
+---
+
+## 8. 时机链重写（已落地：删年主星 + 法达子限 + 接纳链帮手星）
+
+> **当前实现口径**：active Timing 以 `compute_firdaria(birth_utc, sect, reference)` 的法达大限/子限为 timing authority；direct targets = 大限主/子限主 + 本轮 enrichment 的 `focus_planets` / `focus_house_lords` / `focus_houses` 实际宫主；helper targets = `ConnectionClassifier.ally_timeline()` 找到的直接互溶/激活接纳帮手星。行运只作为触发窗口扫描，payload 分开记录 direct/helper/scoring targets，并返回 `timing_authority="firdaria"`。annual profection/year-lord 不再参与 active 判断。
+
+**当前判断链**：
 
 ```
 问题（啥时候结婚）
- ① 征象星 = 7宫主 + 金星 + 5宫主
- ② 帮手星 = 征象星受克 → 找互溶/接纳/吉相帮手星
- ③ 法达章节 = 扫大限 + 子限，征象星或帮手星掌管的章节 = 窗口候选
- ④ 行运触发点 = 候选章节内行运吉相对征象星 → 标触发点
- ⑤ 叠层验证 = 大限主 + 子限主都是征象星/帮手星 + 行运吉相 → 高置信窗口
+ ① 征象星/宫主星 = ConsultCallPlan enrichment 解析出的 7宫主 + 金星 + 5宫主等本轮承载者
+ ② 法达章节 = 当前大限主 + 子限主，作为时间主轴与 direct targets
+ ③ 帮手星 = 本命互溶/激活接纳里能托住 direct targets 的 ally/helper
+ ④ 行运触发点 = 候选窗口内行运相位打到 direct targets ∪ helper targets
+ ⑤ 叠层验证 = 法达主轴 + 本轮承载者 + 接纳帮手 + 行运触发同向时，窗口置信度更高
 ```
 
-**删年主星（彻底）——精确清单**：
+**删年主星——历史迁移清单（已完成，不代表当前代码仍存在）**：
 
-| 位置 | 具体内容 |
-|---|---|
-| `domain/analysis/timing.py` | `_year_lord()`（:67-85）、`_month_score` 的 `targets={year_lord, SUN}`（:93）、`_window_fact` 描述（:184）、docstring（:3-4） |
-| `domain/timeline/timing_stack.py` | `TimingStack.year_lord` 字段（:30）、`build_timing_stack` 里 `_year_lord` 调用（:68） |
-| `application/conversation/response.py` | `_SYSTEM_VOICE` 咨询节奏第1条「（法达/年主星）」（:79） |
-| `shared/enums.py` | `ANNUAL_PROFECTION = "annual_profection"` 枚举（:76） |
-| `tests/unit/test_timing_stack.py` | year_lord 相关断言 |
-| `tests/unit/test_fallback_template.py` | :38 含「年主星火星」字样的降级模板断言 |
-| `docs/astrology_timing.md` | :17/:24/:33/:37/:83/:91/:94/:104 多处引用 |
-| `docs/astrology_lunar_return.md` | :32/:62 |
-| `docs/consult_method.md` | :29/:41/:238/:251 |
-| `docs/product_report_uiux.md` | :91/:154 |
+| 历史残留类型 | 当时位置 | 当前边界 |
+|---|---|---|
+| 年主星函数 / 固定目标星 | `domain/analysis/timing.py` 曾有 `_year_lord()` 与 `targets={year_lord, SUN}` | 已迁移为法达 major/sub + enrichment targets + helper targets；不再用固定太阳兜底 |
+| Timeline 年主星字段 | `domain/timeline/timing_stack.py` 曾输出 `year_lord` | active 输出以 `timing_authority="firdaria"` 和 direct/helper/scoring targets 为准 |
+| Response / docs 旧措辞 | 曾把「法达/年主星」并列，或把年度小限说成时机权威 | 活跃产品口径只展示法达章节、触发对象与证据；旧称呼只可出现在历史迁移说明里 |
+| 枚举 / 测试残留 | `ANNUAL_PROFECTION` 与 year_lord 断言 | active API/序列化不再声明年度小限为活跃图型；若历史数据导入需要兼容，另走导入层迁移 |
 
 ---
 
@@ -293,7 +295,7 @@ assess_planet(chart, planet) -> PlanetState
 以下判断逻辑是反复实盘推演验证过的**资产**，抽取时**原样保留**，只收敛矛盾系数：
 
 1. **吉凶两论**——正负分开累积、不抵消（`_house_quality_dual`）
-2. **per-signification 调制**——词级基础 × governor 对应正/负轴 × 宫极性（`_strength`）
+2. **per-signification 调制**——词级基础 × 动态承载者对应正/负轴 × 宫结构贡献（`_strength`）
 3. **飞宫增强**（`_flight_boost`）
 4. **event 门控收敛**——gated + strong_count 强连接门槛
 5. **接纳三档**——磨合 / 外部压力 / 硬碰（dispositor `_quality`）
@@ -306,15 +308,15 @@ assess_planet(chart, planet) -> PlanetState
 
 依赖：`assess_planet` 是地基 → 定位点/帮手星/时机链建立其上；静态落库是独立优化，改动面大，放 assess 稳定后。
 
-| 阶段 | 做什么 | 改/删 | 验证 |
-|---|---|---|---|
-| **0 抽取盘点** | 4 套证据判断逻辑逐条列出（公式+系数+阈值+门控+来源行号）成资产清单 | 只读不删 | 用户过目确认一条不丢 |
-| **1 立 assess_planet** | 抽离合并 4 套 → 唯一函数，收敛矛盾系数，补燃烧/逆行/角续果/劫夺/世代/昼夜 | 改 common.py，删 3 套重复壳 | 单测：同一星多引擎结果一致 |
-| **2 定位点整理** | house_significations 承载路由词；house_derived 承载转宫关系；house_nature 已删除；下一步收敛 planet_nature/domain_signals 与星座方式 | 改 yaml + resolver | ✅ 婚姻/事业/技能话题定位正确 |
-| **3 静态落库** | ChartProvider + 本命/互溶接纳落库，运行时读缓存（法达纯函数不落库） | 改 create_person + 4 处 compute 调用点 | 单测：注册即缓存，二次请求零重算 |
-| **4 帮手星/证据链** | 实现 ally_timeline 接纳链，接线 scenario_maps 的 has_ally/debilitated_with_ally | 改 reception + timing_rules | 单测：7R 受克 → 找到太阳帮手 |
-| **5 时机链重写** | 删年主星，法达大限+子限+征象星/帮手星窗口 | 改 timing.py，删 timing_stack year_lord | 夏天盘实盘验证 |
-| **6 全量回归** | 跑 pytest 修破坏 + 新增阶段测试 | — | 全绿 |
+| 阶段 | 当前状态 | 做什么 | 改/删 | 验证 |
+|---|---|---|---|---|
+| **0 抽取盘点** | ✅ 已完成，转为 `v3_phase0_inventory` 持续维护 | 4 套证据判断逻辑逐条列出（公式+系数+阈值+门控+来源行号）成资产清单 | 只读不删 | 当前工作树索引持续维护 |
+| **1 立 assess_planet** | ✅ 核心已落地，后续只补新增技法 | 抽离合并 4 套 → 唯一函数；本质/境遇/关系三轴保留正负证据 | common.py 成为行星状态入口；`planet_strength` 仅兼容 wrapper | combustion/sect/house/dispositor/profile/career 回归 |
+| **2 定位点整理** | ✅ 核心已落地，领域词汇仍可迭代 | house_significations 承载语义场；house_derived 承载转宫；planet_nature/domain_signals 做领域自然征象 | YAML + resolver/enrichment | 婚姻/事业/技能/宫位切片定位正确 |
+| **3 静态落库** | ✅ 生产 cache 已落地，预热策略后置 | `NatalChartCache` + 本命/互溶接纳快照；法达纯函数不落库 | Application 注入 ChartProvider；旧缓存懒迁移 | storage/runtime/API 回归 |
+| **4 帮手星/证据链** | ✅ 直接 helper/ally 已落地；2 跳 chain 后置 | `ally_timeline` 接纳链，scenario/timing 消费 helper | reception + timing targets | helper/ally/timing helper targets 回归 |
+| **5 时机链重写** | ✅ 已落地 | 删年主星，法达大限+子限+征象星/帮手星窗口 | timing.py / timing_stack / docs | Firdaria + timing_stack + career timing 回归 |
+| **6 全量回归** | ✅ 已有全量基线；本轮文档收口仍需 targeted 验证 | pytest 修破坏 + 新增阶段测试 | — | 当前已知基线 845 passed；文档收口后跑 targeted/diff check |
 
 ---
 
@@ -360,57 +362,59 @@ assess_planet(chart, planet) -> PlanetState
 
 > 本节是「占星学正确性」层，与 §1 架构层 R1-R12 互补。来源：2026-08-13 占星师审稿。
 
-### 14.1 占星技法层缺陷（F1-F7 + 修法 + 对应阶段）
+### 14.1 占星技法层缺陷（F1-F7 + 当前状态 + 后续边界）
 
-| # | 缺陷 | 位置 | 修法 | 阶段 |
-|---|---|---|---|---|
-| **F1**（最重） | **Timing 与问题无关**——`analyze()` 无 domain 入参，`_month_score` 写死 `targets={year_lord, SUN}`，「什么时候结婚」和「什么时候发财」给同一个答案 | `timing.py:40-93` | 征象星化：加 domain/征象星入参，targets 改「7R+金星+5R+帮手星」，法达做窗口骨架、行运做触发点 | §8（阶段5） |
-| **F2** | 年主星被当征象星（profections 宫激活法被误塞进婚姻征象位置） | `timing.py:67-93` | 删年主星（见 R1） | 阶段5 |
-| **F3** | ~~**燃烧/日核缺失**~~ ✅ **已落地（2026-08-14）**——`combustion_state` 接线 `planet_strength`/`_house_quality_dual`：17′ 日核 +1.0、8.5° 燃烧 -1.0、17° 日光下 -0.5 | `common.py` | 已实现（+7 测试） | ✅ |
-| **F4a** | ~~**吉凶星写死**~~ ✅ **已落地（2026-08-14）**——`_benefic_malefic_scale` 按昼夜缩放：吉星得时满额/失时减半、凶星得时减半/失时满额 | `common.py` | 已实现（接线 planet_strength/_house_quality_dual） | ✅ |
-| **F4b** | **得时/失时缺失**——行星 sect vs 盘 sect ±0.5 | — | **待阶段 1**：±0.5 与尊贵 ×0.35 不同量纲，实测压过落陷（木星落陷+得时→误判 mixed），先撤 | 阶段1 |
-| **F5** | ~~宫位制哲学冲突~~ ✅ **已定口径（2026-08-14）**——默认阿卡比特(ALCABITIUS)，支持切普拉西德(Placidus)/整宫(Whole Sign)，前端层切换（留口子，前端未做） | 全局 | 已定：默认 ALCABITIUS + 可切换 | ✅ |
-| **F6** | 数据层小瑕疵——quincunx 进 `reception.yaml` active_aspects（与 `dispositor._minor_dynamic` 排除矛盾）；外行星 exaltation 非共识；水星 sect 写死 | reception.yaml:50 等 | 删 quincunx 出 active_aspects；外行星 exaltation 标「非经典」 | 阶段1 |
-| **F7** | ~~吉凶两论半途被净值化~~ ✅ **部分落地（2026-08-14）**——合成器改 `_verdict_axes` 四象限（本质优先、境遇兜底），不再 `score=pos-neg` 净值；`signification._strength` 的 gov_factor 仍 net（排名标量，双轨证据保留，阶段1 再收） | `compositor.py` / `signification.py:190` | 合成器已改；调制层待阶段1 | 部分 |
+> **阅读口径**：F1-F7 是 2026-08-13 审稿时的历史缺陷编号；表内保留“为什么改”的诊断价值，同时标出当前实现。不要把历史位置/旧公式当作 active code。
 
-### 14.2 证据链全清单（✅ 已有 / ⚠️ 有数据没接线 / ❌ 缺）
+| # | 历史缺陷 | 当前状态 | 后续边界 |
+|---|---|---|---|
+| **F1**（最重） | Timing 与问题无关：旧 `_month_score` 写死 `targets={year_lord, SUN}` | ✅ 已迁移为法达 major/sub + ConsultCallPlan enrichment + focus houses/lords + helper targets；payload 分开 direct/helper/scoring targets | 月度 scoring 的传统细化可后续增强，但不得回退到固定太阳/年主星 |
+| **F2** | 年主星被当征象星 | ✅ active Timing 已删 year-lord/profection 权威，年度小限不参与结论 | 若历史数据导入出现旧字段，另做兼容迁移，不恢复活跃技法 |
+| **F3** | 燃烧/日核/日光下缺失 | ✅ `assess_planet` accidental 轴已接线：日核/燃烧/日光下分轨 | 保持证据文本正负分轨 |
+| **F4a** | 吉凶星写死，不按昼夜调制 | ✅ `assess_planet` 已按 sect 调制吉凶星 | 场景层不得重写第二套吉凶星系数 |
+| **F4b** | 得时/失时作为独立 sect dignity 量纲待统一 | ⚠️ 当前保留在唯一 `assess_planet` 口径下审慎处理，避免压过本质尊贵 | 若新增/调整权重，必须只在 `assess_planet` 一处改，并补混合尊贵回归 |
+| **F5** | 宫位制哲学冲突 | ✅ 产品默认 ALCABITIUS，支持 Placidus / Whole Sign；cache key 含 house_system/zodiac | 前端切换与旧缓存迁移按产品迭代做 |
+| **F6** | quincunx、外行星尊贵、水星 sect 等数据口径不一 | ⚠️ active 接纳/状态评分已排除 minor dynamic；三王星只关联影响的原则已定 | `reception.yaml` 非经典标注、速度/世代修正等继续作为后续技法 audit |
+| **F7** | 吉凶两论半途被净值化 | ✅ 合成器与 signification 已按 positive/negative axes 分轨；`_strength` 取 polarity-specific carrier 轴，不再用整宫净值平摊 | 内部排序标量/legacy `net_score` 可保留；用户可见结论不得展示“净吉凶/净分” |
 
-| 维度 | 状态 | 现状 |
+### 14.2 证据链全清单（当前实现 + 后续项）
+
+> 本表按 2026-08-16 当前工作树重标状态。历史审稿里的“planet_strength 没消费”仅说明旧 facade 的缺口；active 行星状态以 `assess_planet` 为准。
+
+| 维度 | 状态 | 当前边界 |
 |---|---|---|
-| 掌宫（lordship，含劫夺） | ✅ | `house_lord` / `house_rulers` |
+| 掌宫（lordship，含劫夺 ruler 事实） | ✅ | `house_lord` / `house_rulers`；劫夺作为 ruler 事实可读 |
 | 飞宫（disposition） | ✅ | `effective_house` / `dispositor` |
 | 落座（sign） | ✅ | `cp.sign` |
-| 尊贵（庙旺陷三分界面） | ✅ | `DignityEngine` |
-| 相位（吉凶 + 入相/出相） | ✅ | `aspects` + `application` |
-| 互溶接纳 | ✅ | `ReceptionEngine` + `is_received` |
-| 克向谁 × 有无接纳 两轴 | ✅ | `affliction_quality` |
-| 飞宫得吉/受克意涵 | ✅ | `dispositor_rules` + `house_lord` |
+| 尊贵（庙旺陷三分界面） | ✅ | `DignityEngine` → `assess_planet.essential` |
+| 相位（吉凶 + 入相/出相） | ✅ | `aspects` + `application`；active 评分排除 minor dynamic |
+| 互溶接纳 | ✅ | `ReceptionEngine` + `ConnectionClassifier.is_received` |
+| 克向谁 × 有无接纳 两轴 | ✅ | `affliction_quality` + 接纳/acceptance 口径 |
+| 飞宫得吉/受克意涵 | ✅ | `dispositor_rules` + `house_lord`，作为场景解释/兑现路径 |
 | 行星×落宫意涵 | ✅ | `planet_in_house.yaml` |
 | 行星×落座（120 条） | ✅ | `planet_sign_style.yaml` |
-| **角续果（angularity）** | ⚠️ | `houses.yaml` 有、loader 解析了，**`planet_strength` 没消费** |
-| **逆行（retrograde）** | ⚠️ | `cp.speed` 有数据，**评分没算**（逆行=力量内收 -0.5） |
-| **劫夺（interception）** | ⚠️ | `house_rulers` 处理了，**没作评分因子** |
-| **世代修正（三王星不硬碰）** | ⚠️ | `dispositor._quality` 有，**`planet_strength` 没有** |
-| **次要相位排除** | ⚠️ | `dispositor._quality` 排了半刑/八分/梅花，**`planet_strength` 没排除** |
-| **福点 / 月相** | ⚠️ | 计算了（`lots`/`moon_phase`），**分析层几乎没消费** |
-| **速度（快/慢）** | ⚠️ | `cp.speed_deg_per_day` 有，慢速=力量迟滞，未算 |
-| **燃烧 / 日核（combust/cazimi）** | ❌ | 传统最强受克/得吉，**完全没进评分**（F3） |
-| **得时/失时（行星 sect vs 盘 sect）** | ❌ | 尊贵里的 sect 维度缺失（F4） |
-| **吉凶星按 sect 调制** | ❌ | `BENEFICS`/`MALEFICS` 写死（F4） |
+| **角续果（angularity）** | ✅ | `houses.yaml` angularity 已进 `assess_planet.accidental` |
+| **逆行（retrograde）** | ✅ | `cp.speed` 已进 `assess_planet.accidental` |
+| **燃烧 / 日核 / 日光下** | ✅ | 已进 `assess_planet.accidental`，正负证据分轨 |
+| **吉凶星按 sect 调制 / 日月 sect light** | ✅ | 已进 `assess_planet.accidental` |
+| **次要相位排除** | ✅ | `assess_planet` / `dispositor` / `planet_profile` active 口径一致排除 minor dynamic |
+| **世代修正（三王星不硬碰）** | ⚠️ | 原则已定，部分场景层已消费；后续继续统一外行星/虚点压力在所有场景中的映射 |
+| **劫夺（interception）评分** | ⚠️ | ruler 事实已有；暂不作为行星状态评分因子 |
+| **福点 / 月相** | ⚠️ | 计算数据存在，分析层尚未系统消费 |
+| **速度快慢** | ⚠️ | `speed_deg_per_day` 有数据；快慢/迟滞暂未进入核心评分 |
+| **得时/失时细分** | ⚠️ | 吉凶星 sect 与日月 sect light 已接线；更细行星得时/失时权重后续统一 |
 
-**结论**：⚠️/❌ 的 12 项多数「数据已躺在 Chart 里，只是没接进评分」——阶段 1 把散落数据接进唯一 `assess_planet`，不是重新造数据。
+**结论**：阶段 1 已把燃烧/日核、sect 调制、角续果、逆行、日月 sect light、minor aspect 排除接入唯一 `assess_planet`。仍待后续的是速度、劫夺评分、福点/月相消费、外行星/虚点压力进一步统一，以及得时/失时细分权重。
 
-**2026-08-14 已落地（三轴 assess_planet：本质/境遇/关系）**：燃烧/日核 ✅、吉凶星 sect 缩放 ✅、角续果 ✅、逆行 ✅、日月 sect light ✅、**次要相位排除 ✅**——`assess_planet` 三轴（本质=尊贵、境遇=燃烧/吉凶星sect/角续果/逆行/日月sect light、关系=主相位+接纳），合成器走四象限判（本质优先、境遇+关系兜底）。**仍待阶段1**：速度、劫夺、福点/月相消费、世代修正接线（`dispositor` 有、`assess_planet` 无）、reception.yaml 梅花口径统一。
+### 14.3 遗漏清单（分四类，已剔除阶段1完成项）
 
-### 14.3 遗漏清单（分四类）
+**A. 技法完全缺失（❌，新写）**：**相位主星（aspect dispositor）**——刑你的星自己尊贵不尊贵，决定是「贵人的刑」还是「落水狗补一刀」；**太阳弧**（已标注未实现，v3 后置）。
 
-**A. 技法完全缺失（❌，新写）**：燃烧/日核/日光下（F3）、得时/失时（F4）、**相位主星（aspect dispositor）**——刑你的星自己尊贵不尊贵，决定是「贵人的刑」还是「落水狗补一刀」、**太阳弧**（已标注未实现，v3 后置）。
+**B. 数据已有没系统消费（⚠️）**：速度快慢、劫夺评分、福点/月相、**命主星特殊权重**（命主星=全局「盘主」，传统要加权读其状态，现只当普通 1 宫主）、**行星容许度 orb 死数据**（`planets.yaml` 每星 orb 未消费，`_pair_aspects` 用相位类型固定容许度+日月+2，传统应取 `(orb_A+orb_B)/2`）。
 
-**B. 数据已有没接线（⚠️）**：角续果、逆行、速度、劫夺、福点/月相、**命主星特殊权重**（命主星=全局「盘主」，传统要加权读其状态，现只当普通 1 宫主）、**行星容许度 orb 死数据**（`planets.yaml` 每星 orb 未消费，`_pair_aspects` 用相位类型固定容许度+日月+2，传统应取 `(orb_A+orb_B)/2`）。
+**C. 已收敛但需防回潮（✅/⚠️）**：minor dynamic 排除、吉凶两论不净值化、Timing 征象星化、法达 authority、R9 core_planets 三处重复、R10 静态 governors 退场均已完成；后续只保留文档/测试护栏。
 
-**C. 逻辑矛盾/口径不一致（⚠️，统一）**：次要相位排除不一致、世代修正不一致、吉凶两论净值化、梅花进出不一致、吉凶星写死。
-
-**D. 架构缺口（补结构）**：**组合层统一入口**（金月火散在 planet_pair/theme_map/natal_composition/compositor 四处，缺 CombinationEngine）、**性别征象星**（女盘太阳=夫/男盘月亮=妻，`PartnerTraits` 没读）、**婚姻征象星缺土星**（§3.1 已补）、**Timing 征象星化**（F1）、**法达落库矛盾**（本文档已修）。**core_planets 三处重复已由 R9 收口**。
+**D. 架构缺口（补结构）**：**组合层统一入口**（金月火散在 planet_pair/theme_map/natal_composition/compositor 四处，缺 CombinationEngine）、**性别征象星**（女盘太阳=夫/男盘月亮=妻，`PartnerTraits` 没读）、婚姻征象星土星已补进 §3.1，后续要看输出链是否系统消费。
 
 ### 14.4 证据层职责分工（本命 / 法达 / 行运 / 日月返 / 年主星）
 
@@ -426,10 +430,10 @@ assess_planet(chart, planet) -> PlanetState
 
 **调用决策（写死成门控，别让 LLM 选）**：问「我是什么样/婚姻模式」→ 只本命；问「现在/最近/今年」→ 本命+法达+行运（+日返可选）；问「什么时候结婚」→ 本命（征象星）+法达（章节窗口）+行运（触发点）。**用时间粒度判断，不用话题判断。**
 
-### 14.5 修复优先级
+### 14.5 后续维护优先级
 
-1. **F1 征象星化 Timing**（最大收益）= §8，直接落。
-2. **F3 燃烧/日核 + F4 sect 调制 + 14.2 的 ⚠️ 接线**（零新依赖）——阶段 1 接进 `assess_planet`。
-3. **14.3-C 统一口径**（次要相位/梅花/世代修正三处对齐）。
-4. **14.3-D 结构补缺**：组合引擎 → 性别征象星（core_planets 三合一已由 R9 完成）。
-5. **A 后置**：相位主星、太阳弧（进阶，v3 后再议）。
+1. **已完成项设护栏**：F1 Timing 征象星化、F2 年主星退场、F3 燃烧/日核、F4 sect 调制、minor dynamic 排除、R9/R10 动态承载者，后续只保留测试与文档防回潮。
+2. **继续统一但不抢主轴**：外行星/虚点压力、世代修正、得时/失时细分，只能在 `assess_planet` 或明确 scenario map 中推进，不新增第二套行星状态评分。
+3. **数据已有但后置消费**：速度快慢、劫夺评分、福点/月相、命主星特殊权重、行星 orb，逐项补规则与回归，不在本轮假定完成。
+4. **结构增强**：组合引擎（CombinationEngine）与性别征象星输出链，作为后续架构补缺，不影响当前唯一证据引擎收口。
+5. **进阶技法后置**：相位主星、太阳弧等新技法另开阶段设计；不得混入本轮文档/契约收口。

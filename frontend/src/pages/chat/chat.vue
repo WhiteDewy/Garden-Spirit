@@ -17,13 +17,35 @@
         <view class="bubble" :class="m.role">
           <text class="msg-text">{{ m.text }}</text>
         </view>
+        <view v-if="m.role === 'assistant' && m.loopCards?.length" class="loop-panel">
+          <text class="loop-kicker">THIS CONVERSATION LEFT LIGHT</text>
+          <text class="loop-heading">这次聊天，花园已经替你收好。</text>
+          <view
+            v-for="card in m.loopCards"
+            :key="card.key"
+            class="loop-card"
+            @tap.stop="handleLoopAction(card.action)"
+          >
+            <view class="loop-icon">{{ card.icon }}</view>
+            <view class="loop-copy">
+              <text class="loop-title">{{ card.title }}</text>
+              <text class="loop-desc">{{ card.desc }}</text>
+            </view>
+            <text v-if="card.actionText" class="loop-action">{{ card.actionText }}</text>
+          </view>
+          <view class="loop-actions">
+            <button class="loop-btn" @tap.stop="openMailbox">去信箱</button>
+            <button class="loop-btn" @tap.stop="openFragments">看碎片</button>
+            <button class="loop-btn" @tap.stop="continueAsking">继续追问</button>
+            <button class="loop-btn ghost" @tap.stop="reportComingSoon">整理成报告</button>
+          </view>
+        </view>
       </view>
       <view v-if="thinking" class="msg-row assistant">
         <view class="bubble assistant">
           <text class="msg-text">🌙 正在查看你的星图……</text>
         </view>
       </view>
-      <view v-if="feedbackNote" class="growth-note"><text>✦</text><text>{{ feedbackNote }}</text></view>
 
       <view v-if="!sentOnce && !thinking" class="quick-zone">
         <text class="quick-lead">不知道从哪开始，也可以：</text>
@@ -50,12 +72,27 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
-import api, { ApiError } from "@/api/client";
+import api, { ApiError, type ChatOut, type ReportIntentIn } from "@/api/client";
 import SpiritPortrait from "@/components/SpiritPortrait.vue";
+import { selectSpirit } from "@/utils/spiritSelection";
 import { useTimePhase } from "@/utils/timeTheme";
 
-const PERSON_KEY = "gs_person_id";
-const SESSION_KEY = "gs_session_id";
+import { cacheChatSessionId, clearAccountCache, getChatSessionId, requireSelfPersonId } from "@/utils/account";
+
+type LoopAction = "mailbox" | "fragments" | "followup" | "report";
+interface LoopCard {
+  key: string;
+  icon: string;
+  title: string;
+  desc: string;
+  action?: LoopAction;
+  actionText?: string;
+}
+interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+  loopCards?: LoopCard[];
+}
 
 const spiritName = ref("星灵");
 const draft = ref("");
@@ -63,11 +100,13 @@ const thinking = ref(false);
 const scrollTo = ref("");
 const trustLabel = ref("");
 const sentOnce = ref(false);
-const messages = ref<Array<{ role: "user" | "assistant"; text: string }>>([]);
-const quickOptions = ["我最近有点累", "想问问工作的事", "随便聊聊"];
+const messages = ref<ChatMessage[]>([]);
+const quickOptions = ["我最近有点累", "想聊聊心里的事", "随便聊聊"];
 const persona = ref<string | undefined>();
-const feedbackNote = ref("");
 const spiritPlanet = ref("moon");
+const pendingSeedMessage = ref("");
+const pendingReportIntent = ref<ReportIntentIn | null>(null);
+const personId = ref("");
 const { phaseClass, refreshPhase } = useTimePhase();
 
 const todayStr = (() => {
@@ -84,29 +123,46 @@ const TRUST_ZH: Record<string, string> = {
   intimate: "深交",
 };
 
-const PLANET_ZH: Record<string, string> = {
-  sun: "太阳星灵", moon: "月亮星灵", mercury: "水星星灵", venus: "金星星灵",
-  mars: "火星星灵", jupiter: "木星星灵", saturn: "土星星灵", uranus: "天王星灵",
-  neptune: "海王星灵", pluto: "冥王星灵",
-};
+function queryString(query: Record<string, unknown> | undefined, key: string) {
+  const value = query?.[key];
+  return typeof value === "string" ? decodeURIComponent(value).trim() : "";
+}
 
-onLoad(() => {
+function parseReportIntent(query: Record<string, unknown> | undefined): ReportIntentIn | null {
+  const entryTopicKey = queryString(query, "entry_topic_key");
+  if (!entryTopicKey) return null;
+  const secondary = queryString(query, "secondary_topics");
+  return {
+    entry_source: "observatory",
+    entry_topic_key: entryTopicKey,
+    primary_topic: queryString(query, "primary_topic") || undefined,
+    secondary_topics: secondary ? secondary.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+    intent_shape: queryString(query, "intent_shape") as ReportIntentIn["intent_shape"] || undefined,
+    report_type: queryString(query, "report_type") as ReportIntentIn["report_type"] || undefined,
+    user_focus_text: queryString(query, "user_focus_text") || queryString(query, "message") || undefined,
+  };
+}
+
+onLoad(async (query) => {
   refreshPhase();
-  const pid = uni.getStorageSync(PERSON_KEY) as string;
-  if (!pid) {
-    uni.redirectTo({ url: "/pages/index/index" });
-    return;
-  }
+  const seeded = queryString(query, "message");
+  pendingSeedMessage.value = seeded.trim();
+  pendingReportIntent.value = parseReportIntent(query);
+  const pid = await requireSelfPersonId();
+  if (!pid) return;
+  personId.value = pid;
 
-  // 今日星灵（顶部身份与开场口吻与之对齐；失败安静回退默认人格）
-  api
-    .recommendedSpirits(pid)
-    .then((rec) => {
-      const top = rec.spirits?.[0];
-      if (!top) return;
-      persona.value = top.planet;
-      spiritPlanet.value = top.planet.toLowerCase();
-      spiritName.value = top.healing_name || top.name || PLANET_ZH[top.planet?.toLowerCase()] || "星灵";
+  // 常驻星灵优先；没有 preferred_persona 时，才用今日推荐作为本次陪伴人格。
+  Promise.allSettled([api.getPreferences(pid), api.recommendedSpirits(pid), api.personas()])
+    .then(([prefsRes, recRes, personasRes]) => {
+      const selection = selectSpirit({
+        preferredPersona: prefsRes.status === "fulfilled" ? prefsRes.value?.preferred_persona : "",
+        recommendations: recRes.status === "fulfilled" ? recRes.value.spirits : [],
+        personas: personasRes.status === "fulfilled" ? personasRes.value : [],
+      });
+      persona.value = selection.planet;
+      spiritPlanet.value = selection.planet;
+      spiritName.value = selection.name;
       return api.opening(pid, persona.value);
     })
     .then((o) => {
@@ -117,7 +173,12 @@ onLoad(() => {
     .catch(() => undefined)
     .finally(() => {
       if (!messages.value.length) {
-        messages.value.push({ role: "assistant", text: "今天想聊点什么？事业、感情、还是最近的心情？" });
+        messages.value.push({ role: "assistant", text: "今天想聊点什么？可以说一个具体问题，也可以只说最近的心情。" });
+      }
+      if (pendingSeedMessage.value) {
+        draft.value = pendingSeedMessage.value;
+        pendingSeedMessage.value = "";
+        setTimeout(() => { void send(); }, 240);
       }
     });
 });
@@ -131,25 +192,27 @@ async function send() {
   thinking.value = true;
   scrollTo.value = "bottom";
 
-  const pid = uni.getStorageSync(PERSON_KEY) as string;
-  const session = (uni.getStorageSync(SESSION_KEY) as string) || undefined;
+  const pid = personId.value || await requireSelfPersonId();
+  if (!pid) return;
+  personId.value = pid;
+  const session = getChatSessionId();
   try {
-    const res = await api.chat({ person_id: pid, session_id: session, message: text, persona: persona.value });
-    uni.setStorageSync(SESSION_KEY, res.session_id);
-    messages.value.push({ role: "assistant", text: res.answer });
-    const parts: string[] = [];
-    if (res.lit_fragments?.length) parts.push(`点亮 ${res.lit_fragments.length} 个内在角落`);
-    if (res.seen_fragments?.length) parts.push("星灵记住了你的确认");
-    if (res.actioned_fragments?.length) parts.push("这次行动也被收进成长里");
-    if (res.keepsake_created) parts.push("一封新的记忆来信已放进信箱");
-    feedbackNote.value = parts.join(" · ");
-    if (feedbackNote.value) setTimeout(() => { feedbackNote.value = ""; }, 5200);
+    const res = await api.chat({
+      person_id: pid,
+      session_id: session,
+      message: text,
+      persona: persona.value,
+      report_intent: pendingReportIntent.value || undefined,
+    });
+    cacheChatSessionId(res.session_id);
+    pendingReportIntent.value = null;
+    messages.value.push({ role: "assistant", text: res.answer, loopCards: buildLoopCards(res) });
   } catch (e: any) {
-    if (e instanceof ApiError && e.status === 404) {
-      // 用户档案过期/被清（如后端数据重建）→ 回建档页重新开始
-      uni.removeStorageSync(PERSON_KEY);
-      uni.removeStorageSync(SESSION_KEY);
-      uni.reLaunch({ url: "/pages/index/index" });
+    if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
+      // 用户档案过期/被清/旧密钥不可解 → 回建档页重新开始
+      clearAccountCache();
+      uni.showToast({ title: e.status === 410 ? "当前档案已无法解密，请重新登录建档" : "这个花园已经找不到了", icon: "none" });
+      uni.reLaunch({ url: "/pages/auth/login" });
       return;
     }
     messages.value.push({
@@ -162,6 +225,79 @@ async function send() {
     thinking.value = false;
     scrollTo.value = "bottom";
   }
+}
+
+function buildLoopCards(res: ChatOut): LoopCard[] {
+  const cards: LoopCard[] = [];
+  const litCount = res.lit_fragments?.length || 0;
+  const seenCount = res.seen_fragments?.length || 0;
+  const actionCount = res.actioned_fragments?.length || 0;
+
+  if (litCount) {
+    cards.push({
+      key: "lit",
+      icon: "✦",
+      title: `点亮 ${litCount} 个内在角落`,
+      desc: "这些碎片已进入自我星盘轮，之后可以在宇宙里慢慢回看。",
+      action: "fragments",
+      actionText: "看碎片",
+    });
+  }
+  if (seenCount) {
+    cards.push({
+      key: "seen",
+      icon: "✓",
+      title: "这次确认，星灵记住了",
+      desc: "被你确认过的判断会进入信任层，让花园以后更懂你。",
+      action: "fragments",
+      actionText: "看沉淀",
+    });
+  }
+  if (actionCount) {
+    cards.push({
+      key: "action",
+      icon: "✹",
+      title: "行动进入成长账本",
+      desc: "真正做出来的改变，会让对应碎片继续发光。",
+      action: "fragments",
+      actionText: "看成长",
+    });
+  }
+  if (res.keepsake_created) {
+    cards.push({
+      key: "keepsake",
+      icon: "✉",
+      title: "新的记忆来信已放进信箱",
+      desc: "这段重要的话被保存成可以回看的记忆资产。",
+      action: "mailbox",
+      actionText: "去信箱",
+    });
+  }
+  return cards;
+}
+
+function handleLoopAction(action?: LoopAction) {
+  if (action === "mailbox") return openMailbox();
+  if (action === "fragments") return openFragments();
+  if (action === "followup") return continueAsking();
+  if (action === "report") return reportComingSoon();
+}
+
+function openMailbox() {
+  uni.reLaunch({ url: "/pages/mailbox/mailbox" });
+}
+
+function openFragments() {
+  uni.navigateTo({ url: "/pages/universe/wheel" });
+}
+
+function continueAsking() {
+  draft.value = "我想继续追问刚才这一点。";
+  scrollTo.value = "bottom";
+}
+
+function reportComingSoon() {
+  uni.showToast({ title: "报告整理后续接入证据链", icon: "none" });
 }
 
 function sendQuick(q: string) {
@@ -188,12 +324,25 @@ function sendQuick(q: string) {
 .trust-tag { margin-left: auto; flex-shrink: 0; color: rgba(165, 214, 167, 0.9); font-size: 21rpx; background: rgba(124, 179, 66, 0.16); border: 1rpx solid rgba(165, 214, 167, 0.22); border-radius: 999rpx; padding: 8rpx 18rpx; }
 .messages { flex: 1; padding: 12rpx 32rpx; box-sizing: border-box; position: relative; z-index: 1; }
 .time-divider { text-align: center; font-size: 19rpx; color: rgba(235, 241, 233, 0.35); margin: 14rpx 0 30rpx; }
-.msg-row { display: flex; margin-bottom: 26rpx; }
-.msg-row.user { justify-content: flex-end; }
+.msg-row { display: flex; flex-direction: column; margin-bottom: 26rpx; }
+.msg-row.user { align-items: flex-end; }
+.msg-row.assistant { align-items: flex-start; }
 .bubble { max-width: 84%; border-radius: 40rpx 40rpx 40rpx 12rpx; padding: 28rpx 32rpx; }
 .bubble.user { border-radius: 40rpx 40rpx 12rpx 40rpx; background: #637b6e; color: #f8f7ee; }
 .bubble.assistant { background: rgba(255, 255, 255, 0.075); border: 1rpx solid rgba(255, 255, 255, 0.09); color: #edf1e9; }
 .msg-text { font-family: Georgia, "Noto Serif SC", serif; font-size: 29rpx; line-height: 1.9; white-space: pre-wrap; word-break: break-word; }
+.loop-panel { width: 86%; margin-top: 14rpx; padding: 24rpx; box-sizing: border-box; border-radius: 30rpx; border: 1rpx solid rgba(240, 210, 139, 0.2); background: linear-gradient(145deg, rgba(240, 210, 139, 0.13), rgba(255, 255, 255, 0.055)); box-shadow: 0 18rpx 58rpx rgba(0, 0, 0, 0.12); }
+.loop-kicker { display: block; font-size: 17rpx; letter-spacing: 0.14em; color: rgba(240, 210, 139, 0.62); font-weight: 800; }
+.loop-heading { display: block; margin-top: 8rpx; margin-bottom: 16rpx; color: #fff7e7; font-family: Georgia, "Noto Serif SC", serif; font-size: 27rpx; font-weight: 600; }
+.loop-card { display: flex; align-items: center; gap: 16rpx; padding: 18rpx 0; border-top: 1rpx solid rgba(255, 255, 255, 0.08); }
+.loop-icon { width: 46rpx; height: 46rpx; flex-shrink: 0; border-radius: 50%; background: rgba(240, 210, 139, 0.16); color: #f0d28b; display: flex; align-items: center; justify-content: center; font-size: 24rpx; }
+.loop-copy { flex: 1; min-width: 0; }
+.loop-title { display: block; color: rgba(255, 247, 231, 0.9); font-size: 24rpx; font-weight: 650; }
+.loop-desc { display: block; margin-top: 6rpx; color: rgba(235, 241, 233, 0.46); font-size: 20rpx; line-height: 1.55; }
+.loop-action { flex-shrink: 0; color: #f0d28b; font-size: 20rpx; }
+.loop-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin-top: 12rpx; }
+.loop-btn { min-height: 58rpx; padding: 0; margin: 0; border-radius: 18rpx; background: rgba(255, 247, 231, 0.13); color: rgba(255, 247, 231, 0.84); font-size: 20rpx; line-height: 58rpx; }
+.loop-btn.ghost { color: rgba(240, 210, 139, 0.78); background: rgba(240, 210, 139, 0.08); }
 .quick-zone { margin-top: 34rpx; padding-bottom: 10rpx; }
 .quick-lead { display: block; font-size: 22rpx; color: rgba(235, 241, 233, 0.45); margin-bottom: 16rpx; }
 .quick-row { display: flex; flex-wrap: wrap; gap: 16rpx; }
@@ -202,5 +351,4 @@ function sendQuick(q: string) {
 .composer-input { flex: 1; min-height: 96rpx; background: rgba(255, 255, 255, 0.09); border: 1rpx solid rgba(255, 255, 255, 0.1); border-radius: 44rpx; padding: 0 36rpx; color: #edf1e9; font-size: 27rpx; }
 .composer-send { width: 84rpx; height: 84rpx; flex-shrink: 0; border-radius: 30rpx; background: #b8c8b7; color: #253a36; font-size: 36rpx; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 1; }
 .composer-send[disabled] { opacity: 0.5; }
-.growth-note { display: flex; align-items: center; justify-content: center; gap: 10rpx; margin: 6rpx 32rpx 12rpx; padding: 14rpx 18rpx; border: 1rpx solid rgba(240, 210, 139, 0.2); border-radius: 999rpx; background: rgba(240, 210, 139, 0.08); color: rgba(240, 210, 139, 0.82); font-size: 20rpx; }
 </style>

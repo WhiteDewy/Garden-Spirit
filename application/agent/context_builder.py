@@ -72,6 +72,18 @@ class SessionContext:
         #: A2 关系层：本条消息是否命中纯问候/闲聊快路径（_detect_chat）。
         #: 该路径在意图解析之前返回，没有 Intent 可查，故用标志位识别 casual 信号。
         self.last_was_chat: bool = False
+        #: 主题观星台 → Chat 的报告型意图入口上下文。
+        #: 只作为意图路由/澄清素材，不承载也不生成占星结论。
+        self.report_intent: dict | None = None
+
+    def begin_turn(self) -> None:
+        """重置本轮输出状态，保留可用于追问消解的会话上下文。"""
+        self.latest_conclusion = None
+        self.emotion_result = None
+        self.last_was_companion = False
+        self.fragments = []
+        self.planet_activation = None
+        self.last_was_chat = False
 
     def to_intent_context(self) -> dict:
         """蒸馏上下文：供 IntentParser 消解追问（如"那明年呢？"）。
@@ -103,6 +115,7 @@ class SessionContext:
             "active_house": self.pending_focus_house,
             # 宫位深挖待验证（规则层确认检测用；LLM 走 intent_type=confirmation）
             "pending_house_verify": self.pending_house_verify,
+            "report_intent": self.report_intent,
             "recent_turns": recent_turns,
         }
 

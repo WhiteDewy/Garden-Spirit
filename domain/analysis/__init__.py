@@ -6,6 +6,7 @@
 from domain.analysis.base import AnalysisModule
 from domain.analysis.career_strength import CareerStrength
 from domain.analysis.daily import Daily
+from domain.analysis.daily_reminder import DailyReminder, DailyReminderEngine
 from domain.analysis.finance import Finance
 from domain.analysis.life_domains import Emotion, Family, Health, Learning
 from domain.analysis.marriage_potential import MarriagePotential
@@ -34,6 +35,8 @@ __all__ = [
     "RelationshipStatus",
     "MarriagePotential",
     "Daily",
+    "DailyReminder",
+    "DailyReminderEngine",
     "Health",
     "Emotion",
     "Family",

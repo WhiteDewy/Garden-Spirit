@@ -40,7 +40,8 @@ def test_daily_letter_created_and_idempotent():
 
     l2 = service.get_or_create_daily(p)  # 同一天再取 → 同一封
     assert l1.id == l2.id
-    assert len(service.list(p.id)) == 1
+    items, total = service.list(p.id)
+    assert total == 1 and len(items) == 1
 
 
 def test_daily_letter_different_person():
@@ -50,15 +51,16 @@ def test_daily_letter_different_person():
     la = service.get_or_create_daily(a)
     lb = service.get_or_create_daily(b)
     assert la.id != lb.id
-    assert len(service.list(a.id)) == 1
+    items, _ = service.list(a.id)
+    assert len(items) == 1
 
 
 def test_inbox_lists():
     service = _make_service()
     p = _make_person()
     service.get_or_create_daily(p)
-    letters = service.list(p.id)
-    assert len(letters) == 1
+    letters, total = service.list(p.id)
+    assert total == 1
     assert letters[0].sender == "moon"  # 无行运 → 默认月亮来信
 
 

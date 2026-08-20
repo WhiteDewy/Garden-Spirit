@@ -21,7 +21,7 @@ class EphemerisConfig:
 
     ephemeris_path: str = "./data/ephemeris"
     zodiac: ZodiacType = ZodiacType.TROPICAL        # v1 决策：回归黄道
-    default_house_system: HouseSystem = HouseSystem.PLACIDUS  # v1 决策：象限制
+    default_house_system: HouseSystem = HouseSystem.ALCABITIUS  # 产品默认：阿卡比特
     ayanamsa: str = "lahiri"                        # 仅 SIDEREAL 时使用
 
 
@@ -73,9 +73,15 @@ class StorageConfig:
     """出生数据持久化配置（PRD §8 红线：加密存储）。"""
 
     db_path: str = "./data/garden_spirit.db"
-    #: 加密密钥（Fernet key，base64 url-safe）。留空 → 自动生成随机密钥（仅开发）。
-    #: 生产必须通过环境变量 GS_ENCRYPTION_KEY 提供。
+    #: 加密密钥（Fernet key，base64 url-safe）。生产必须通过环境变量 GS_ENCRYPTION_KEY 提供。
+    #: create_app 对持久化文件库会 fail-fast；仅 :memory: 测试允许底层随机开发密钥。
     encryption_key: str = ""
+
+    def __post_init__(self) -> None:
+        import os
+
+        if not self.encryption_key:
+            self.encryption_key = os.getenv("GS_ENCRYPTION_KEY", "")
 
 
 @dataclass
@@ -120,3 +126,9 @@ class AppConfig:
     #: 返回盘（日返/月返）默认排盘地点：birth_place（默认出生地）/ current_place
     #: 留作后期可改——宫位随地点变，改这里即可全局切换
     return_chart_location: str = "birth_place"
+
+    def __post_init__(self) -> None:
+        import os
+
+        if not self.debug:
+            self.debug = os.getenv("GS_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")

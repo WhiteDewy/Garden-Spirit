@@ -22,7 +22,7 @@ from shared.models import BirthData, Chart, ChartPlanet, EclipticPosition, GeoLo
 
 
 def _venus_virgo_5th_house_chart() -> Chart:
-    """金星处女 10.5°：五宫恋爱切片的 governor 混合尊贵回归盘。"""
+    """金星处女 10.5°：五宫恋爱切片的 carrier 混合尊贵回归盘。"""
     now = datetime.now(timezone.utc)
     return Chart(
         id="house_venus_virgo_mixed",
@@ -131,8 +131,8 @@ def test_dual_track_good_bad_not_netted(chart, engine):
     assert not any("学霸" in r for r in gaoxue.resonance)
 
 
-def test_governor_mixed_debility_keeps_signification_tracks_split(engine):
-    """词级 governor 也必须吉凶分轨：金星处女不能把落陷证据塞进正向恋爱切片。"""
+def test_carrier_mixed_debility_keeps_signification_tracks_split(engine):
+    """词级 carrier 必须吉凶分轨：金星处女不能把落陷证据塞进正向恋爱切片。"""
     items = engine.interpret(_venus_virgo_5th_house_chart(), "relationship", houses=[5], max_items=20)
     romance = next(i for i in items if "恋爱" in i.word or "浪漫" in i.word)
 
@@ -140,11 +140,83 @@ def test_governor_mixed_debility_keeps_signification_tracks_split(engine):
     assert any("金星尊贵" in ev for ev in romance.evidence)
     assert not any("受克" in ev or "落陷" in ev or "失势" in ev for ev in romance.evidence)
 
-    _gpos, gneg, _gov_pos_ev, gov_neg_ev = engine._governor_quality(
+    _gpos, gneg, _carrier_pos_ev, carrier_neg_ev = engine._carrier_quality(
         _venus_virgo_5th_house_chart(), ["venus"]
     )
     assert gneg > 0
-    assert any("金星受克" in ev for ev in gov_neg_ev)
+    assert any("金星受克" in ev for ev in carrier_neg_ev)
+
+
+def test_entry_governors_are_legacy_metadata_not_runtime_carriers(engine):
+    """R10 防回潮：词条 governors 只是迁移期备注，不参与运行时强度计算。"""
+    chart = _venus_virgo_5th_house_chart()
+    dynamic_tokens = engine._carrier_tokens(chart, 5, "relationship")
+    gpos, gneg, _pos_ev, _neg_ev = engine._carrier_quality(chart, dynamic_tokens)
+    venus_entry = {"polarity": "positive", "intensity": 2, "governors": ["venus"]}
+    saturn_entry = {"polarity": "positive", "intensity": 2, "governors": ["saturn"]}
+
+    venus_strength = engine._strength(chart, 5, venus_entry, pos=0.0, neg=0.0, gpos=gpos, gneg=gneg)
+    saturn_strength = engine._strength(chart, 5, saturn_entry, pos=0.0, neg=0.0, gpos=gpos, gneg=gneg)
+
+    assert venus_strength == saturn_strength
+    assert "venus" in dynamic_tokens
+
+
+def test_enrichment_carriers_are_runtime_authority(engine):
+    """R10 防回潮：ConsultCallPlan enrichment 必须进入运行时承载者。"""
+    chart = _venus_virgo_5th_house_chart()
+    baseline_tokens = engine._carrier_tokens(chart, 6, "health")
+    enriched_tokens = engine._carrier_tokens(
+        chart,
+        6,
+        "health",
+        enrichment={"focus_planets": ["venus"]},
+    )
+
+    assert "venus" not in baseline_tokens
+    assert "venus" in enriched_tokens
+
+    baseline_gpos, baseline_gneg, _baseline_pos_ev, _baseline_neg_ev = engine._carrier_quality(
+        chart, baseline_tokens
+    )
+    enriched_gpos, enriched_gneg, enriched_pos_ev, enriched_neg_ev = engine._carrier_quality(
+        chart, enriched_tokens
+    )
+
+    assert (baseline_gpos, baseline_gneg) == (0.0, 0.0)
+    assert enriched_gpos > baseline_gpos
+    assert enriched_gneg > baseline_gneg
+    assert any("金星尊贵" in ev for ev in enriched_pos_ev)
+    assert any("金星受克" in ev for ev in enriched_neg_ev)
+
+
+def test_enrichment_carriers_ignore_invalid_house_placement(engine):
+    """损坏的 enrichment 宫号不应让确定性语义场解释崩溃。"""
+    chart = _venus_virgo_5th_house_chart()
+    baseline = engine._carrier_tokens(
+        chart,
+        5,
+        "relationship",
+        enrichment={
+            "focus_planets": ["venus"],
+            "house_lord_placements": [{"house": "5", "lord": "venus"}],
+        },
+    )
+    tokens = engine._carrier_tokens(
+        chart,
+        5,
+        "relationship",
+        enrichment={
+            "focus_planets": ["venus"],
+            "house_lord_placements": [
+                {"house": "not-a-house", "lord": "mars"},
+                {"house": "5", "lord": "venus"},
+            ],
+        },
+    )
+
+    assert "venus" in tokens
+    assert tokens == baseline
 
 
 def test_mercury_affliction_drags_learning_houses(chart, engine):

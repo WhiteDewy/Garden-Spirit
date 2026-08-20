@@ -81,18 +81,18 @@ def test_per_user_house_system():
 
     # 高纬出生（象限制分歧明显：太阳 2↔3宫）
     user = make_person("hs1", 1985, 12, 21, 3, 15, lat=59.9139, lon=10.7522)
-    # 默认 Placidus
-    chart_p = NatalChartCalculator().compute(user)
-    sun_p = chart_p.planets["sun"].house.house
-    assert chart_p.house_system == HouseSystem.PLACIDUS
-
-    # 该用户改用阿卡比特
-    user.house_system = HouseSystem.ALCABITIUS
+    # 产品默认阿卡比特
     chart_b = NatalChartCalculator().compute(user)
     sun_b = chart_b.planets["sun"].house.house
     assert chart_b.house_system == HouseSystem.ALCABITIUS
-    # 两个系统至少有一个行星落宫不同（高纬下 Sun 在 2/3 宫间移动）
-    assert sun_p != sun_b or True  # 至少系统标记正确
+
+    # 仍可按用户偏好显式改用 Placidus
+    user.house_system = HouseSystem.PLACIDUS
+    chart_p = NatalChartCalculator().compute(user)
+    sun_p = chart_p.planets["sun"].house.house
+    assert chart_p.house_system == HouseSystem.PLACIDUS
+    # 两个系统至少保留独立系统标记；星座不随宫制变化
+    assert sun_p != sun_b or True
     assert chart_b.planets["sun"].sign.sign == chart_p.planets["sun"].sign.sign  # 星座不变
 
 

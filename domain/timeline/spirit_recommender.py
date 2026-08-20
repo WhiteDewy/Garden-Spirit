@@ -110,7 +110,7 @@ def score_spirits(
     for p in PLANETS_IN_ORDER:
         if p in SE_PLANET_IDS:
             transit_positions[p] = swe_wrap.planet_full(jd, p)["longitude"]
-    hs = house_system or HouseSystem.PLACIDUS
+    hs = house_system or HouseSystem.ALCABITIUS
     hs_val = hs.value if hasattr(hs, "value") else str(hs)
     cusps = swe_wrap.house_cusps(jd, latitude, longitude, hs_val)["cusps"]
     angular_transits = {

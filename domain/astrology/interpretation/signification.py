@@ -2,8 +2,8 @@
 
 同一宫位是多义词（语义场）。三步把控：
 ① 语境选择：问题域（domain）过滤 → 该宫位只激活相关含义（防关键词倾倒）
-② per-signification 调制：每个含义按自己的 governors 主星状态算强度
-   （词级基础 × governor 对应正/负轴 × 宫结构加权贡献），不按整宫单一状态平摊
+② per-signification 调制：每个含义按动态承载者（实盘宫主/宫内星/领域征象星）算强度
+   （词级基础 × carrier 对应正/负轴 × 宫结构加权贡献），不按整宫单一状态平摊
 ③ 收敛门槛：event（事件预言）条目需强连接收敛数达标才发射；tendency 默认
 
 宫主飞宫（含宫头末度）→ 飞行增强；共振词挂在解读上（LLM 只转述，不发明）。
@@ -18,7 +18,7 @@ from shared.models import Chart
 
 from domain.astrology.common import assess_planet, house_lord
 from domain.astrology.knowledge import DignityEngine
-from domain.astrology.knowledge.loader import KnowledgeBase
+from domain.astrology.knowledge.loader import KnowledgeBase, domain_planet_roles
 from domain.astrology.interpretation.models import SignificationItem
 from domain.astrology.interpretation.synapsis import ConnectionClassifier, effective_house
 
@@ -44,10 +44,12 @@ class HouseSignificationEngine:
         domain: str,
         houses: list[int] | None = None,
         max_items: int = 8,
+        enrichment: dict | None = None,
     ) -> list[SignificationItem]:
         """按问题域激活各宫位语义场，产出排序后的解读条目。
 
         domain: career / relationship / wealth / health / emotion / family / learning / self
+        enrichment: 可选 ConsultCallPlan/DecomposedIntent 承载者；只决定读哪些星，评分仍走 assess_planet。
         """
         items: list[SignificationItem] = []
         for house in range(1, 13):
@@ -60,8 +62,9 @@ class HouseSignificationEngine:
             pos, neg, pos_ev, neg_ev = self._house_quality_dual(chart, house)
             conn_evidence = self._house_connection_evidence(chart, house)
             for e in eligible:
-                # per-signification 调制：每个含义按自己的 governors 单独算强度，且按正/负/中性语义切片取对应轨道。
-                gpos, gneg, gov_pos_ev, gov_neg_ev = self._governor_quality(chart, e.get("governors") or [])
+                # per-signification 调制：按本轮动态承载者（实盘宫主/宫内星/领域征象星）算强度，且按正/负/中性语义切片取对应轨道。
+                carriers = self._carrier_tokens(chart, house, domain, enrichment)
+                gpos, gneg, gov_pos_ev, gov_neg_ev = self._carrier_quality(chart, carriers)
                 strength = self._strength(chart, house, e, pos, neg, gpos, gneg)
                 if strength is None or strength < _MIN_STRENGTH:
                     continue
@@ -187,12 +190,12 @@ class HouseSignificationEngine:
         """per-signification 调制（领域引擎 v2 §5）。
 
         含义强度 = 词级基础(intensity)
-                 × (1 + governor 对应正/负轴 × 0.4，最低保 0.15)  # governors 状态（词级，占主导）
+                 × (1 + carrier 对应正/负轴 × 0.4，最低保 0.15)  # 动态承载者状态（词级，占主导）
                  × (1 + 宫极性贡献 × 0.25)                 # 宫结构只贡献一部分，不独占
                  + 飞宫增强
 
-        修复整宫状态平摊：3宫强时，手足(governor=3rd_lord)吃宫主土星的旺，
-        表达(governor=水星)吃水星自己的克——两顶帽子各论各的，互不污染。
+        修复整宫状态平摊：同一宫的不同含义不共用“整宫净值”。本轮问题先解析
+        实盘宫主/宫内星/领域征象星，再逐条按承载者吉凶两轨调制，互不污染。
         """
         base = float(entry.get("intensity", 2))
         pol = entry.get("polarity", "neutral")
@@ -220,24 +223,84 @@ class HouseSignificationEngine:
 
         return round(s, 2)
 
-    # -- per-signification 主星 -------------------------------------------
+    # -- per-signification 承载者 -------------------------------------------
 
-    def _governor_quality(
-        self, chart: Chart, governors: list[str]
+    def _carrier_tokens(
+        self,
+        chart: Chart,
+        house: int,
+        domain: str,
+        enrichment: dict | None = None,
+    ) -> list[str]:
+        """本轮问题的动态承载者：实盘宫主/宫内星/领域征象星。"""
+        tokens: list[str] = []
+
+        def add(value) -> None:
+            if value in (None, ""):
+                return
+            if isinstance(value, Planet):
+                token = value.value
+            elif isinstance(value, int):
+                token = self._lord_token(value)
+            else:
+                token = str(value)
+            if token not in tokens:
+                tokens.append(token)
+
+        # 当前语义宫的实际宫主 + 宫内星，是 house consult 的最小动态地基。
+        add(self._lord_token(house))
+        for pl, cp in chart.planets.items():
+            if pl in _MEANINGFUL and cp.house.house == house:
+                add(pl)
+
+        # 领域自然征象星来自 planet_nature.domain_signals，保持唯一知识源。
+        core, supporting = domain_planet_roles(self._kb.planet_nature, domain)
+        for token in [*core, *supporting]:
+            add(token)
+
+        if enrichment:
+            for key in ("focus_house_lords", "focus_houses"):
+                for h in enrichment.get(key) or []:
+                    try:
+                        add(self._lord_token(int(h)))
+                    except (TypeError, ValueError):
+                        continue
+            for key in ("house_lord_planets", "house_occupants", "focus_planets"):
+                for token in enrichment.get(key) or []:
+                    add(token)
+            for placement in enrichment.get("house_lord_placements") or []:
+                if not isinstance(placement, dict):
+                    continue
+                try:
+                    placement_house = int(placement.get("house") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if placement_house == house:
+                    add(placement.get("lord"))
+
+        return tokens
+
+    @staticmethod
+    def _lord_token(house: int) -> str:
+        """宫号 → 宫主 token（兼容既有 {n}st/nd/rd/th_lord 解析）。"""
+        suffix = "th"
+        if house % 100 not in (11, 12, 13):
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(house % 10, "th")
+        return f"{house}{suffix}_lord"
+
+    def _carrier_quality(
+        self, chart: Chart, carriers: list[str]
     ) -> tuple[float, float, list[str], list[str]]:
-        """governors 主星状态 → (吉分量, 凶分量, 吉证据, 凶证据)。
-
-        展开 {n}th_lord 宫主引用为实际宫主星（传统守卫星，common.py 已实现）。
-        天海冥可作次级关联（贡献自己的尊贵/相位），但引擎层面的掌宫/互溶排除
-        仍由 house_lord/reception 保证——这里只读它们的状态做词级调制。
-        """
+        """动态承载者状态 → (吉分量, 凶分量, 吉证据, 凶证据)。"""
         gpos, gneg = 0.0, 0.0
         pos_ev: list[str] = []
         neg_ev: list[str] = []
-        for g in governors:
-            pl = self._resolve_governor(chart, g)
-            if pl is None or pl not in chart.planets:
+        seen: set[Planet] = set()
+        for token in carriers:
+            pl = self._resolve_carrier(chart, token)
+            if pl is None or pl in seen or pl not in chart.planets:
                 continue
+            seen.add(pl)
             assessment = assess_planet(chart, self._kb, pl, self._dignity, self._classifier)
             gpos += assessment.pos
             gneg += assessment.neg
@@ -245,13 +308,13 @@ class HouseSignificationEngine:
             neg_ev.extend(self._polarity_evidence(assessment.evidence, positive=False))
         return gpos, gneg, list(dict.fromkeys(pos_ev)), list(dict.fromkeys(neg_ev))
 
-    def _resolve_governor(self, chart: Chart, governor: str) -> Planet | None:
-        """governor 取值 → 行星。'3rd_lord' → 3宫主星；具体行星名（'mercury'）→ 该行星。"""
-        m = re.fullmatch(r"(\d+)(?:st|nd|rd|th)_lord", governor)
+    def _resolve_carrier(self, chart: Chart, carrier: str) -> Planet | None:
+        """carrier token → 行星。'3rd_lord' → 实盘 3 宫主星；'mercury' → 水星。"""
+        m = re.fullmatch(r"(\d+)(?:st|nd|rd|th)_lord", carrier)
         if m:
             return house_lord(chart, self._kb, int(m.group(1)))
         try:
-            return Planet(governor)
+            return Planet(carrier)
         except ValueError:
             return None
 

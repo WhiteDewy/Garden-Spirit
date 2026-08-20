@@ -47,11 +47,58 @@
       <view class="entry" @tap="goConsult">
         <text class="entry-ico">♀</text>
         <view class="entry-body">
-          <text class="entry-title">星盘咨询</text>
-          <text class="entry-sub">{{ findingLabel }}</text>
-          <text class="entry-desc">大领域 · 深度解读 · 带着星盘的视角看生活的难题</text>
+          <text class="entry-title">主题观星台</text>
+          <text class="entry-sub">主题问题 · 后端证据链</text>
+          <text class="entry-desc">只承接已沉淀的星图线索，不前端生成结论</text>
         </view>
         <text class="entry-arrow">›</text>
+      </view>
+      <view class="entry" @tap="focusCalibration">
+        <text class="entry-ico">✓</text>
+        <view class="entry-body">
+          <text class="entry-title">沉淀判断</text>
+          <text class="entry-sub">{{ findingLabel }}</text>
+          <text class="entry-desc">待验证 / 已确认的理解，会在这里继续校准</text>
+        </view>
+        <text class="entry-arrow">↓</text>
+      </view>
+    </view>
+
+    <view v-if="calibrationVisible" id="calibration" class="calibration-panel">
+      <view class="calibration-head">
+        <text class="calibration-kicker">CALIBRATION · 沉淀判断</text>
+        <text class="calibration-title">这些理解，需要你来校准。</text>
+        <text class="calibration-copy">花园不会替你下定论。你点头或摇头，都会让之后的陪伴更贴近真实的你。</text>
+      </view>
+
+      <view v-if="pendingFindings.length" class="finding-list">
+        <view v-for="f in pendingFindings" :key="f.id" class="finding-card pending">
+          <view class="finding-top">
+            <text class="finding-tag">待校准</text>
+            <text class="finding-conf">{{ Math.round(f.confidence * 100) }}% 把握</text>
+          </view>
+          <text class="finding-statement">{{ f.statement }}</text>
+          <view v-if="f.verification_notes?.length" class="finding-notes">
+            <text v-for="(n, i) in f.verification_notes.slice(0, 2)" :key="i" class="finding-note">· {{ n }}</text>
+          </view>
+          <view class="finding-actions">
+            <button class="finding-btn yes" :disabled="verifyingId === f.id" @tap.stop="verifyFinding(f, 'confirmed')">✓ 对上了</button>
+            <button class="finding-btn no" :disabled="verifyingId === f.id" @tap.stop="verifyFinding(f, 'refuted')">✕ 不准确</button>
+          </view>
+        </view>
+      </view>
+
+      <view v-else class="calibration-empty">
+        <text class="empty-title">暂时没有待验证判断</text>
+        <text class="empty-copy">继续聊天或记录重要事件后，这里会出现可以一起校准的理解。</text>
+      </view>
+
+      <view v-if="verifiedFindings.length" class="verified-section">
+        <text class="verified-title">已校准的理解</text>
+        <view v-for="f in verifiedFindings.slice(0, 3)" :key="f.id" class="verified-card">
+          <text class="verified-status">{{ f.feedback === 'confirmed' ? '✓ 已确认' : f.feedback === 'refuted' ? '✕ 已修正' : '⚡ 事件验证' }}</text>
+          <text class="verified-text">{{ f.statement }}</text>
+        </view>
       </view>
     </view>
 
@@ -60,25 +107,32 @@
       先去聊一次，花园才能开始认识你。
     </text>
 
-    <BottomNav active="universe" />
+    <BottomNav active="universe" :universe-badge="pendingCount > 0" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import api from "@/api/client";
+import api, { type FindingOut } from "@/api/client";
 import BottomNav from "@/components/BottomNav.vue";
 import { useTimePhase } from "@/utils/timeTheme";
-
-const PERSON_KEY = "gs_person_id";
+import { requireSelfPersonId } from "@/utils/account";
 
 const litCount = ref(0);       // 已点亮的 34 子类数
 const findingCount = ref(0);   // 沉淀判断总数（含待验证）
+const pendingCount = ref(0);   // 待验证判断数（宇宙红点来源）
+const findings = ref<FindingOut[]>([]);
+const personId = ref("");
+const verifyingId = ref("");
+const calibrationVisible = ref(false);
 const loaded = ref(false);
 
+const pendingFindings = computed(() => findings.value.filter((f) => f.status === "unverified"));
+const verifiedFindings = computed(() => findings.value.filter((f) => f.status === "verified"));
+
 const litLabel = ref("34 子类 · 3 星区");
-const findingLabel = ref("大领域 · 深度解读");
+const findingLabel = ref("沉淀判断 · 待校准");
 const { phaseClass, refreshPhase } = useTimePhase();
 
 // 星座散点（固定伪随机，避免每次渲染跳位）
@@ -89,13 +143,14 @@ const stars = Array.from({ length: 12 }, (_, i) => ({
 
 onShow(async () => {
   refreshPhase();
-  const personId = uni.getStorageSync(PERSON_KEY) as string;
-  if (!personId) return uni.redirectTo({ url: "/pages/index/index" });
+  const pid = await requireSelfPersonId();
+  if (!pid) return;
+  personId.value = pid;
 
   // 并行拉两入口的统计，任一侧失败都不阻塞枢纽页
   const [frag, fids] = await Promise.allSettled([
-    api.fragments(personId),
-    api.findings(personId),
+    api.fragments(pid),
+    api.findings(pid),
   ]);
 
   if (frag.status === "fulfilled") {
@@ -106,11 +161,51 @@ onShow(async () => {
   }
 
   if (fids.status === "fulfilled") {
-    findingCount.value = fids.value.length;
-    findingLabel.value = `已有 ${fids.value.length} 条沉淀判断`;
+    applyFindings(fids.value);
+    calibrationVisible.value = findingCount.value > 0;
   }
   loaded.value = true;
 });
+
+function applyFindings(list: FindingOut[]) {
+  findings.value = list;
+  findingCount.value = findings.value.length;
+  pendingCount.value = pendingFindings.value.length;
+  findingLabel.value = pendingCount.value
+    ? `待验证 ${pendingCount.value} 条 · 共 ${findingCount.value} 条沉淀判断`
+    : findingCount.value
+      ? `已有 ${findingCount.value} 条沉淀判断`
+      : "等你一起校准的理解";
+}
+
+async function refreshFindings() {
+  if (!personId.value) return;
+  try {
+    applyFindings(await api.findings(personId.value));
+  } catch {
+    applyFindings([]);
+  }
+}
+
+function focusCalibration() {
+  calibrationVisible.value = true;
+  uni.pageScrollTo({ selector: "#calibration", duration: 260 });
+}
+
+async function verifyFinding(f: FindingOut, feedback: "confirmed" | "refuted") {
+  if (!personId.value || verifyingId.value) return;
+  verifyingId.value = f.id;
+  try {
+    await api.feedbackFinding(personId.value, f.id, feedback);
+    await refreshFindings();
+    calibrationVisible.value = true;
+    uni.showToast({ title: feedback === "confirmed" ? "已确认这条理解" : "已记下修正", icon: "none" });
+  } catch {
+    uni.showToast({ title: "操作失败，请重试", icon: "none" });
+  } finally {
+    verifyingId.value = "";
+  }
+}
 
 function goWheel() {
   uni.navigateTo({ url: "/pages/universe/wheel" });
@@ -136,13 +231,13 @@ function goConsult() {
 @keyframes twinkle { 50% { opacity: 0.3; } }
 
 /* 星轨核心（可点：进星盘轮） */
-.orbit-zone { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); pointer-events: none; }
+.orbit-zone { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%); pointer-events: none; }
 .orbit { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1rpx solid rgba(226, 222, 198, 0.18); border-radius: 50%; }
 .orbit.one { width: 560rpx; height: 560rpx; rotate: 13deg; animation: slowSpin 60s linear infinite; }
 .orbit.two { width: 410rpx; height: 410rpx; rotate: -22deg; animation: slowSpin 48s linear reverse infinite; }
 .orbit.three { width: 250rpx; height: 250rpx; rotate: 32deg; animation: slowSpin 36s linear infinite; }
 @keyframes slowSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
-.core { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); width: 128rpx; height: 128rpx; border-radius: 50%;
+.core { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%); width: 128rpx; height: 128rpx; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff7dc, #bca873 58%, #576a77);
   box-shadow: 0 0 100rpx rgba(220, 205, 158, 0.35); display: flex; align-items: center; justify-content: center;
   font-family: Georgia, "Noto Serif SC", serif; font-size: 42rpx; color: #2c3e50; z-index: 2; }
@@ -159,7 +254,7 @@ function goConsult() {
 .title { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 52rpx; font-weight: 600; color: #eef1ea; margin-top: 6rpx; }
 .sub { display: block; position: relative; z-index: 3; font-size: 23rpx; color: rgba(238, 241, 234, 0.54); line-height: 1.7; margin-top: 12rpx; }
 
-.copy { position: relative; z-index: 3; margin-top: 74vh; margin-bottom: 40rpx; }
+.copy { position: relative; z-index: 3; margin-top: 430rpx; margin-bottom: 34rpx; }
 .copy-h { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 46rpx; font-weight: 600; color: #eef1ea; }
 .copy-p { display: block; font-family: Georgia, "Noto Serif SC", serif; font-size: 24rpx; color: rgba(238, 241, 234, 0.58); line-height: 1.8; margin: 16rpx 0 0; white-space: pre-line; }
 .explore { margin-top: 28rpx; border: 1rpx solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.06); color: #eef1ea;
@@ -177,6 +272,32 @@ function goConsult() {
 .entry-sub { display: block; margin-top: 6rpx; font-size: 23rpx; color: #b9c8bd; }
 .entry-desc { display: block; margin-top: 8rpx; font-size: 21rpx; color: rgba(238, 241, 234, 0.5); }
 .entry-arrow { color: rgba(238, 241, 234, 0.4); font-size: 44rpx; }
+
+.calibration-panel { position: relative; z-index: 3; margin-top: 22rpx; border-radius: 34rpx; padding: 30rpx 26rpx; background: rgba(255, 255, 255, 0.065); border: 1rpx solid rgba(185, 200, 189, 0.16); box-shadow: 0 22rpx 70rpx rgba(0, 0, 0, 0.12); }
+.calibration-kicker { display: block; font-size: 19rpx; letter-spacing: 0.14em; color: rgba(185, 200, 189, 0.78); font-weight: 800; }
+.calibration-title { display: block; margin-top: 12rpx; font-family: Georgia, "Noto Serif SC", serif; font-size: 31rpx; font-weight: 600; color: #f4ead7; }
+.calibration-copy { display: block; margin-top: 10rpx; color: rgba(238, 241, 234, 0.56); font-size: 22rpx; line-height: 1.7; }
+.finding-list { display: grid; gap: 16rpx; margin-top: 24rpx; }
+.finding-card { padding: 24rpx; border-radius: 28rpx; background: rgba(8, 22, 19, 0.34); border: 1rpx solid rgba(240, 210, 139, 0.14); }
+.finding-top { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; }
+.finding-tag { color: #f0d28b; font-size: 20rpx; font-weight: 700; }
+.finding-conf { color: rgba(238, 241, 234, 0.48); font-size: 19rpx; }
+.finding-statement { display: block; margin-top: 16rpx; color: #fff7e7; font-size: 25rpx; line-height: 1.7; }
+.finding-notes { display: grid; gap: 8rpx; margin-top: 14rpx; }
+.finding-note { color: rgba(238, 241, 234, 0.5); font-size: 20rpx; line-height: 1.6; }
+.finding-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14rpx; margin-top: 20rpx; }
+.finding-btn { margin: 0; padding: 18rpx 0; border-radius: 999rpx; font-size: 22rpx; line-height: 1.2; border: 1rpx solid rgba(255, 255, 255, 0.12); }
+.finding-btn::after { border: 0; }
+.finding-btn.yes { background: rgba(240, 210, 139, 0.16); color: #f8e2a7; }
+.finding-btn.no { background: rgba(255, 255, 255, 0.055); color: rgba(238, 241, 234, 0.68); }
+.calibration-empty { margin-top: 24rpx; padding: 28rpx; border-radius: 26rpx; background: rgba(255, 255, 255, 0.045); border: 1rpx dashed rgba(238, 241, 234, 0.12); }
+.empty-title { display: block; color: #eef1ea; font-size: 25rpx; font-weight: 650; }
+.empty-copy { display: block; margin-top: 10rpx; color: rgba(238, 241, 234, 0.5); font-size: 21rpx; line-height: 1.6; }
+.verified-section { margin-top: 26rpx; }
+.verified-title { display: block; color: rgba(238, 241, 234, 0.66); font-size: 21rpx; font-weight: 700; }
+.verified-card { margin-top: 14rpx; padding: 20rpx 22rpx; border-radius: 24rpx; background: rgba(255, 255, 255, 0.045); border: 1rpx solid rgba(255, 255, 255, 0.08); }
+.verified-status { display: block; color: rgba(240, 210, 139, 0.74); font-size: 19rpx; }
+.verified-text { display: block; margin-top: 8rpx; color: rgba(238, 241, 234, 0.68); font-size: 22rpx; line-height: 1.6; }
 
 .hint { position: relative; z-index: 3; display: block; color: rgba(238, 241, 234, 0.6); font-size: 25rpx; text-align: center; padding: 40rpx 0; }
 </style>

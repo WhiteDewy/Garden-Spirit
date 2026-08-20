@@ -278,7 +278,7 @@ def test_record_keepsake_saves_and_returns_signature():
     assert letter.id
     assert sig.planet is not None
     # 已落库（信箱能取到）
-    assert any(l.id == letter.id for l in svc.list(p.id))
+    assert any(l.id == letter.id for l in svc.list(p.id)[0])
     # metadata 完整（供前端"为什么点亮它"）：推导链显式可解释
     assert letter.metadata["primary_need"] == "soothed"
     assert letter.metadata["healing_name"] == "想被抱抱的我"
@@ -327,7 +327,7 @@ def test_record_memorable_creates_entry_keepsake():
     assert letter.metadata["healing_name"] == "想做梦的我"
     assert "想做梦" in letter.metadata["explain"]
     # 已落库（信箱能取到）
-    assert any(l.id == letter.id for l in svc.list(p.id))
+    assert any(l.id == letter.id for l in svc.list(p.id)[0])
 
 
 def test_record_memorable_falls_back_to_reply():

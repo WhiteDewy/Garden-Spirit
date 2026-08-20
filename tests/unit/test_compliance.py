@@ -217,8 +217,8 @@ def test_export_person_contains_all_sections(client):
     assert data["memory_items"][0]["content"] == "我想换工作"
     assert data["journal_entries"][0]["content"] == "今天有点迷茫"
     assert data["life_events"][0]["label"] == "完成事业咨询"
-    assert data["letters"][0]["body"] == "你最近睡得好吗？"
-    assert data["letters"][0]["title"] == "月亮来信"
+    seeded_letter = next(letter for letter in data["letters"] if letter["body"] == "你最近睡得好吗？")
+    assert seeded_letter["title"] == "月亮来信"
     assert data["fragment_lights"][0]["subtype_id"] == "moon_tide"
     assert data["fragment_lights"][0]["source"] == "我想换工作"
     assert data["push_subscriptions"][0]["endpoint"] == "https://push.example/ep_1"
@@ -238,6 +238,8 @@ def test_export_person_empty_has_no_crash(client):
     assert data["profile"] is None
     assert data["conversations"] == []
     assert data["memory_items"] == []
+    assert len(data["letters"]) == 1
+    assert data["letters"][0]["kind"] == "daily"
     assert data["related_persons"] == []
     assert data["exported_at"]
 

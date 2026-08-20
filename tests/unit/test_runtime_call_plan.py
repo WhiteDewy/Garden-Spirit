@@ -299,3 +299,109 @@ def test_handle_message_passes_consult_call_plan_carriers_into_plan_params(monke
     assert enrichment["house_lord_placements"][0]["lord"] == "saturn"
     assert enrichment["house_occupants"] == ["moon"]
     assert enrichment["consult_call_plan_source"] == "consult_resolver_v2"
+
+
+def test_direct_house_consult_passes_call_plan_carriers(monkeypatch):
+    """宫位直读路径也必须复用 ConsultCallPlan carriers，不能绕过动态承载者。"""
+    from shared.models import IntentSlot
+
+    intent = Intent(
+        id="i4",
+        raw_query="我的12宫财运怎么样？",
+        domain=IntentDomain.WEALTH,
+        slots={
+            "focus_house": IntentSlot(
+                name="focus_house",
+                raw_value="12宫",
+                normalized_value="12",
+            )
+        },
+    )
+    decomposed = DecomposedIntent(
+        intent=intent,
+        focus_houses=[12],
+        focus_planets=["mercury"],
+        focus_house_lords=[12],
+        focus_dimensions=["wealth"],
+    )
+    chart = SimpleNamespace(id="chart-house", house_system=HouseSystem.PLACIDUS)
+    captured: dict[str, object] = {}
+
+    class _ExecutionCallPlan:
+        def to_dict(self) -> dict:
+            return {
+                "focus_house": 12,
+                "primary_house": 12,
+                "core_houses": [12, 2],
+                "house_lords": [12, 2],
+                "natural_significators": ["jupiter"],
+                "supporting_planets": ["venus"],
+                "house_lord_planets": ["mars"],
+                "house_lord_placements": [
+                    {"house": 12, "cusp_sign": "aries", "lord": "mars", "lord_house": 2},
+                ],
+                "house_occupants": ["moon"],
+                "aspect_pairs": [["mars", "jupiter"]],
+                "source": "consult_resolver_v2",
+            }
+
+    class _Parser:
+        def parse_deep(self, message, context, mode):
+            return decomposed
+
+    class _Resolver:
+        def resolve_call_plan(self, got_intent, chart=None):
+            captured["resolver_intent"] = got_intent
+            captured["resolver_chart"] = chart
+            return _ExecutionCallPlan()
+
+    def fake_get_resolver():
+        return _Resolver()
+
+    def fake_house_conclusion(chart, got_intent, house_slot, *, deep=False, confirmed=None, enrichment=None):
+        captured["house_chart"] = chart
+        captured["house_intent"] = got_intent
+        captured["house_slot"] = house_slot
+        captured["house_deep"] = deep
+        captured["house_enrichment"] = enrichment
+        return _make_conclusion()
+
+    def fake_format_response(conclusion, got_intent, persona, chart=None, mode=None, house_focus=None, confirmed=None, call_plan=None):
+        captured["format_call_plan"] = call_plan
+        captured["format_house_focus"] = house_focus
+        return "house ok"
+
+    monkeypatch.setattr("domain.reasoning.consult.get_resolver", fake_get_resolver)
+
+    agent = object.__new__(GardenSpiritAgent)
+    agent.config = SimpleNamespace(default_persona=PersonaType.MOON)
+    agent.context_builder = ContextBuilder()
+    agent.intent_parser = _Parser()
+    agent._emotion = SimpleNamespace(perceive=lambda message: SimpleNamespace(needs_care=False))
+    agent._chart_provider = lambda got_person, house_system: chart
+    agent._house_conclusion = fake_house_conclusion
+    agent._format_response = fake_format_response
+
+    person = Person(
+        id="p1",
+        name="测试用户",
+        birth=BirthData(
+            datetime.now(timezone.utc),
+            GeoLocation(31.2, 121.5, timezone_name="Asia/Shanghai", place_name="上海"),
+        ),
+    )
+
+    assert agent.handle_message("s-house", "我的12宫财运怎么样？", person, PersonaType.MOON) == "house ok"
+
+    enrichment = captured["house_enrichment"]
+    assert captured["resolver_chart"] is chart
+    assert captured["house_chart"] is chart
+    assert captured["format_house_focus"] == 12
+    assert captured["format_call_plan"].to_dict()["source"] == "consult_resolver_v2"
+    assert enrichment["focus_houses"] == [12, 2]
+    assert enrichment["focus_house_lords"] == [12, 2]
+    assert enrichment["focus_planets"] == ["mercury", "jupiter", "venus", "mars", "moon"]
+    assert enrichment["focus_aspect_pairs"] == [["mars", "jupiter"]]
+    assert enrichment["house_lord_placements"][0]["lord"] == "mars"
+    assert enrichment["house_occupants"] == ["moon"]
+    assert enrichment["consult_call_plan_source"] == "consult_resolver_v2"

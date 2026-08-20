@@ -220,6 +220,7 @@ class GardenSpiritAgent:
         person: Person,
         persona: PersonaType | None = None,
         mode: ConsultMode | str = ConsultMode.DEEP,
+        report_intent: dict | None = None,
     ) -> str:
         """处理一条用户消息，返回助手回答。
 
@@ -227,8 +228,13 @@ class GardenSpiritAgent:
         """
         persona = persona or self.config.default_persona
         ctx = self.context_builder.get_or_create(session_id, person, persona)
+        if report_intent:
+            ctx.report_intent = report_intent
+        else:
+            ctx.report_intent = None
+        intent_context = ctx.to_intent_context()
+        ctx.begin_turn()
         ctx.record_user_message(message)
-        ctx.last_was_chat = False  # A2：每轮重置，仅本条命中闲聊才置真
 
         # 0. Safety gate（对齐 requires_clarification 短路模式）
         #    自伤/自杀信号 → 阻断占星，返回专业求助引导（PRD §9）
@@ -253,7 +259,7 @@ class GardenSpiritAgent:
 
         # 1. Intent 解析（LLM 深度拆解：领域路由 + 占星结构映射 + 任务富化）
         decomposed = self.intent_parser.parse_deep(
-            message, context=ctx.to_intent_context(), mode=mode,
+            message, context=intent_context, mode=mode,
         )
         intent = decomposed.intent
 
@@ -309,15 +315,20 @@ class GardenSpiritAgent:
                 house_slot = intent.get_slot("focus_house")
             if house_slot is not None:
                 chart = self._chart_provider(person, None)
+                from domain.reasoning.consult import get_resolver
+
+                call_plan = get_resolver().resolve_call_plan(intent, chart=chart)
+                enrichment = self._build_enrichment(decomposed, call_plan=call_plan)
                 conclusion = self._house_conclusion(
                     chart, intent, house_slot, deep=True, confirmed=intent.confirmed,
+                    enrichment=enrichment,
                 )
                 house = int(house_slot.normalized_value)
                 ctx.pending_house_verify = None
                 ctx.pending_focus_house = None
                 answer = self._format_response(
                     conclusion, intent, persona, chart=chart, mode=mode,
-                    house_focus=house, confirmed=intent.confirmed,
+                    house_focus=house, confirmed=intent.confirmed, call_plan=call_plan,
                 )
                 ctx.latest_intent = intent
                 ctx.latest_conclusion = conclusion
@@ -332,12 +343,19 @@ class GardenSpiritAgent:
         house_slot = intent.get_slot("focus_house")
         if house_slot is not None:
             chart = self._chart_provider(person, None)
+            from domain.reasoning.consult import get_resolver
+
+            call_plan = get_resolver().resolve_call_plan(intent, chart=chart)
+            enrichment = self._build_enrichment(decomposed, call_plan=call_plan)
             deep = intent.deep_dive or intent.intent_type == "follow_up_deep_dive"
-            conclusion = self._house_conclusion(chart, intent, house_slot, deep=deep)
+            conclusion = self._house_conclusion(
+                chart, intent, house_slot, deep=deep, enrichment=enrichment,
+            )
             house = int(house_slot.normalized_value)
             ctx.pending_focus_house = None
             answer = self._format_response(
-                conclusion, intent, persona, chart=chart, mode=mode, house_focus=house,
+                conclusion, intent, persona, chart=chart, mode=mode,
+                house_focus=house, call_plan=call_plan,
             )
             if deep:
                 # 证据链深挖：暂存待验证 + 追加机制问句（引导用户确认，进入收敛轮）
@@ -764,7 +782,7 @@ class GardenSpiritAgent:
 
     def _house_conclusion(
         self, chart, intent: Intent, house_slot, *, deep: bool = False,
-        confirmed: bool | None = None,
+        confirmed: bool | None = None, enrichment: dict | None = None,
     ) -> Conclusion:
         """宫位语义场解读 → Conclusion（确定性，无 LLM）。
 
@@ -787,6 +805,7 @@ class GardenSpiritAgent:
 
         items = HouseSignificationEngine(self._kb).interpret(
             chart, domain, houses=[house], max_items=10 if deep else 6,
+            enrichment=enrichment,
         )
 
         findings: list[Finding] = []

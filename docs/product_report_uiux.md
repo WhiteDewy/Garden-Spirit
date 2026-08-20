@@ -14,6 +14,7 @@
 4. [能力已具备但前端未接入（缺口表）](#四能力已具备但前端未接入)
 5. [面向 UI/UX 的能力→界面映射](#五面向-uiux-的能力界面映射)
 6. [对 UI 设计有约束的关键事实](#六对-ui-设计有约束的关键事实)
+7. [V8 Report Compiler 契约](#七v8-report-compiler-契约)
 
 ---
 
@@ -88,7 +89,7 @@
 | **Finance** | 财务支撑力？（职业视角） | 二宫主/八宫主尊贵 + 财务相位评分 |
 | **Opportunity** | 职业机会/贵人运？ | 吉星助力相位 + 11宫主/2宫主位势 |
 | **Risk** | 换工作/创业有哪些风险？ | 凶星紧张相位 + 10宫主失势 + 12宫隐患 |
-| **Timing** | 未来 N 个月哪些窗口有利/不利？ | 年度推运 + 逐月行运扫描 → 时间窗口 |
+| **Timing** | 未来 N 个月哪些窗口有利/不利？ | 法达大限/子限 + 本轮问题 targets/helpers + 逐月行运触发 → 时间窗口 |
 | **Daily** | 今天的能量天气？ | 今日快速行星对本命相位，映射到生活领域 |
 
 **文法引擎驱动模块**（配置配方驱动，内容在 YAML）：
@@ -131,6 +132,8 @@ TimelineWindow: start / end / opportunity_score / pressure_score
                 / quality(POSITIVE|NEGATIVE|NEUTRAL) / key_transits(top3) / net_score
 Timeline: windows 序列 + best_window + worst_window + overall_quality
 ```
+
+> `TimelineWindow.net_score` 是 WindowScanner 的内部/兼容聚合字段，用于窗口排序和旧前端契约；它不是用户可见的行星“净吉凶”，也不能覆盖 opportunity/pressure 双轨或法达权威。产品文案应展示窗口方向、证据与触发对象，不直接展示“净分”。
 目前 `Timeline` 模型和 WindowScanner 计算引擎都已存在，但 **API 层尚未暴露**（见 §四）。
 
 ### 2.4 叙事能力（第三层）
@@ -355,4 +358,246 @@ Timeline: windows 序列 + best_window + worst_window + overall_quality
 
 ---
 
-*报告完 · 若需进一步，可以基于本报告直接展开某个界面的信息架构 / 低保真线框图。*
+## 七、V8 Report Compiler 契约
+
+> **V8 口径**：报告不是 Chat 的替代品，也不是前端拼出来的预测页。报告是 Domain 证据链、时间线、沉淀判断、来信记忆与多轮 Chat 主题被编排后的结构化资产。
+
+本章用于承接 `docs/frontend_ia_uiux_v8.md` 的“主题观星台 / 小报告 / 标准报告 / 深度报告”规划，定义后端 Report Compiler 与前端展示之间的契约边界。当前阶段允许前端展示入口与“证据链待接入”状态，不允许生成未被后端支持的年运、月运、人生走向、婚运、桃花、事业、财富等预测结论。
+
+### 7.1 产品分层
+
+| 类型 | 用户问题 | 商品形态 | 当前支撑 | V8 建议 |
+|---|---|---|---|---|
+| 小报告 | “我最近事业卡在哪里？”“这段关系怎么看？” | 单点结构化解读，可保存，可继续聊 | `/chat` 已能给 Domain 驱动回答，但缺报告资产 API | 最先做 MVP：从一次主题 Chat / Finding 编排成短报告 |
+| 标准报告 | 情感、事业、财富、学业、自我、家庭 / 亲子 | 完整主题章节、证据链、待验证点、建议、复盘入口 | 需要 Report Compiler | 第二阶段主力付费产品 |
+| 深度报告 | 年运、月运、人生走向、0-100 岁人生规划 | 时间线、多章节、版本化、长期复盘、继续深聊上下文 | 需要 Report Compiler + 时间线契约 | 后置，不提前高价商业化 |
+
+### 7.2 主题观星台分类与报告边界
+
+| 主题 | 报告类型建议 | 必需证据 | 前端当前状态 |
+|---|---|---|---|
+| 年运 | 深度报告 | 年度时间窗、机会/压力双轨、关键行运、年度主题、复盘节点 | 只展示“将接入星图证据链” |
+| 月运 | 小报告 / 深度报告切片 | 月度节律、情绪提醒、行动窗口、关键触发 | 只展示“将接入星图证据链” |
+| 人生走向 | 深度报告 | 法达章节、长期阶段、关键转折、人生主题 | 只展示“将接入星图证据链” |
+| 情感 | 小报告 / 标准报告 | 关系宫位、承载者、相关相位、模式与资源 | 可先从 Chat 沉淀小报告开始 |
+| 事业 | 小报告 / 标准报告 | 事业语义场、承载者、机会/压力、行动建议 | 可先从 Chat 沉淀小报告开始 |
+| 财富 | 小报告 / 标准报告 | 正财/偏财语义切片、资源流动、风险提醒 | 可先从 Chat 沉淀小报告开始 |
+| 学业 | 小报告 / 标准报告 | 学习方式、考试/深造语义场、节律建议 | 可先从 Chat 沉淀小报告开始 |
+| 自我 | 标准报告 | 自我星盘轮、灵魂碎片、人格主题、确认记录 | 与自我星盘轮联动 |
+| 家庭 / 亲子 | 小报告 / 标准报告 | 原生家庭/父母/亲子语义场、承载者、模式与边界 | 可先从 Chat 沉淀小报告开始 |
+
+### 7.3 Report Compiler 输入契约
+
+Report Compiler 不直接“算命”。它只编排已有 Domain / Application 输出。
+
+建议输入：
+
+```ts
+interface ReportCompileInput {
+  person_id: string;
+  report_type: "mini" | "standard" | "deep";
+  theme: "annual" | "monthly" | "life" | "relationship" | "career" | "wealth" | "study" | "self" | "family";
+  source: "chat" | "observatory" | "finding" | "letter" | "manual";
+  session_id?: string;
+  finding_ids?: string[];
+  letter_ids?: string[];
+  journal_ids?: string[];
+  persona?: string;
+  question?: string;
+  time_range?: {
+    start?: string;
+    end?: string;
+    scale?: "month" | "year" | "life_stage";
+  };
+}
+```
+
+输入来源优先级：
+
+1. 明确用户问题和主题。
+2. Domain 产生的 Conclusion / Finding / TimePeriod / Evidence。
+3. 已确认记忆、来信、手账、碎片点亮。
+4. Chat session 上下文。
+5. 星灵 persona 只影响表达风格，不改变占星结论。
+
+### 7.4 Report Compiler 输出契约
+
+建议输出：
+
+```ts
+interface ReportOut {
+  id: string;
+  person_id: string;
+  report_type: "mini" | "standard" | "deep";
+  theme: string;
+  title: string;
+  status: "draft" | "ready" | "archived";
+  created_at: string;
+  updated_at: string;
+  summary: string;
+  sections: ReportSection[];
+  evidence: ReportEvidence[];
+  timeline?: ReportTimeline;
+  verification_points: VerificationPoint[];
+  continue_chat: {
+    session_seed: string;
+    suggested_prompts: string[];
+  };
+  disclaimers: string[];
+}
+
+interface ReportSection {
+  key: string;
+  title: string;
+  body: string;
+  source_refs: string[];
+  confidence?: "low" | "medium" | "high";
+}
+
+interface ReportEvidence {
+  id: string;
+  label: string;
+  kind: "finding" | "conclusion" | "time_window" | "fragment" | "letter" | "journal";
+  summary: string;
+  source_ref: string;
+}
+
+interface ReportTimeline {
+  windows: Array<{
+    start: string;
+    end: string;
+    quality: "positive" | "negative" | "neutral";
+    opportunity_score?: number;
+    pressure_score?: number;
+    title: string;
+    summary: string;
+    key_transits: string[];
+  }>;
+}
+
+interface VerificationPoint {
+  id: string;
+  text: string;
+  source_ref: string;
+  status: "unverified" | "confirmed" | "refuted";
+}
+```
+
+关键边界：
+
+- `body` 可以由 LLM 负责疗愈表达，但必须引用 `source_refs`。
+- `evidence` 必须来自后端 Domain / Conclusion / Finding / Timeline / Memory，不由前端构造。
+- `timeline.windows` 可以展示 `opportunity_score` 与 `pressure_score` 双轨，但不得把 `TimelineWindow.net_score` 暴露为“净吉凶分”。
+- `continue_chat.session_seed` 是报告进入 Chat 的上下文种子，不是让前端重新生成报告。
+
+### 7.5 推荐 API 端点
+
+| 端点 | 方法 | 用途 | 备注 |
+|---|---|---|---|
+| `/person/{id}/reports` | GET | 已购 / 已生成报告列表 | 我的页只展示资产，不售卖预测入口 |
+| `/reports/{report_id}` | GET | 报告详情 | 前端只读展示 `ReportOut` |
+| `/reports/compile` | POST | 生成报告 | 后端编排 Domain 输出与记忆资产 |
+| `/reports/{report_id}/continue-chat` | POST | 将报告带入 Chat | 返回 session_id 或 seed message |
+| `/reports/{report_id}/verification/{point_id}` | POST | 验证报告中的判断点 | 与现有 Finding feedback 口径一致 |
+
+### 7.6 前端展示规则
+
+主题观星台当前只允许展示三种状态：
+
+1. `证据链待接入`：后端无报告能力，展示占位。
+2. `可生成小报告`：主题 Chat 或 Finding 已足够形成单点资产。
+3. `已生成报告`：存在 ReportOut，可进入阅读与继续 Chat。
+
+前端禁止：
+
+- 根据主题名自行写预测结论。
+- 在卡片上写“今年会升职 / 桃花很旺 / 必有婚姻机会”等未由后端输出的判断。
+- 把商品页做成“报告越贵，结论越玄”。
+- 为了售卖报告，故意让免费 Chat 回答变弱。
+
+前端应该强调：
+
+- 报告会把已经聊出的内容整理成可保存资产。
+- 报告有章节、证据链、时间线、复盘点。
+- 报告可以带回 Chat 继续深聊。
+- 免费 Chat 仍然可以深入，只是不承担长期报告资产的完整编排。
+
+### 7.7 小报告 MVP 建议
+
+小报告优先从“Chat 后整理”切入，而不是从主题观星台直接硬卖。
+
+推荐触发：
+
+- Chat 已产生 `lit_fragments` / `seen_fragments` / `keepsake_created`。
+- 同一主题连续追问 2 轮以上。
+- 存在至少 1 条 `Finding` 或可引用的 `Conclusion`。
+- 用户点击“整理成报告”。
+
+小报告章节建议：
+
+1. 这次问题的核心。
+2. 星图里被触发的证据。
+3. 你现在的资源与卡点。
+4. 可以验证的一句话。
+5. 接下来可以怎么做。
+6. 带着这份报告继续问星灵。
+
+### 7.8 标准报告建议
+
+标准报告适合情感 / 事业 / 财富 / 学业 / 自我 / 家庭亲子。
+
+章节建议：
+
+1. 主题总览。
+2. 关键证据链。
+3. 主要模式。
+4. 资源与优势。
+5. 压力与风险。
+6. 未来 1-3 个行动窗口（如果后端时间线支持）。
+7. 待验证判断。
+8. 复盘与继续 Chat。
+
+### 7.9 深度报告建议
+
+深度报告适合年运 / 月运 / 人生走向 / 0-100 岁人生规划。
+
+人生规划不建议机械按平均 7 岁切段作为算法主轴。更合理的方式是：
+
+- **占星主轴**：法达大限 / 子限、次限月亮、日返/月返、行运窗口。
+- **产品阅读层**：童年根基、学习成长、关系探索、事业建立、家庭承诺、中年转向、长期沉淀。
+- **展示策略**：先展示当前阶段、前一阶段、后一阶段，再允许用户展开更远时间段。
+- **付费策略**：不要一上来售卖完整 0-100 岁高价报告；先验证年运 / 月运 / 单主题标准报告的留存和复盘价值。
+
+### 7.10 与 Chat 的关系
+
+报告和 Chat 的平衡口径：
+
+```text
+Chat 负责陪伴与探索。
+报告负责整理与保存。
+Chat 可以聊得很深，但它是流动的。
+报告把重要内容变成可复盘资产。
+```
+
+用户拿报告继续 Chat 时：
+
+- Chat 应读取报告摘要、章节 key、证据 refs、待验证点。
+- Chat 不重新生成报告全文。
+- Chat 可以围绕某一章节追问、解释、验证或转成行动建议。
+- 新的确认、行动和记忆应继续回流到碎片 / Finding / 信箱。
+
+### 7.11 Definition of Done
+
+Report Compiler 阶段完成标准：
+
+- 后端存在 `ReportCompileInput` → `ReportOut` 的稳定契约。
+- 报告内容每段都有 `source_refs`。
+- 前端主题观星台能区分“待接入 / 可生成 / 已生成”。
+- 我的页只展示“已购报告 / 已生成报告”资产，不成为预测入口。
+- Chat 的“整理成报告”不再只是 toast，而是进入小报告生成或报告草稿页。
+- 所有报告都能继续进入 Chat，并保留证据链上下文。
+- 用户可见时间线只展示 opportunity / pressure 双轨和解释，不展示 `net_score`。
+
+---
+
+*报告完 · V8 后续若进入报告实现，应先落 Report Compiler 后端契约，再接主题观星台与 Chat 小报告入口。*

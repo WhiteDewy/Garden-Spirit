@@ -26,7 +26,7 @@
 
 ## 一、后端就绪、前端零接入的功能区
 
-### 1. 星盘咨询模式选择（ConsultMode）— 🔴 高
+### 1. 主题观星台模式选择（ConsultMode）— 🔴 高
 
 **后端现状**
 - `ChatIn.mode`（`application/api/main.py:102`）接受 `str | None`，`_parse_mode()`（main.py:913）默认 `DEEP`。

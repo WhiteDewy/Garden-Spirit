@@ -235,7 +235,7 @@ class Timing(AnalysisModule):
             chart_id=chart.id,
             description=(
                 f"时间窗口 {label}：法达{major}大限/{sub}子限，"
-                f"行运对{target_phrase}总体{quality}（净分{net:+.1f}）"
+                f"行运对{target_phrase}总体{quality}"
             ),
             extracted_at=datetime.now(timezone.utc),
             payload={

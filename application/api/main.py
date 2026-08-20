@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from foundation.astronomy.geocoding import geocode, manual_location
 from foundation.config import AppConfig
 from foundation.database import PersonRepository
+from foundation.database.encryption import ENV_KEY_NAME, Encryptor
 from foundation.database.store import GardenStore, _birth_from_json, _birth_to_json
 from foundation.utils import birth_data_fallback, new_id, utc_now_aware
 from shared.enums import ConsultMode, HouseSystem, IntentDomain, PersonaType, Planet
@@ -97,6 +98,59 @@ class PersonOut(BaseModel):
     is_premium: bool = False
 
 
+class AuthVerifyIn(BaseModel):
+    """手机号验证码登录/注册。开发临时白名单：任意手机号 + 000000。"""
+
+    phone: str
+    code: str
+
+
+class BirthOut(BaseModel):
+    """档案编辑页回显出生数据：前端直接按建档表单填回。"""
+
+    datetime_local: str
+    location: GeoIn
+    time_known: bool = True
+
+
+class SelfProfileOut(PersonOut):
+    """本人档案详情：比列表多出生数据与备注。"""
+
+    birth: BirthOut
+    notes: str = ""
+
+
+class AccountOut(BaseModel):
+    """后端权威账号态：手机号账号 owns 唯一本人档案。"""
+
+    account_id: str
+    phone: str
+    self_person_id: str | None = None
+    self_profile: SelfProfileOut | None = None
+
+
+class ProfileListItemOut(BaseModel):
+    """档案列表：self 唯一；related 只用于合盘，不能升为本人。"""
+
+    id: str
+    role: str
+    name: str
+    can_be_self: bool = False
+    created_at: str | None = None
+
+
+class ReportIntentIn(BaseModel):
+    """主题观星台 → Chat 的报告型意图入口契约。只作路由/澄清上下文，不产出占星结论。"""
+
+    entry_source: str = "observatory"
+    entry_topic_key: str
+    primary_topic: str | None = None
+    secondary_topics: list[str] = Field(default_factory=list)
+    intent_shape: str | None = None
+    report_type: str | None = None
+    user_focus_text: str | None = None
+
+
 class ChatIn(BaseModel):
     person_id: str
     session_id: str | None = None  # 留空 → 服务端生成（多轮追问传同一个）
@@ -104,6 +158,7 @@ class ChatIn(BaseModel):
     persona: str | None = None     # 星灵人格名（小写，如 "zircon"）
     mode: str | None = None        # 咨询模式：quick/deep/annual/chart/free（默认 deep）
     related_person_id: str | None = None  # 本次合盘使用的对象（先 POST /related 保存）
+    report_intent: ReportIntentIn | None = None  # 主题观星台入口上下文；只用于路由/澄清
 
 
 class ChatOut(BaseModel):
@@ -281,6 +336,16 @@ class JournalOut(BaseModel):
     updated_at: str | None = None
 
 
+class JournalPageOut(BaseModel):
+    """手账分页（信箱"我的手账"：20 条一页）。"""
+
+    items: list[JournalOut]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
+
+
 class RelatedPersonIn(BaseModel):
     """保存一个合盘对象（对方出生数据）。birth 复用建档的 BirthIn 格式。"""
 
@@ -297,6 +362,15 @@ class RelatedPersonOut(BaseModel):
     person_id: str
     name: str
     created_at: str | None = None
+
+
+class RelatedPersonDetailOut(RelatedPersonOut):
+    """合盘对象编辑页详情：只用于 owner 自己查看/修改。"""
+
+    birth: BirthOut
+    gender: str | None = None
+    notes: str = ""
+    updated_at: str | None = None
 
 
 class SpiritRecommendationOut(BaseModel):
@@ -379,6 +453,34 @@ class RecallOut(BaseModel):
     has_memory: bool
 
 
+class DailyPushItemOut(BaseModel):
+    level: int
+    score: float | None = None
+    house: int | None = None
+    scene: str
+    sender: str | None = None
+    reason: str
+    advice: str
+    trigger_planet: str | None = None
+    natal_planet: str | None = None
+    aspect: str | None = None
+    orb: float | None = None
+    role: str | None = None
+    confidence: float | None = None
+    reason_chain: list[str] = []
+    time_label: str = "全天背景"
+    start_at: str | None = None
+    end_at: str | None = None
+
+
+class DailyPushOut(BaseModel):
+    letter_date: str | None = None
+    timezone_name: str | None = None
+    summary: str
+    items: list[DailyPushItemOut] = []
+    disclaimer: str | None = None
+
+
 class LetterOut(BaseModel):
     id: str
     person_id: str
@@ -397,10 +499,21 @@ class LetterOut(BaseModel):
     lit_fragments: list[str] = []    # 当日随聊点亮的 34 子类
     explain: str | None = None
     entry: bool = False              # 词条式来信（§6.1 日常/正面分享时刻）
+    daily_push: DailyPushOut | None = None  # 当日日推：本地 0:00-24:00 聚合提醒（有几条推几条）
 
 
 class MailboxTodayIn(BaseModel):
     person_id: str
+
+
+class LetterPageOut(BaseModel):
+    """信箱信件分页（20 条一页；kind 可选 daily/keepsake）。"""
+
+    items: list[LetterOut]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
 
 
 class GardenState(BaseModel):
@@ -444,8 +557,21 @@ def _load_config() -> AppConfig:
     return AppConfig()
 
 
+def _persistent_db_requires_key(config: AppConfig) -> None:
+    """持久化库必须显式配置稳定密钥，避免生产误写随机密钥密文。"""
+    if str(config.storage.db_path) == ":memory:":
+        return
+    if config.storage.encryption_key:
+        return
+    raise RuntimeError(
+        f"持久化数据库 {config.storage.db_path} 缺少 {ENV_KEY_NAME}；"
+        "拒绝使用随机开发密钥启动，请先在部署密钥或 .env 中配置稳定 Fernet key。"
+    )
+
+
 def create_app(config: AppConfig | None = None) -> FastAPI:
     config = config or _load_config()
+    _persistent_db_requires_key(config)
 
     app = FastAPI(title=APP_NAME, version=APP_VERSION)
     app.add_middleware(
@@ -455,8 +581,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    person_repo = PersonRepository(db_path=config.storage.db_path)
-    store = GardenStore(db_path=config.storage.db_path)
+    encryptor = Encryptor(key=config.storage.encryption_key)
+    person_repo = PersonRepository(db_path=config.storage.db_path, encryptor=encryptor)
+    store = GardenStore(db_path=config.storage.db_path, encryptor=encryptor)
     agent = GardenSpiritAgent(config)
     chart_cache = NatalChartCache(person_repo, agent._calculator)
     agent.set_chart_provider(chart_cache.get_or_compute)
@@ -523,10 +650,122 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "llm_available": agent._llm.available if hasattr(agent, "_llm") else False,
         }
 
+    @app.post("/auth/phone/verify", response_model=AccountOut)
+    def verify_phone(body: AuthVerifyIn) -> AccountOut:
+        """手机号登录/注册：一号一本人档案，返回后端权威 self_person_id。"""
+        _verify_dev_code(config, body.phone, body.code)
+        account = store.upsert_phone_account(body.phone)
+        return _to_account_out(account, person_repo)
+
+    @app.get("/account/{account_id}", response_model=AccountOut)
+    def get_account(account_id: str) -> AccountOut:
+        account = store.get_phone_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="账号不存在，请先手机号登录")
+        return _to_account_out(account, person_repo)
+
+    @app.post("/account/{account_id}/self", response_model=AccountOut)
+    def create_self_profile(account_id: str, body: PersonIn) -> AccountOut:
+        """创建唯一本人档案；已有本人档案时幂等拒绝，避免 gs_person_id 覆盖。"""
+        account = store.get_phone_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="账号不存在，请先手机号登录")
+        if account.get("self_person_id"):
+            raise HTTPException(status_code=409, detail="该手机号已有唯一本人档案，请使用档案修改")
+        person = _to_person(body)
+        person_repo.save(person)
+        store.set_account_self_person(account_id, person.id)
+        try:
+            letter.get_or_create_daily(person)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("本人建档后生成今日来信失败，稍后由信箱入口兜底: %s", exc)
+        account = store.get_phone_account(account_id)
+        return _to_account_out(account or {}, person_repo)
+
+    @app.put("/account/{account_id}/self", response_model=AccountOut)
+    def update_self_profile(account_id: str, body: PersonIn) -> AccountOut:
+        """修改本人档案：出生/宫制等影响解读，先清空旧业务数据再覆盖档案。"""
+        account = store.get_phone_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="账号不存在，请先手机号登录")
+        person_id = account.get("self_person_id") or ""
+        if not person_id:
+            raise HTTPException(status_code=404, detail="尚未创建本人档案")
+        _get_person(person_id)
+        person = _to_person(body)
+        person.id = person_id
+        store.reset_person_business_data(person_id)
+        person_repo.save(person)
+        try:
+            letter.get_or_create_daily(person)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("本人档案更新后生成今日来信失败，稍后由信箱入口兜底: %s", exc)
+        account = store.get_phone_account(account_id)
+        return _to_account_out(account or {}, person_repo)
+
+    @app.get("/account/{account_id}/profiles", response_model=list[ProfileListItemOut])
+    def list_account_profiles(account_id: str) -> list[ProfileListItemOut]:
+        """档案列表：本人唯一 + 合盘对象；合盘对象永不允许升为本人。"""
+        account = store.get_phone_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="账号不存在，请先手机号登录")
+        out: list[ProfileListItemOut] = []
+        self_id = account.get("self_person_id") or ""
+        if self_id:
+            person = _get_person(self_id)
+            out.append(ProfileListItemOut(
+                id=person.id,
+                role="self",
+                name=person.name,
+                can_be_self=True,
+                created_at=_iso_str(person.created_at),
+            ))
+            out.extend(
+                ProfileListItemOut(
+                    id=d["id"],
+                    role="related",
+                    name=d["name"],
+                    can_be_self=False,
+                    created_at=d.get("created_at"),
+                )
+                for d in store.list_related_persons(self_id)
+            )
+        return out
+
+    @app.post("/account/{account_id}/claim-xiatian", response_model=dict)
+    def claim_xiatian_legacy_data(account_id: str) -> dict:
+        """开发迁移：把夏天旧测试档案归并到 18513821306 的唯一本人档案。"""
+        account = store.get_phone_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="账号不存在，请先手机号登录")
+        if account.get("phone") != "18513821306":
+            raise HTTPException(status_code=403, detail="旧数据认领仅限夏天测试账号")
+        target_id = account.get("self_person_id") or ""
+        if not target_id:
+            raise HTTPException(status_code=404, detail="请先创建夏天的本人档案")
+        _get_person(target_id)
+        candidates = (
+            "person_399bb64b9be44430",
+            "person_da3c540ff05d4354",
+            "person_d8624fb3de624942",
+            "person_909e658438f54ac7",
+        )
+        merged: dict[str, dict[str, int]] = {}
+        for old_id in candidates:
+            if old_id == target_id or person_repo.get(old_id) is None:
+                continue
+            merged[old_id] = store.reassign_person_data(old_id, target_id)
+        return {"target_person_id": target_id, "merged": merged}
+
     @app.post("/person", response_model=PersonOut)
     def create_person(body: PersonIn) -> PersonOut:
         person = _to_person(body)
         person_repo.save(person)
+        try:
+            # 产品规则：建档即生成当天来信；普通读信路径只幂等读取，不按版本自动刷新。
+            letter.get_or_create_daily(person)
+        except Exception as exc:  # noqa: BLE001 - 建档成功优先，来信失败可由 /mailbox/today 兜底补生成
+            logger.warning("建档后生成今日来信失败，稍后由信箱入口兜底: %s", exc)
         return _to_person_out(person)
 
     @app.get("/person/{person_id}", response_model=PersonOut)
@@ -625,6 +864,36 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             for d in store.list_related_persons(person_id)
         ]
 
+    @app.get("/person/{person_id}/related/{related_id}", response_model=RelatedPersonDetailOut)
+    def get_related_person_detail(person_id: str, related_id: str) -> RelatedPersonDetailOut:
+        """读取一个合盘对象详情（编辑页回显出生数据/备注）。"""
+        _get_person(person_id)
+        data = store.get_related_person(related_id)
+        if data is None or data["person_id"] != person_id:
+            raise HTTPException(status_code=404, detail="合盘对象不存在")
+        return _to_related_detail_out(data)
+
+    @app.put("/person/{person_id}/related/{related_id}", response_model=RelatedPersonDetailOut)
+    def update_related_person(person_id: str, related_id: str, body: RelatedPersonIn) -> RelatedPersonDetailOut:
+        """修改合盘对象；仍只属于 owner，不能变成本人档案。"""
+        _get_person(person_id)
+        location = _resolve_location(body.birth.location)
+        birth = _to_birth_data(body.birth, location)
+        ok = store.update_related_person(
+            related_id,
+            person_id,
+            body.name,
+            _birth_to_json(birth),
+            gender=body.gender or "",
+            notes=body.notes,
+        )
+        if not ok:
+            raise HTTPException(status_code=404, detail="合盘对象不存在")
+        data = store.get_related_person(related_id)
+        if data is None or data["person_id"] != person_id:
+            raise HTTPException(status_code=404, detail="合盘对象不存在")
+        return _to_related_detail_out(data)
+
     @app.delete("/person/{person_id}/related/{related_id}")
     def delete_related_person(person_id: str, related_id: str) -> dict:
         """删除一个合盘对象（合规：用户可随时删除自己的数据）。
@@ -657,7 +926,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         target = datetime.now(timezone.utc)
         lat = person.birth.location.latitude
         lon = person.birth.location.longitude
-        hs = person.house_system or HouseSystem.PLACIDUS
+        hs = person.house_system or HouseSystem.ALCABITIUS
         scores = score_spirits(
             natal, target, lat, lon, hs,
             fragment_depths=dict(profile.fragments or {}),
@@ -749,10 +1018,22 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
         return _to_journal_out(entry)
 
-    @app.get("/person/{person_id}/journal", response_model=list[JournalOut])
-    def list_journal(person_id: str) -> list[JournalOut]:
+    @app.get("/person/{person_id}/journal", response_model=JournalPageOut)
+    def list_journal(
+        person_id: str,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=100),
+    ) -> JournalPageOut:
+        """手账分页列表（20 条一页）。"""
         _get_person(person_id)
-        return [_to_journal_out(e) for e in journal.list(person_id)]
+        items, total = journal.list(person_id, page=page, page_size=page_size)
+        return JournalPageOut(
+            items=[_to_journal_out(e) for e in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_more=page * page_size < total,
+        )
 
     @app.put("/journal/{entry_id}", response_model=JournalOut)
     def update_journal(entry_id: str, body: JournalUpdate) -> JournalOut:
@@ -767,10 +1048,32 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         person = _get_person(body.person_id)
         return _to_letter_out(letter.get_or_create_daily(person))
 
-    @app.get("/person/{person_id}/letters", response_model=list[LetterOut])
-    def list_letters(person_id: str) -> list[LetterOut]:
+    @app.post("/mailbox/today/force-refresh", response_model=LetterOut)
+    def mailbox_today_force_refresh(body: MailboxTodayIn) -> LetterOut:
+        """开发/管理员工具：显式重算今天的 daily 来信；普通用户路径不会自动刷新。"""
+        if not config.debug:
+            raise HTTPException(status_code=403, detail="force refresh 仅在 debug/admin 模式开放")
+        person = _get_person(body.person_id)
+        return _to_letter_out(letter.force_refresh_daily(person))
+
+    @app.get("/person/{person_id}/letters", response_model=LetterPageOut)
+    def list_letters(
+        person_id: str,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=100),
+        kind: str | None = Query(None),
+    ) -> LetterPageOut:
+        """信箱信件分页（20 条一页）。kind=daily 取日推历史 / kind=keepsake 取记忆来信；默认全部。"""
         _get_person(person_id)
-        return [_to_letter_out(l) for l in letter.list(person_id)]
+        kind_val = kind if kind in ("daily", "keepsake") else None
+        items, total = letter.list(person_id, kind=kind_val, page=page, page_size=page_size)
+        return LetterPageOut(
+            items=[_to_letter_out(l) for l in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_more=page * page_size < total,
+        )
 
     @app.post("/person/{person_id}/letters/read-today", response_model=dict)
     def mark_letters_read_today(person_id: str) -> dict:
@@ -979,10 +1282,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 skipped_quiet += 1
                 continue
             letter_obj = letter.get_or_create_daily(person)  # 幂等：已有则复用
+            push_title = letter_obj.title or "星灵来信"
+            push_body = _daily_push_body(letter_obj)
             n = push_service.send_to_person(
                 person.id,
-                title=letter_obj.title or "星灵来信",
-                body=(letter_obj.body or "").replace("\n", " ")[:80],
+                title=push_title,
+                body=push_body,
                 url="/pages/mailbox/mailbox",
             )
             if n > 0:
@@ -1025,7 +1330,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         # 用户指定合盘对象 → 从 DB 恢复到会话上下文（多轮持久化）
         _restore_related_person(store, agent, session_id, body.person_id, body.related_person_id, person)
 
-        answer = agent.handle_message(session_id, body.message, person, persona, mode=mode)
+        answer = agent.handle_message(
+            session_id,
+            body.message,
+            person,
+            persona,
+            mode=mode,
+            report_intent=body.report_intent.model_dump() if body.report_intent else None,
+        )
 
         written_back = _maybe_writeback(
             agent, memory, session_id, body.person_id
@@ -1186,6 +1498,27 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     return app
 
 
+def _daily_push_body(letter_obj: Letter) -> str:
+    """每日 push 优先推当日日推主提醒；没有则退回旧单条提醒/正文摘要。"""
+    meta = letter_obj.metadata or {}
+    daily_push = meta.get("daily_push")
+    if isinstance(daily_push, dict):
+        summary = str(daily_push.get("summary") or "").strip()
+        items = daily_push.get("items")
+        if summary:
+            suffix = "，点开看今天只记三件事" if isinstance(items, list) and items else ""
+            return f"{summary}{suffix}".replace("\n", " ")[:80]
+
+    reminder = meta.get("daily_reminder")
+    if isinstance(reminder, dict):
+        reason = str(reminder.get("reason") or "").strip()
+        advice = str(reminder.get("advice") or "").strip()
+        text = f"{reason}{advice}".strip()
+        if text:
+            return text.replace("\n", " ")[:110]
+    return (letter_obj.body or "").replace("\n", " ")[:80]
+
+
 # ----------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------
@@ -1255,13 +1588,18 @@ def _to_person(body: PersonIn) -> Person:
     location = _resolve_location(body.birth.location)
     birth = _to_birth_data(body.birth, location)
 
+    try:
+        house_system = HouseSystem(body.house_system) if body.house_system else HouseSystem.ALCABITIUS
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"不支持的宫位制: {body.house_system}") from exc
+
     return Person(
         id=body.id or new_id("person"),
         name=body.name,
         birth=birth,
         gender=body.gender,
         notes=body.notes,
-        house_system=HouseSystem(body.house_system) if body.house_system else None,
+        house_system=house_system,
     )
 
 
@@ -1333,6 +1671,67 @@ def _to_person_out(p: Person) -> PersonOut:
         created_at=_iso_str(p.created_at),
         is_premium=False,  # v0.5 预留会员位，后续接付费状态
     )
+
+
+def _birth_out(birth) -> BirthOut:
+    local_dt = birth.datetime_utc.astimezone(ZoneInfo(birth.location.timezone_name))
+    return BirthOut(
+        datetime_local=local_dt.replace(tzinfo=None).isoformat(timespec="seconds"),
+        location=GeoIn(
+            latitude=birth.location.latitude,
+            longitude=birth.location.longitude,
+            altitude=birth.location.altitude,
+            timezone_name=birth.location.timezone_name,
+            place_name=birth.location.place_name,
+        ),
+        time_known=birth.time_known,
+    )
+
+
+def _to_self_profile_out(p: Person) -> SelfProfileOut:
+    base = _to_person_out(p)
+    return SelfProfileOut(
+        **base.model_dump(),
+        birth=_birth_out(p.birth),
+        notes=p.notes,
+    )
+
+
+def _to_account_out(account: dict, person_repo: PersonRepository) -> AccountOut:
+    self_id = account.get("self_person_id") or ""
+    self_profile = None
+    if self_id:
+        person = person_repo.get(self_id)
+        if person is not None:
+            self_profile = _to_self_profile_out(person)
+    return AccountOut(
+        account_id=account.get("id", ""),
+        phone=account.get("phone", ""),
+        self_person_id=self_profile.id if self_profile is not None else None,
+        self_profile=self_profile,
+    )
+
+
+def _to_related_detail_out(data: dict) -> RelatedPersonDetailOut:
+    birth = data["birth_data"]
+    return RelatedPersonDetailOut(
+        id=data["id"],
+        person_id=data["person_id"],
+        name=data["name"],
+        birth=_birth_out(birth),
+        gender=data.get("gender") or None,
+        notes=data.get("notes", ""),
+        created_at=data.get("created_at"),
+        updated_at=data.get("updated_at"),
+    )
+
+
+def _verify_dev_code(config: AppConfig, phone: str, code: str) -> None:
+    """开发期验证码门：临时允许任意手机号用 000000 验证注册。"""
+    normalized = "".join(ch for ch in str(phone) if ch.isdigit())
+    if config.debug and normalized and code == "000000":
+        return
+    raise HTTPException(status_code=403, detail="验证码错误或当前环境未开放开发白名单")
 
 
 def _restore_related_person(
@@ -1564,6 +1963,27 @@ def _to_letter_out(l: Letter) -> LetterOut:
         lit_fragments=list(meta.get("lit_fragments") or []),
         explain=meta.get("explain"),
         entry=bool(meta.get("entry")),
+        daily_push=_daily_push_out(meta.get("daily_push")),
+    )
+
+
+def _daily_push_out(raw: object) -> DailyPushOut | None:
+    if not isinstance(raw, dict):
+        return None
+    items: list[DailyPushItemOut] = []
+    for item in raw.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            items.append(DailyPushItemOut(**item))
+        except Exception:
+            continue
+    return DailyPushOut(
+        letter_date=raw.get("letter_date"),
+        timezone_name=raw.get("timezone_name"),
+        summary=str(raw.get("summary") or "今日星灵日推"),
+        items=items,
+        disclaimer=raw.get("disclaimer"),
     )
 
 

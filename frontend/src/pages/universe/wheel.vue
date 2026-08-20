@@ -134,8 +134,7 @@ import {
   ZONE_META,
   type BallState,
 } from "@/utils/fragments";
-
-const PERSON_KEY = "gs_person_id";
+import { clearAccountCache, requireSelfPersonId } from "@/utils/account";
 
 interface StarItem {
   id: string;
@@ -188,8 +187,8 @@ function goDetail(id: string) {
 }
 
 async function load() {
-  const personId = uni.getStorageSync(PERSON_KEY) as string;
-  if (!personId) return uni.redirectTo({ url: "/pages/index/index" });
+  const personId = await requireSelfPersonId();
+  if (!personId) return;
 
   try {
     const res = await api.fragments(personId);
@@ -220,10 +219,10 @@ async function load() {
     });
   } catch (e) {
     // person 已不存在（后端重置/换库）→ 清空本地身份，回首页重建
-    if (e instanceof ApiError && e.status === 404) {
-      uni.removeStorageSync(PERSON_KEY);
-      uni.showToast({ title: "这个花园已经找不到了", icon: "none" });
-      return uni.redirectTo({ url: "/pages/index/index" });
+    if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
+      clearAccountCache();
+      uni.showToast({ title: e.status === 410 ? "当前档案已无法解密，请重新登录建档" : "这个花园已经找不到了", icon: "none" });
+      return uni.redirectTo({ url: "/pages/auth/login" });
     }
     error.value = true;
     errorMsg.value = describeError(e);

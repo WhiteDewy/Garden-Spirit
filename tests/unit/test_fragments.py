@@ -553,7 +553,7 @@ def test_chat_outpouring_generates_keepsake_letter(client):
     assert data["keepsake_created"] is True
     assert "moon_tide" in data["lit_fragments"]
 
-    letters = client.get(f"/person/{pid}/letters").json()
+    letters = client.get(f"/person/{pid}/letters").json()["items"]
     keepsakes = [l for l in letters if l["kind"] == "keepsake"]
     assert len(keepsakes) == 1
     k = keepsakes[0]
@@ -593,7 +593,7 @@ def test_consult_does_not_create_keepsake(client):
     r = client.post("/chat", json={"person_id": pid, "message": "我该不该换工作"})
     assert r.status_code == 200
     assert r.json()["keepsake_created"] is False
-    letters = client.get(f"/person/{pid}/letters").json()
+    letters = client.get(f"/person/{pid}/letters").json()["items"]
     assert all(l["kind"] != "keepsake" for l in letters)
 
 
@@ -660,7 +660,7 @@ def test_chat_memorable_creates_entry_keepsake(monkeypatch):
         assert data["emotion"] == "calm"
         assert data["request_type"] == "heard"
 
-        letters = client.get(f"/person/{pid}/letters").json()
+        letters = client.get(f"/person/{pid}/letters").json()["items"]
         keepsakes = [l for l in letters if l["kind"] == "keepsake"]
         assert len(keepsakes) == 1
         k = keepsakes[0]
@@ -678,7 +678,7 @@ def test_chat_non_memorable_no_keepsake(monkeypatch):
         r = client.post("/chat", json={"person_id": pid, "message": "好的"})
         assert r.status_code == 200
         assert r.json()["keepsake_created"] is False
-        letters = client.get(f"/person/{pid}/letters").json()
+        letters = client.get(f"/person/{pid}/letters").json()["items"]
         assert all(l["kind"] != "keepsake" for l in letters)
 
 
@@ -691,7 +691,7 @@ def test_chat_distress_still_keepsake_not_entry(monkeypatch):
         assert r.status_code == 200
         assert r.json()["keepsake_created"] is True
 
-        letters = client.get(f"/person/{pid}/letters").json()
+        letters = client.get(f"/person/{pid}/letters").json()["items"]
         keepsakes = [l for l in letters if l["kind"] == "keepsake"]
         assert len(keepsakes) == 1          # 不重复：needs_care 优先，不并出词条
         k = keepsakes[0]
