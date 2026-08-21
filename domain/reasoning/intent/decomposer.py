@@ -28,6 +28,7 @@ from shared.models import Intent
 
 from domain.astrology.knowledge.loader import domain_planet_roles
 
+from .canonical import CanonicalIntent, canonicalize_intent
 from .intent_profiles import (
     ConditionalTask,
     IntentProfile,
@@ -148,6 +149,7 @@ class DecomposedIntent:
     llm_used: bool = False
     decomposition_reasoning: str = ""
     llm_latency_ms: float = 0.0
+    canonical: CanonicalIntent | None = None
 
     # ---- 便利属性（委托给 Intent） ----
 
@@ -177,12 +179,32 @@ class DecomposedIntent:
         """创建最小 DecomposedIntent（无 LLM，纯规则）。"""
         bt = list(base_tasks or [])
         ct = list(conditional_tasks or [])
+        focus_houses: list[int] = []
+        house_slot = intent.get_slot("focus_house")
+        if house_slot is not None:
+            try:
+                house = int(house_slot.normalized_value)
+            except (TypeError, ValueError):
+                house = 0
+            if house in _VALID_HOUSE_RANGE:
+                focus_houses.append(house)
+
+        focus_planets: list[str] = []
+        planet_slot = intent.get_slot("focus_planet")
+        if planet_slot is not None:
+            planet = str(planet_slot.normalized_value or "")
+            if planet in _VALID_PLANET_KEYS:
+                focus_planets.append(planet)
+
         return cls(
             intent=intent,
+            focus_houses=focus_houses,
+            focus_planets=focus_planets,
             base_tasks=bt,
             conditional_tasks=ct,
             merged_tasks=bt + ct,
             llm_used=False,
+            canonical=canonicalize_intent(intent),
         )
 
 

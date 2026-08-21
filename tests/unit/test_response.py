@@ -246,6 +246,36 @@ def test_topic_plan_remains_legacy_alias():
     )[0]["content"]
 
 
+def test_user_prompt_includes_report_context_as_non_conclusion():
+    """观星台/报告入口上下文进入 user prompt，但必须标记为非结论语境。"""
+    c = _make_conclusion()
+    user = build_prompt(
+        c,
+        question="从年度报告继续看事业",
+        report_context={
+            "entry_source": "observatory",
+            "entry_topic_key": "career",
+            "primary_topic": "career",
+            "secondary_topics": ["wealth", "growth"],
+            "intent_shape": "cross_topic_influence",
+            "report_type": "annual",
+            "user_focus_text": "想知道事业变化会不会影响收入。",
+        },
+    )[1]["content"]
+
+    assert "报告入口上下文" in user
+    assert "非结论" in user
+    assert "来源：observatory" in user
+    assert "入口主题：career" in user
+    assert "主主题：career" in user
+    assert "次主题：wealth、growth" in user
+    assert "意图形态：cross_topic_influence" in user
+    assert "报告类型：annual" in user
+    assert "用户关注：想知道事业变化会不会影响收入。" in user
+    assert "不是占星结论" in user
+    assert "不能替代或改写「领域分析结论」" in user
+
+
 # --- 能力总纲 system prompt（master prompt） ---
 
 def test_system_prompt_contains_capability_map():

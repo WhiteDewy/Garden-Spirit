@@ -314,6 +314,13 @@ def test_timing_produces_windows(chart, person):
         assert w.payload["timing_authority"] == "firdaria"
         assert w.payload["firdaria_major_lord"] in w.payload["target_planets"]
         assert w.payload["firdaria_sub_lord"] in w.payload["target_planets"]
+        annual = w.payload["annual_activation"]
+        assert annual["type"] == "annual_activation"
+        assert annual["role"] == "auxiliary"
+        assert annual["primary_timing_authority"] == "firdaria"
+        assert annual["activation_lord"] in w.payload["annual_target_planets"]
+        assert annual["activation_lord"] in w.payload["scoring_target_planets"]
+        assert "year_lord" not in annual
 
 
 def test_timing_targets_include_question_significators(chart):
@@ -398,6 +405,13 @@ def test_timing_window_payload_exposes_firdaria_targets(chart, person):
     window = next(f for f in facts if f.payload.get("theme") == "timing_window")
     assert window.payload["timing_authority"] == "firdaria"
     assert "venus" in window.payload["target_planets"]
+    annual = window.payload["annual_activation"]
+    assert annual["role"] == "auxiliary"
+    assert annual["primary_timing_authority"] == "firdaria"
+    assert window.payload["annual_target_planets"] == [annual["activation_lord"]]
+    assert set(window.payload["annual_target_planets"]).issubset(window.payload["scoring_target_planets"])
+    assert "year_lord" not in window.payload
+    assert "年度小限" in window.description
     assert "法达" in window.description
     assert "年主星" not in window.description
 
@@ -550,7 +564,7 @@ def test_career_strength_mixed_debility_does_not_become_positive_theme():
 
     assert theme.payload["polarity"] != EvidencePolarity.POSITIVE.value
     assert theme.payload["score"] < 0
-    assert "本质分-" in theme.description
+    assert "本质状态承压" in theme.description
 
 
 def test_opportunity_does_not_treat_mixed_debility_as_pure_support():
@@ -565,7 +579,7 @@ def test_finance_marks_mixed_dignity_as_supported_but_limited():
     facts = Finance().analyze(_venus_virgo_mixed_chart(), None, {})
     descriptions = [f.description for f in facts]
 
-    assert any("财务尊贵分+2（有支撑但受限）" in d for d in descriptions)
+    assert any("财务本质状态：落陷（有支撑但受限）" in d for d in descriptions)
     assert any("共同资源/他方资金有支撑但受限" in d for d in descriptions)
     assert not any("共同资源/他方资金良好" in d for d in descriptions)
 

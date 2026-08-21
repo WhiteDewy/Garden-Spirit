@@ -72,12 +72,14 @@ def test_timing_stack_export_exposes_helper_targets(person, chart):
     d = build_timing_stack(person, chart, load_knowledge(), reference=REF).to_dict()
     assert set(d["transit_targets"]) == {"moon", "mars"}
     assert "jupiter" in d["helper_transit_targets"]
+    annual_lord = d["annual_activation"]["activation_lord"]
     assert set(d["helper_transit_targets"]).isdisjoint(d["transit_targets"])
-    assert set(d["scoring_transit_targets"]) == set(d["transit_targets"]) | set(d["helper_transit_targets"])
+    assert set(d["scoring_transit_targets"]) == set(d["transit_targets"]) | set(d["helper_transit_targets"]) | {annual_lord}
     first = d["transits"][0]
     assert first["target_planets"] == d["transit_targets"]
     assert first["helper_target_planets"] == d["helper_transit_targets"]
     assert first["scoring_target_planets"] == d["scoring_transit_targets"]
+    assert first["annual_activation"] == d["annual_activation"]
 
 
 def test_timing_stack_uses_question_significators_from_enrichment(person, chart):
@@ -110,4 +112,11 @@ def test_timing_stack_export(person, chart):
     assert d["firdaria"]["period"]["major_lord"] == "moon"
     assert d["firdaria"]["period"]["sub_lord"] == "mars"
     assert set(d["transit_targets"]) == {"moon", "mars"}
+    annual = d["annual_activation"]
+    assert annual["type"] == "annual_activation"
+    assert annual["role"] == "auxiliary"
+    assert annual["primary_timing_authority"] == "firdaria"
+    assert annual["activation_house"] == 12
+    assert annual["activation_lord"] == "mars"
+    assert "year_lord" not in annual
     assert "year_lord" not in d

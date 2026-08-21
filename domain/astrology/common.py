@@ -87,10 +87,10 @@ ASPECT_ZH = {
 
 DIGNITY_ZH = {
     DignityState.DOMICILE: "入庙",
-    DignityState.EXALTATION: "旺相",
+    DignityState.EXALTATION: "曜升",
     DignityState.TRIPLICITY: "三分",
-    DignityState.TERM: "界",
-    DignityState.FACE: "面",
+    DignityState.TERM: "在界",
+    DignityState.FACE: "在面",
     DignityState.DETRIMENT: "失势",
     DignityState.FALL: "落陷",
 }
@@ -314,7 +314,7 @@ def _assess_planet(
         eev.append(f"{name}尊贵（{tags}）")
     if negative_states:
         tags = "、".join(DIGNITY_ZH.get(state, state.value) for state in negative_states)
-        eev.append(f"{name}受克（尊贵{-negative_score_total:+d}；{tags}）")
+        eev.append(f"{name}受克（{tags}）")
 
     # —— 境遇轴：燃烧/日核 ——
     cb_score, cb_tag = combustion_state(chart, planet)

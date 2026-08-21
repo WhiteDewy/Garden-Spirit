@@ -110,6 +110,35 @@ def test_planet_profiles_actually_present():
     assert "- " in profiles_sec, "行星档案块应有条目"
 
 
+def test_llm_receives_report_entry_context_as_non_conclusion():
+    """runtime 把 Intent.entry_* 入口上下文传进 LLM prompt，且不把它当结论。"""
+    agent = GardenSpiritAgent()
+    fake = _FakeLLM()
+    agent._llm = fake
+
+    chart = NatalChartCalculator().compute(_make_person())
+    intent = Intent(id="i", raw_query="从报告继续看事业", domain=IntentDomain.CAREER)
+    intent.entry_source = "observatory"
+    intent.entry_topic_key = "career"
+    intent.entry_primary_topic = "career"
+    intent.entry_secondary_topics = ["wealth", "growth"]
+    intent.entry_intent_shape = "cross_topic_influence"
+    intent.entry_report_type = "annual"
+    intent.entry_user_focus_text = "想知道事业变化会不会影响收入。"
+
+    agent._format_response(
+        _make_conclusion(), intent, PersonaType.MOON, chart
+    )
+
+    user = fake.captured[1]["content"]
+    assert "报告入口上下文" in user
+    assert "来源：observatory" in user
+    assert "入口主题：career" in user
+    assert "次主题：wealth、growth" in user
+    assert "不是占星结论" in user
+    assert "领域分析结论" in user
+
+
 def test_llm_unavailable_falls_back():
     """LLM 不可用 → 降级模板，不崩（chart 可选后仍安全）。"""
     agent = GardenSpiritAgent()

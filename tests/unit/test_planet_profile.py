@@ -16,6 +16,7 @@ from domain.astrology.interpretation import (
     read_planet,
 )
 from domain.astrology.interpretation.planet_profile import pick_for_theme
+import domain.astrology.interpretation.planet_profile as planet_profile
 from domain.astrology.knowledge import load_knowledge
 from shared.enums import ChartType, HouseSystem, Planet, PlanetSpeed, Sect, Sign, ZodiacType
 from shared.models import (
@@ -176,6 +177,33 @@ def test_planet_profile_term_only_is_minor_support(kb):
     assert mars.dignity_score == 2
     assert mars.dignity_label == "在界"
     assert "入旺" not in mars.dignity_label
+
+
+@pytest.mark.parametrize(
+    ("planet", "longitude", "sign", "degree", "expected"),
+    [
+        (Planet.VENUS, 40.0, Sign.TAURUS, 10.0, "入庙"),
+        (Planet.SUN, 15.0, Sign.ARIES, 15.0, "曜升"),
+        (Planet.VENUS, 160.5, Sign.VIRGO, 10.5, "落陷"),
+        (Planet.MARS, 207.0, Sign.LIBRA, 27.0, "失势"),
+        (Planet.SATURN, 70.5, Sign.GEMINI, 10.5, "三分"),
+        (Planet.MARS, 83.3, Sign.GEMINI, 23.3, "在界"),
+        (Planet.MOON, 187.0, Sign.LIBRA, 7.0, "在面"),
+    ],
+)
+def test_planet_profile_dignity_display_is_state_based(kb, planet, longitude, sign, degree, expected):
+    """尊贵展示按 DignityState 输出，不能再通过 score 档位推导。"""
+    chart = _minimal_chart_for_planet(planet, longitude, sign, degree)
+
+    profile = read_planet(chart, kb, planet)
+
+    assert profile.dignity_label.startswith(expected)
+
+
+def test_planet_profile_removes_score_based_dignity_label_path():
+    """旧 _dignity_label(score) 路径不可再作为展示兜底入口。"""
+    assert not hasattr(planet_profile, "_dignity_label")
+    assert not hasattr(planet_profile, "_dignity_label_from_assessment")
 
 
 # -- 星座行为方式 --------------------------------------------------------

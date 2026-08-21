@@ -44,5 +44,14 @@ class Intent:
     deep_dive: bool = False             # 对上一轮某条切片的深挖追问
     confirmed: bool | None = None       # 仅 confirmation 意图：确认(True)/否认(False)
 
+    # ---- 报告/观星台入口上下文（非占星结论；只用于路由、澄清、报告编译素材） ----
+    entry_source: str | None = None
+    entry_topic_key: str | None = None
+    entry_primary_topic: str | None = None
+    entry_secondary_topics: list[str] = field(default_factory=list)
+    entry_intent_shape: str | None = None
+    entry_report_type: str | None = None
+    entry_user_focus_text: str | None = None
+
     def get_slot(self, name: str) -> IntentSlot | None:
         return self.slots.get(name)

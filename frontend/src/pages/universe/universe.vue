@@ -53,6 +53,15 @@
         </view>
         <text class="entry-arrow">›</text>
       </view>
+      <view class="entry" @tap="goLifeRhythm">
+        <text class="entry-ico">♄</text>
+        <view class="entry-body">
+          <text class="entry-title">人生章节</text>
+          <text class="entry-sub">Life Rhythm · 法达主章节</text>
+          <text class="entry-desc">本命承诺 / 年度辅助 / 未来 6 个月触发窗口</text>
+        </view>
+        <text class="entry-arrow">›</text>
+      </view>
       <view class="entry" @tap="focusCalibration">
         <text class="entry-ico">✓</text>
         <view class="entry-body">
@@ -212,6 +221,9 @@ function goWheel() {
 }
 function goConsult() {
   uni.navigateTo({ url: "/pages/universe/consult" });
+}
+function goLifeRhythm() {
+  uni.navigateTo({ url: "/pages/universe/life-rhythm" });
 }
 </script>
 

@@ -144,11 +144,13 @@ class ConclusionBuilder:
                    else -1 if e.polarity == EvidencePolarity.NEGATIVE else 0)
                 for e in items
             )
-            # 代表性证据：优先选"主题总结"（含 score 元数据的聚合事实）
+            # 代表性证据：先选有具体占星陈述的证据；score 仅保留为审计元数据，
+            # 不得让聚合评分文案抢占用户可见 Finding。若主题只有聚合证据，
+            # 仍保留它，避免丢失该主题的唯一确定性输出。
             strongest = max(
                 items,
                 key=lambda e: (
-                    e.metadata.get("score") is not None,
+                    e.metadata.get("score") is None,
                     abs(e.weight) * e.confidence,
                 ),
             )

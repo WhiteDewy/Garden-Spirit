@@ -230,6 +230,47 @@ def _format_natal(natal: object | None) -> str:
     return "\n".join(blocks)
 
 
+def _format_report_context(report_context: dict | None) -> str:
+    """报告/观星台入口上下文：只作路由语境，不生成占星结论。"""
+    if not report_context:
+        return ""
+
+    def text(key: str) -> str:
+        value = report_context.get(key)
+        if not isinstance(value, str):
+            return ""
+        return value.strip()
+
+    labels = [
+        ("来源", "entry_source"),
+        ("入口主题", "entry_topic_key"),
+        ("主主题", "primary_topic"),
+        ("意图形态", "intent_shape"),
+        ("报告类型", "report_type"),
+        ("用户关注", "user_focus_text"),
+    ]
+    lines: list[str] = []
+    for label, key in labels:
+        value = text(key)
+        if value:
+            lines.append(f"- {label}：{value}")
+
+    secondary = report_context.get("secondary_topics") or []
+    if isinstance(secondary, list):
+        items = [item.strip() for item in secondary if isinstance(item, str) and item.strip()]
+        if items:
+            lines.append(f"- 次主题：{'、'.join(items[:8])}")
+
+    if not lines:
+        return ""
+
+    lines.append(
+        "- 边界：本区只说明盘主从报告/观星台入口带来的关注点；"
+        "它不是占星结论，不能替代或改写「领域分析结论」。"
+    )
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Prompt 构建
 # ---------------------------------------------------------------------------
@@ -246,6 +287,7 @@ def build_prompt(
     mode: ConsultMode | str = ConsultMode.DEEP,
     house_focus: int | None = None,
     confirmed: bool | None = None,
+    report_context: dict | None = None,
 ) -> list[dict]:
     """构建 LLM messages（system + user）。
 
@@ -260,6 +302,7 @@ def build_prompt(
     house_focus: 宫位咨询（"3宫表达"）注入——LLM 叙事围绕该宫收束，不发散。
     confirmed: 证据链收敛轮——盘主刚确认/否认了机制验证。True=先承接确认再收敛；
                False=承接否认改判倾向；None=普通轮。
+    report_context: 报告/观星台入口上下文——只作盘主关注点语境，不产出或改写占星结论。
     """
     profile = get_persona(persona)
     persona_block = profile.system_prompt()
@@ -289,6 +332,10 @@ def build_prompt(
     sections: list[str] = []
     if question:
         sections.append(f"## 盘主问的是\n{question}")
+
+    report_txt = _format_report_context(report_context)
+    if report_txt:
+        sections.append(f"## 报告入口上下文（非结论：只作盘主关注点语境）\n{report_txt}")
 
     if house_focus is not None:
         sections.append(
@@ -462,6 +509,7 @@ def paraphrase(
     mode: ConsultMode | str = ConsultMode.DEEP,
     house_focus: int | None = None,
     confirmed: bool | None = None,
+    report_context: dict | None = None,
 ) -> str:
     """把 Conclusion + 卡片 + 行星档案转述成人格化回答。
 
@@ -471,6 +519,7 @@ def paraphrase(
     mode: 咨询模式——quick 覆盖为精简回答；其余默认深度。
     house_focus: 宫位咨询（"3宫表达"）注入——LLM 叙事围绕该宫收束。
     confirmed: 证据链收敛轮（True=确认坐实 / False=否认改倾向）。
+    report_context: 报告/观星台入口上下文——只作盘主关注点语境，不产出或改写占星结论。
     """
     messages = build_prompt(
         conclusion=conclusion,
@@ -484,6 +533,7 @@ def paraphrase(
         mode=mode,
         house_focus=house_focus,
         confirmed=confirmed,
+        report_context=report_context,
     )
     if llm_client is None:
         raise ValueError("paraphrase 需要 llm_client（实现了 .chat(messages)->str）")

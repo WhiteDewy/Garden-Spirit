@@ -204,6 +204,18 @@ def test_house_always_routes_deterministically():
     assert "你想问的是哪一块" in intent.clarification_question
 
 
+def test_planet_in_house_routes_as_complete_material_before_llm():
+    """行星落宫是完整占星材料，不应被“X宫”裸宫反问截走。"""
+    llm = FakeClassifyLLM([{"domain": "daily"}])
+    parser = IntentParser(llm_client=llm)
+    intent = parser.parse("月亮在8宫什么意思啊")
+    assert not intent.requires_clarification
+    assert intent.get_slot("astrology_material").normalized_value == "planet_in_house"
+    assert intent.get_slot("focus_planet").normalized_value == "moon"
+    assert int(intent.get_slot("focus_house").normalized_value) == 8
+    assert llm.calls == []
+
+
 # ---------------------------------------------------------------------------
 # 端到端：深挖证据链 → 验证问句 → 确认收敛（离线 + fake LLM 驱动富输出）
 # ---------------------------------------------------------------------------

@@ -43,6 +43,13 @@
 			}
 		},
 		{
+			"path": "pages/universe/life-rhythm",
+			"style": {
+				"navigationBarTitleText": "人生章节",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/universe/fragment",
 			"style": {
 				"navigationBarTitleText": "子类介绍",
@@ -81,6 +88,13 @@
 			"path": "pages/me/me",
 			"style": {
 				"navigationBarTitleText": "我的",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/me/privacy",
+			"style": {
+				"navigationBarTitleText": "隐私与安全",
 				"navigationStyle": "custom"
 			}
 		}

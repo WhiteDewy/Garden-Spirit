@@ -240,6 +240,119 @@ export interface TimelineEventOut {
   need?: string;
 }
 
+export interface LifeRhythmSignificationItem {
+  house: number;
+  word: string;
+  polarity: string;
+  intensity: number;
+  strength: number;
+  resonance: string[];
+  evidence: string[];
+  gated: string;
+}
+
+export interface LifeRhythmSynapsisItem {
+  hub_planet: string;
+  houses: number[];
+  manifestation_house: number;
+  description_zh: string;
+}
+
+export interface LifeRhythmNatalStage {
+  type: "natal_promise";
+  domain: string;
+  domain_label: string;
+  themes: LifeRhythmSignificationItem[];
+  synapsis: LifeRhythmSynapsisItem[];
+}
+
+export interface LifeRhythmPeriod {
+  major_lord: string;
+  major_start: string;
+  major_end: string;
+  sub_lord: string;
+  sub_start: string;
+  sub_end: string;
+}
+
+export interface LifeRhythmCharacter {
+  lord: string;
+  nature: string;
+  tone: string;
+  domains: string[];
+  behavior: string[];
+  effort: string;
+  afflictions: Array<Record<string, any>>;
+  evidence: string[];
+}
+
+export interface LifeRhythmFirdariaChapter {
+  type: "firdaria_chapter";
+  timing_authority: "firdaria" | string;
+  period: LifeRhythmPeriod;
+  major: LifeRhythmSignificationItem[];
+  sub: LifeRhythmSignificationItem[];
+  major_character?: LifeRhythmCharacter | null;
+  sub_character?: LifeRhythmCharacter | null;
+}
+
+export interface LifeRhythmAnnualActivation {
+  type: "annual_activation";
+  role: "auxiliary" | string;
+  primary_timing_authority: "firdaria" | string;
+  age: number;
+  annual_start: string;
+  annual_end: string;
+  activation_house: number;
+  activation_lord?: string | null;
+  themes: LifeRhythmSignificationItem[];
+  firdaria_overlap: string[];
+}
+
+export interface LifeRhythmTransitTrigger {
+  type: "transit_trigger";
+  month: string;
+  score: number;
+  tag: string;
+  timing_authority: "firdaria" | string;
+  target_planets: string[];
+  helper_target_planets: string[];
+  scoring_target_planets: string[];
+  annual_activation?: LifeRhythmAnnualActivation | null;
+}
+
+export interface LifeRhythmOut {
+  type: "life_rhythm";
+  person_id: string;
+  chart_id: string;
+  generated_at: string;
+  months: number;
+  timing_authority: "firdaria" | string;
+  source_layers: string[];
+  natal_promise: LifeRhythmNatalStage[];
+  firdaria_chapter: LifeRhythmFirdariaChapter;
+  annual_activation: LifeRhythmAnnualActivation;
+  transit_triggers: LifeRhythmTransitTrigger[];
+}
+
+export interface PersonExportOut {
+  person: PersonOut;
+  profile?: Record<string, any> | null;
+  conversations: Array<Record<string, any>>;
+  memory_items: Array<Record<string, any>>;
+  journal_entries: Array<Record<string, any>>;
+  life_events: Array<Record<string, any>>;
+  letters: Array<Record<string, any>>;
+  fragment_lights: Array<Record<string, any>>;
+  push_subscriptions: Array<Record<string, any>>;
+  related_persons: Array<Record<string, any>>;
+  exported_at: string;
+}
+
+export interface PersonDeleteOut {
+  deleted: string;
+}
+
 export interface FragmentOut {
   id: string;        // "sun_core"
   zone: string;      // "planet" | "house" | "sign"
@@ -283,7 +396,7 @@ export function describeError(e: unknown): string {
   return "出了点意外，请稍后再试";
 }
 
-function request<T>(method: "GET" | "POST" | "PUT", path: string, data?: unknown, timeout = 15000): Promise<T> {
+function request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, data?: unknown, timeout = 15000): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     uni.request({
       url: BASE_URL + path,
@@ -314,6 +427,8 @@ export const api = {
   claimXiatianLegacyData: (accountId: string) => request<{ target_person_id: string; merged: Record<string, Record<string, number>> }>("POST", `/account/${accountId}/claim-xiatian`, undefined, 60000),
   createPerson: (p: PersonIn) => request<PersonOut>("POST", "/person", p),
   getPerson: (id: string) => request<PersonOut>("GET", `/person/${id}`),
+  exportPerson: (id: string) => request<PersonExportOut>("GET", `/person/${id}/export`, undefined, 60000),
+  deletePerson: (id: string) => request<PersonDeleteOut>("DELETE", `/person/${id}`, undefined, 60000),
   // chat 涉及 LLM（意图拆解+叙事），可能较慢，单独放宽超时
   chat: (body: ChatIn) => request<ChatOut>("POST", "/chat", body, 60000),
   profile: (personId: string) => request<ProfileOut>("GET", `/person/${personId}/profile`),
@@ -333,6 +448,8 @@ export const api = {
   updatePreferences: (personId: string, prefs: Record<string, any>) =>
     request<PreferencesOut>("PUT", `/person/${personId}/preferences`, prefs),
   timeline: (personId: string) => request<TimelineEventOut[]>("GET", `/person/${personId}/timeline`),
+  lifeRhythm: (personId: string, months = 6) =>
+    request<LifeRhythmOut>("GET", `/person/${personId}/life-rhythm?months=${months}`, undefined, 60000),
   journalList: (personId: string, page = 1, page_size = 20) =>
     request<JournalPage>("GET", `/person/${personId}/journal?page=${page}&page_size=${page_size}`),
   journalCreate: (body: { person_id: string; content: string; mood?: string }) =>

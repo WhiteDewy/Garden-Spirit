@@ -340,8 +340,15 @@ class GardenSpiritAgent:
         # 宫位咨询路径：用户锁定"3宫表达"/"12宫财运" → 宫位语义场直接出解读。
         # 不走领域策略管线（那是 generic 领域结论，与宫位无关）；硬线不变——
         # 占星结论仍全由 Domain 的 HouseSignificationEngine 出，LLM 只叙事。
+        # 完整材料（如"月亮在8宫"）虽带 focus_house，但不是裸宫/切片咨询，
+        # 不能被旧直读路径截走；它应进入常规分析链，由 call_plan/enrichment 承载。
         house_slot = intent.get_slot("focus_house")
-        if house_slot is not None:
+        material_slot = intent.get_slot("astrology_material")
+        is_complete_material = (
+            material_slot is not None
+            and material_slot.normalized_value == "planet_in_house"
+        )
+        if house_slot is not None and not is_complete_material:
             chart = self._chart_provider(person, None)
             from domain.reasoning.consult import get_resolver
 
@@ -587,6 +594,22 @@ class GardenSpiritAgent:
         enrichment["house_occupants"] = d.get("house_occupants") or []
         return enrichment
 
+    @staticmethod
+    def _report_context_for_prompt(intent: Intent) -> dict | None:
+        """Intent.entry_* → LLM prompt 入口上下文；只作语境，不参与 Domain 结论。"""
+        data = {
+            "entry_source": intent.entry_source,
+            "entry_topic_key": intent.entry_topic_key,
+            "primary_topic": intent.entry_primary_topic,
+            "secondary_topics": list(intent.entry_secondary_topics or []),
+            "intent_shape": intent.entry_intent_shape,
+            "report_type": intent.entry_report_type,
+            "user_focus_text": intent.entry_user_focus_text,
+        }
+        if any(value for key, value in data.items() if key != "secondary_topics") or data["secondary_topics"]:
+            return data
+        return None
+
     def _format_response(
         self,
         conclusion: Conclusion,
@@ -639,6 +662,7 @@ class GardenSpiritAgent:
                     mode=mode,
                     house_focus=house_focus,
                     confirmed=confirmed,
+                    report_context=self._report_context_for_prompt(intent),
                 )
             except Exception as exc:  # pragma: no cover - LLM 降级
                 logger.warning("LLM 转述失败，降级 v1 模板: %s", exc)

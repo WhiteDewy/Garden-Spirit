@@ -169,7 +169,11 @@ class Risk(AnalysisModule):
                 theme_fact(
                     chart, self.name, "career_risk",
                     polarity, weight, 0.65,
-                    f"职业风险综合评分 {score:+.1f}（凶星相位与十宫压力）",
+                    (
+                        "这次职业议题存在需要谨慎处理的压力点"
+                        if score < -1.0
+                        else "这次职业议题的压力信号不算突出"
+                    ) + "（凶星相位与十宫压力）",
                     {"score": score},
                 )
             )

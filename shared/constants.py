@@ -150,7 +150,7 @@ BIRTH_UNKNOWN_FALLBACK_HOUR: int = 12
 DIGNITY_STATE_ZH: dict[str, str] = {
     "domicile": "入庙",
     "exaltation": "曜升",
-    "triplicity": "三分主",
+    "triplicity": "三分",
     "term": "在界",
     "face": "在面",
     "peregrine": "游走",

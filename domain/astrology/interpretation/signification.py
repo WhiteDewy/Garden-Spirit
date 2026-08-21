@@ -170,7 +170,7 @@ class HouseSignificationEngine:
         planet_name: str, house: int, evidence: tuple[str, ...], *, positive: bool
     ) -> list[str]:
         """assess_planet 本质轴证据 → 宫主语境证据（保持宫结构可读）。"""
-        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（尊贵"
+        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（"
         return [ev.replace(planet_name, f"{planet_name}为{house}宫主", 1) for ev in evidence if marker in ev]
 
     @staticmethod
@@ -178,7 +178,7 @@ class HouseSignificationEngine:
         planet_name: str, house: int, evidence: tuple[str, ...], *, positive: bool
     ) -> list[str]:
         """assess_planet 本质轴证据 → 宫内星语境证据。"""
-        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（尊贵"
+        marker = f"{planet_name}尊贵" if positive else f"{planet_name}受克（"
         return [ev.replace(planet_name, f"{planet_name}落{house}宫", 1) for ev in evidence if marker in ev]
 
     # -- 强度调制 ---------------------------------------------------------

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from foundation.logger import get_logger
 from foundation.utils import new_id
-from shared.constants import ASPECT_ZH
+from shared.constants import ASPECT_ZH, DIGNITY_STATE_ZH
 from shared.enums import DignityState, EvidencePolarity, FactCategory, Planet
 from shared.models import Chart, Fact, Person
 
@@ -64,11 +64,7 @@ class Finance(AnalysisModule):
             total = self._raw_essential_score(assessment)
             evidence_dignity = self._evidence_dignity(states)
             score += self._essential_finance_score(assessment) * 0.8
-            dignity_status = (
-                "有支撑但受限"
-                if assessment.essential_pos > 0 and assessment.essential_neg > 0
-                else "有支撑" if assessment.essential_pos > 0 else "受限"
-            )
+            dignity_label = self._dignity_label(evidence_dignity, assessment)
             if assessment.essential_pos > 0 or assessment.essential_neg > 0:
                 facts.append(
                     Fact(
@@ -78,7 +74,7 @@ class Finance(AnalysisModule):
                         description=(
                             f"二宫主{self._kb.planet(h2_lord).name_zh}"
                             f"落在{self._kb.sign(cp.sign.sign).name_zh}，"
-                            f"财务尊贵分{total:+d}（{dignity_status}）"
+                            f"财务本质状态：{dignity_label}"
                         ),
                         extracted_at=datetime.now(timezone.utc),
                         payload={
@@ -123,6 +119,7 @@ class Finance(AnalysisModule):
                     if assessment.essential_pos > 0 and assessment.essential_neg > 0
                     else "良好" if assessment.essential_pos > 0 else "受限"
                 )
+                ruler_state = self._essential_status_label(assessment)
                 facts.append(
                     Fact(
                         id=new_id("fact"),
@@ -130,7 +127,7 @@ class Finance(AnalysisModule):
                         chart_id=chart.id,
                         description=(
                             f"八宫主{self._kb.planet(h8_lord).name_zh}"
-                            f"尊贵分{total:+d}，共同资源/他方资金{resource_status}"
+                            f"本质状态：{ruler_state}，共同资源/他方资金{resource_status}"
                         ),
                         extracted_at=datetime.now(timezone.utc),
                         payload={
@@ -191,7 +188,13 @@ class Finance(AnalysisModule):
                 theme_fact(
                     chart, self.name, "career_finance",
                     polarity, weight, 0.6,
-                    f"财务支撑评分 {score:+.1f}（二宫收入与资源位势）",
+                    (
+                        "财务资源对这次职业议题有支撑"
+                        if score > 1.0
+                        else "财务资源是这次职业议题里需要先稳住的一环"
+                        if score < -1.0
+                        else "财务资源对这次职业议题呈现为支持与压力并存"
+                    ) + "（二宫收入与资源位势）",
                     {"score": score},
                 )
             )
@@ -212,6 +215,33 @@ class Finance(AnalysisModule):
         if assessment.essential_neg > 0:
             return -assessment.essential_neg
         return assessment.essential_pos
+
+    @staticmethod
+    def _dignity_label(state: DignityState, assessment) -> str:
+        """用户可见尊贵标签只读 state；raw_score 留在 payload 审计。"""
+        base = DIGNITY_STATE_ZH.get(state.value, state.value)
+        if assessment.essential_pos > 0 and assessment.essential_neg > 0:
+            if assessment.essential_pos > assessment.essential_neg:
+                return f"{base}（有支撑但受限）"
+            if assessment.essential_neg > assessment.essential_pos:
+                return f"{base}（有支撑）"
+            return f"{base}（吉凶并见）"
+        return base
+
+    @staticmethod
+    def _essential_status_label(assessment) -> str:
+        """八宫主等非 DIGNITY fact 按 split-axis 显示状态，不展示净分。"""
+        if assessment.essential_pos > 0 and assessment.essential_neg > 0:
+            if assessment.essential_pos > assessment.essential_neg:
+                return "有支撑但受限"
+            if assessment.essential_neg > assessment.essential_pos:
+                return "受限但有支撑"
+            return "吉凶并见"
+        if assessment.essential_pos > 0:
+            return "有支撑"
+        if assessment.essential_neg > 0:
+            return "受限"
+        return "平稳"
 
     @staticmethod
     def _evidence_dignity(states: list[DignityState]) -> DignityState:

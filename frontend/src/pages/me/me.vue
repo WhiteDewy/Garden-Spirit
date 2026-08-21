@@ -83,9 +83,10 @@
     <text class="section-label">TRUST · 数据与安全</text>
     <view class="settings">
       <view class="setting" @tap="goMailbox"><view><text class="setting-title">我的信箱与手账</text><text class="setting-sub">查看来信、记忆词条和自己写下的时刻</text></view><text class="arrow">→</text></view>
-      <view class="setting" @tap="reportsComingSoon"><view><text class="setting-title">已生成资产</text><text class="setting-sub">后续只存放报告、复盘和可回看的结构化资产</text></view><text class="arrow">→</text></view>
-      <view class="setting" @tap="pushComingSoon"><view><text class="setting-title">推送偏好</text><text class="setting-sub">管理今日来信、回家看看与复盘提醒</text></view><text class="arrow">→</text></view>
-      <view class="setting" @tap="privacyComingSoon"><view><text class="setting-title">隐私与安全</text><text class="setting-sub">后续承接导出、删除、密钥安全说明</text></view><text class="arrow">→</text></view>
+      <view class="setting" @tap="goLifeRhythm"><view><text class="setting-title">人生章节报告</text><text class="setting-sub">查看 Life Rhythm：本命承诺、法达章节和未来触发窗口</text></view><text class="arrow">→</text></view>
+      <view class="setting" @tap="reportsComingSoon"><view><text class="setting-title">已生成资产</text><text class="setting-sub">后续存放报告编译器生成的复盘与结构化资产</text></view><text class="arrow">→</text></view>
+      <view class="setting" @tap="goPrivacy"><view><text class="setting-title">推送偏好</text><text class="setting-sub">管理今日来信、回家看看与复盘提醒</text></view><text class="arrow">→</text></view>
+      <view class="setting" @tap="goPrivacy"><view><text class="setting-title">隐私与安全</text><text class="setting-sub">导出、删除和密钥安全说明</text></view><text class="arrow">→</text></view>
     </view>
 
     <BottomNav active="me" />
@@ -213,8 +214,11 @@ function goConsult() {
 function goMailbox() {
   uni.reLaunch({ url: "/pages/mailbox/mailbox" });
 }
-function privacyComingSoon() {
-  uni.showToast({ title: "隐私工具后续会放在这里", icon: "none" });
+function goLifeRhythm() {
+  uni.navigateTo({ url: "/pages/universe/life-rhythm" });
+}
+function goPrivacy() {
+  uni.navigateTo({ url: "/pages/me/privacy" });
 }
 function vipComingSoon() {
   uni.showToast({ title: "VIP 权益后续接入", icon: "none" });
@@ -224,9 +228,6 @@ function inviteComingSoon() {
 }
 function reportsComingSoon() {
   uni.showToast({ title: "结构化资产后续接入", icon: "none" });
-}
-function pushComingSoon() {
-  uni.showToast({ title: "推送偏好后续接入", icon: "none" });
 }
 </script>
 

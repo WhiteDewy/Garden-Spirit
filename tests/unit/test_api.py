@@ -299,6 +299,62 @@ def test_chat_accepts_observatory_report_intent(client):
     assert data["mode"] == "deep"
 
 
+def test_chat_rejects_invalid_observatory_report_intent(client):
+    """报告型入口字段是受控契约；非法类型不能污染后续意图与报告编译。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    chat = client.post("/chat", json={
+        "person_id": pid,
+        "message": "我想看看最近",
+        "report_intent": {
+            "entry_source": "observatory",
+            "entry_topic_key": "career",
+            "intent_shape": "made_up_shape",
+            "report_type": "weekly",
+        },
+    })
+
+    assert chat.status_code == 422
+
+
+def test_life_rhythm_endpoint_exposes_domain_report_contract(client):
+    """Life Rhythm 独立出口：不复用成长事件 timeline，四层素材由 Domain 给出。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    resp = client.get(f"/person/{pid}/life-rhythm?months=3")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "life_rhythm"
+    assert data["person_id"] == pid
+    assert data["timing_authority"] == "firdaria"
+    assert data["source_layers"] == [
+        "natal_promise",
+        "firdaria_chapter",
+        "annual_activation",
+        "transit_triggers",
+    ]
+    assert data["natal_promise"]
+    assert data["firdaria_chapter"]["type"] == "firdaria_chapter"
+    assert data["firdaria_chapter"]["timing_authority"] == "firdaria"
+    assert data["annual_activation"]["role"] == "auxiliary"
+    assert data["annual_activation"]["primary_timing_authority"] == "firdaria"
+    assert len(data["transit_triggers"]) == 3
+    assert all(row["timing_authority"] == "firdaria" for row in data["transit_triggers"])
+    assert "year_lord" not in data
+    assert "year_lord" not in data["annual_activation"]
+
+
+def test_life_rhythm_months_are_bounded(client):
+    """报告窗口先锁 1-6 个月，避免前端任意拉长扫描造成慢请求。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    resp = client.get(f"/person/{pid}/life-rhythm?months=12")
+
+    assert resp.status_code == 422
+
+
+
 def test_chat_followup_same_session(client):
     """同一 session_id 多轮追问，仍能回答（会话延续）。"""
     pid = client.post("/person", json=_person_payload()).json()["id"]
@@ -959,3 +1015,148 @@ def test_garden_pending_verifications_dot(client):
     _inject_finding(client, pid, "土星落九宫：深造是必经之路", fid="dot1")
     g = client.get(f"/garden?person_id={pid}").json()
     assert g["pending_verifications"] == 1
+
+
+def _seed_report_sources(client, pid: str, session_id: str = "report_s1") -> str:
+    """Report Compiler MVP：测试只种后端已有素材，不走 LLM 造结论。"""
+    from foundation.utils import new_id, utc_now_aware
+    from shared.enums import PersonaType, Role
+    from shared.models import (
+        ChartProfile,
+        Conversation,
+        DialogueTurn,
+        DomainSummary,
+        FragmentLight,
+        Letter,
+        LifeEvent,
+        MemoryItem,
+        VerifiedFinding,
+    )
+
+    store = client.app.state.store
+    now = utc_now_aware()
+    conv = Conversation(
+        id=session_id,
+        person_id=pid,
+        persona=PersonaType.MOON,
+        started_at=now,
+        is_active=True,
+    )
+    conv.add_turn(DialogueTurn(
+        id=new_id("t"),
+        user_message="我想把最近事业和情绪整理一下",
+        assistant_response="我们先把已确认的线索收拢。",
+        persona_used=PersonaType.MOON,
+        timestamp=now,
+    ))
+    store.save_conversation(conv, summary="事业和情绪整理")
+
+    profile = ChartProfile(person_id=pid, created_at=now, updated_at=now)
+    profile.domain_summaries["career"] = DomainSummary(
+        domain="career",
+        summary="最近在重新评估职业方向。",
+        confidence=0.8,
+        evidence_notes=["来自对话"],
+        updated_at=now,
+    )
+    profile.verified_findings.append(VerifiedFinding(
+        id="vf_report",
+        statement="土星线索显示事业选择需要长期结构。",
+        confidence=0.72,
+        domain="career",
+    ))
+    store.save_profile(profile)
+
+    store.save_memory_item(MemoryItem(
+        id="mem_report",
+        session_id=session_id,
+        person_id=pid,
+        role=Role.USER,
+        content="我担心工作方向走错了",
+        timestamp=now,
+    ))
+    store.save_life_event(LifeEvent(
+        id="evt_report",
+        person_id=pid,
+        occurred_at=now,
+        label="完成事业复盘",
+        kind="consult",
+        domain="career",
+    ))
+    store.save_letter(Letter(
+        id="lt_report",
+        person_id=pid,
+        letter_date="2026-08-21",
+        sender="moon",
+        title="月亮来信",
+        body="你愿意把这段卡住说出来。",
+        kind="keepsake",
+        created_at=now,
+    ))
+    store.append_fragment_lights(
+        pid,
+        [FragmentLight(subtype_id="moon_tide", delta=5, kind="outpouring", source="工作方向很乱")],
+        session_id=session_id,
+    )
+    return session_id
+
+
+def test_compile_chat_digest_uses_backend_sources_and_refs(client):
+    """Report Compiler 小报告：只整理已有素材，且每段都有 source_refs。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+    session_id = _seed_report_sources(client, pid)
+
+    resp = client.post(
+        f"/person/{pid}/reports/compile",
+        json={"report_type": "chat_digest", "source": "chat", "session_id": session_id, "topic": "事业复盘"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "report"
+    assert data["status"] == "draft"
+    assert data["report_type"] == "chat_digest"
+    assert data["person_id"] == pid
+    assert data["sections"]
+    assert all(s["source_refs"] for s in data["sections"])
+    ref_types = {ref["type"] for section in data["sections"] for ref in section["source_refs"]}
+    assert {"profile", "finding", "conversation", "memory", "timeline", "fragment_light", "letter"}.issubset(ref_types)
+    assert {ref["type"] for ref in data["source_refs"]} == ref_types
+    assert "net_score" not in str(data)
+
+
+def test_compile_report_without_backend_material_returns_422(client):
+    """无对话/画像/记忆/来信等素材 → 不伪造报告，安全 422。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    resp = client.post(
+        f"/person/{pid}/reports/compile",
+        json={"report_type": "chat_digest", "source": "chat", "topic": "空白主题"},
+    )
+
+    assert resp.status_code == 422
+    assert "暂无足够素材" in resp.json()["detail"]
+
+
+def test_compile_life_rhythm_report_preserves_timing_authority_boundary(client):
+    """Life Rhythm 报告草稿：引用 Domain 四层素材，不暴露旧 year_lord / net_score。"""
+    pid = client.post("/person", json=_person_payload()).json()["id"]
+
+    resp = client.post(
+        f"/person/{pid}/reports/compile",
+        json={"report_type": "life_rhythm", "source": "observatory", "months": 3},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["report_type"] == "life_rhythm"
+    assert data["sections"]
+    keys = {s["key"] for s in data["sections"]}
+    assert {"life_rhythm_authority", "firdaria_chapter", "annual_activation"}.issubset(keys)
+    assert all(s["source_refs"] for s in data["sections"])
+    assert {ref["type"] for ref in data["source_refs"]} == {"life_rhythm"}
+    text = str(data)
+    assert "法达是主章节" in text
+    assert "annual_activation" in text
+    assert "year_lord" not in text
+    assert "net_score" not in text

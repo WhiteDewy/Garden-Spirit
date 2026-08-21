@@ -49,6 +49,11 @@ def _fd(intent) -> str | None:
     return s.normalized_value if s else None
 
 
+def _slot(intent, name: str) -> str | None:
+    s = intent.get_slot(name)
+    return s.normalized_value if s else None
+
+
 # -- 路由层：裸宫反问 / 切片锁定 / 领域词 / 别名 / 中文数字 -----------------
 
 def test_bare_house_asks_clarification():
@@ -80,6 +85,25 @@ def test_rule_plus_house_no_clarification():
     assert not intent.requires_clarification
     assert _fh(intent) == 12
     assert _fd(intent) == "wealth"
+
+
+def test_planet_in_house_is_complete_astrology_material():
+    """完整配置（行星+落宫）不是裸宫位，不能追问“8宫哪一块”。"""
+    intent = IntentRouter().route("月亮在8宫什么意思啊")
+    assert not intent.requires_clarification
+    assert _slot(intent, "astrology_material") == "planet_in_house"
+    assert _slot(intent, "focus_planet") == "moon"
+    assert _fh(intent) == 8
+
+
+def test_planet_in_house_friend_chart_subject():
+    """朋友/对方星盘里的行星落宫，是他盘材料上下文，不是用户本盘裸宫。"""
+    intent = IntentRouter().route("我有一个朋友的星盘，月亮在8宫")
+    assert not intent.requires_clarification
+    assert _slot(intent, "astrology_material") == "planet_in_house"
+    assert _slot(intent, "focus_planet") == "moon"
+    assert _fh(intent) == 8
+    assert _slot(intent, "subject") == "friend_chart"
 
 
 def test_house_slice_alias_taohua():

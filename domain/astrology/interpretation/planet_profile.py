@@ -217,18 +217,6 @@ _MINOR_DIGNITY_LABELS = {
 }
 
 
-def _dignity_label(score: int) -> str:
-    if score >= 5:
-        return "入庙"
-    if score >= 4:
-        return "曜升"
-    if score <= -5:
-        return "落陷"
-    if score <= -2:
-        return "失势"
-    return "游走"
-
-
 def _dignity_label_from_states(chart: Chart, kb: KnowledgeBase, planet: Planet, assessment) -> str:
     """尊贵标签：按真实 dignity state 输出，避免把三分/界/面说成入旺。"""
     states: list[DignityState] = []
@@ -253,18 +241,6 @@ def _dignity_label_from_states(chart: Chart, kb: KnowledgeBase, planet: Planet, 
     else:
         base = "游走"
 
-    if assessment.essential_pos > 0 and assessment.essential_neg > 0:
-        if assessment.essential_neg > assessment.essential_pos:
-            return f"{base}（有支撑）"
-        if assessment.essential_pos > assessment.essential_neg:
-            return f"{base}（有支撑但受限）"
-        return "游走（吉凶并见）"
-    return base
-
-
-def _dignity_label_from_assessment(assessment) -> str:
-    """兼容旧调用：仅保留净分兜底；新星档案应走 _dignity_label_from_states。"""
-    base = _dignity_label(_dignity_score_from_assessment(assessment))
     if assessment.essential_pos > 0 and assessment.essential_neg > 0:
         if assessment.essential_neg > assessment.essential_pos:
             return f"{base}（有支撑）"

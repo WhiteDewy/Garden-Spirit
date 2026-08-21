@@ -144,7 +144,7 @@ def test_evidence_builder_mixed_dignity_preserves_debility_polarity():
     builder = EvidenceBuilder(kb)
     fact = Fact(
         id="f1", category=FactCategory.DIGNITY, chart_id="c1",
-        description="金星落在处女座，财务尊贵分+2（有支撑但受限）",
+        description="金星落在处女座，落陷（有支撑但受限）",
         extracted_at=datetime.now(timezone.utc),
         payload={
             "planet": "venus",
@@ -180,6 +180,43 @@ def test_evidence_builder_aspect_nature():
     assert len(es.positive_evidence) == 1
     # trine 基权重 1.0 × 入相 1.2
     assert es.positive_evidence[0].weight == pytest.approx(1.2)
+
+
+def test_theme_evidence_preserves_annual_activation_metadata():
+    """Timing THEME fact 的 annual_activation 必须进入 Evidence metadata，供 Domain evidence chain 审计。"""
+    kb = load_knowledge()
+    builder = EvidenceBuilder(kb)
+    annual_activation = {
+        "type": "annual_activation",
+        "role": "auxiliary",
+        "primary_timing_authority": "firdaria",
+        "activation_house": 12,
+        "activation_lord": "mars",
+    }
+    fact = Fact(
+        id="f_timing",
+        category=FactCategory.THEME,
+        chart_id="c1",
+        description="时间窗口：法达月亮大限/火星子限；年度小限激活12宫/火星作辅助观察",
+        extracted_at=datetime.now(timezone.utc),
+        payload={
+            "theme": "timing_window",
+            "polarity": EvidencePolarity.NEUTRAL.value,
+            "weight": 1.0,
+            "confidence": 0.65,
+            "module": "Timing",
+            "timing_authority": "firdaria",
+            "annual_target_planets": ["mars"],
+            "annual_activation": annual_activation,
+        },
+    )
+    fs = FactSet(id="fs", chart_ids=["c1"], intent_domain="career", facts=[fact])
+    es = builder.build(fs, domain="career", query_context="换工作")
+    ev = es.neutral_evidence[0]
+
+    assert ev.metadata["annual_activation"] == annual_activation
+    assert ev.metadata["timing_authority"] == "firdaria"
+    assert "year_lord" not in ev.metadata
 
 
 def test_dominant_theme():

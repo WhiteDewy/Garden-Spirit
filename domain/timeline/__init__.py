@@ -1,5 +1,6 @@
 """Timeline —— 人生 K 线 + 法达时间领主。"""
 
+from domain.timeline.annual_activation import AnnualActivation, compute_annual_activation
 from domain.timeline.firdaria import (
     FirdariaPeriod,
     FirdariaReading,
@@ -8,6 +9,7 @@ from domain.timeline.firdaria import (
     firdaria_reading,
     time_lord_character,
 )
+from domain.timeline.life_rhythm import LifeChapter, LifeRhythm, LifeStage, build_life_rhythm
 from domain.timeline.lunar_return import LunarReturn, LunarReturnCalculator
 from domain.timeline.progressed import ProgressedMoon, ProgressedMoonCalculator
 from domain.timeline.scanner import WindowScanner
@@ -16,8 +18,12 @@ from domain.timeline.spirit_recommender import PlanetActivationScore, score_spir
 from domain.timeline.timing_stack import TimingStack, build_timing_stack
 
 __all__ = [
+    "AnnualActivation",
     "FirdariaPeriod",
     "FirdariaReading",
+    "LifeChapter",
+    "LifeRhythm",
+    "LifeStage",
     "LunarReturn",
     "LunarReturnCalculator",
     "PlanetActivationScore",
@@ -28,7 +34,9 @@ __all__ = [
     "TimeLordCharacter",
     "TimingStack",
     "WindowScanner",
+    "build_life_rhythm",
     "build_timing_stack",
+    "compute_annual_activation",
     "compute_firdaria",
     "firdaria_reading",
     "score_spirits",

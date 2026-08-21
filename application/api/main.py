@@ -15,6 +15,7 @@ W1 骨架端点：
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
@@ -49,6 +50,7 @@ from application.conversation.fragments import (
     DEPTH_SEEN,
     FragmentService,
 )
+from domain.timeline.life_rhythm import build_life_rhythm
 from domain.timeline.spirit_recommender import score_spirits
 
 APP_NAME = "星灵花园 Garden-Spirit"
@@ -142,13 +144,72 @@ class ProfileListItemOut(BaseModel):
 class ReportIntentIn(BaseModel):
     """主题观星台 → Chat 的报告型意图入口契约。只作路由/澄清上下文，不产出占星结论。"""
 
-    entry_source: str = "observatory"
-    entry_topic_key: str
-    primary_topic: str | None = None
-    secondary_topics: list[str] = Field(default_factory=list)
-    intent_shape: str | None = None
-    report_type: str | None = None
-    user_focus_text: str | None = None
+    entry_source: Literal["observatory"] = "observatory"
+    entry_topic_key: str = Field(min_length=1, max_length=64)
+    primary_topic: str | None = Field(default=None, max_length=64)
+    secondary_topics: list[str] = Field(default_factory=list, max_length=8)
+    intent_shape: Literal[
+        "single_topic",
+        "cross_topic_influence",
+        "topic_switch_suggested",
+        "clarification_required",
+        "unsupported",
+    ] | None = None
+    report_type: Literal["monthly", "annual", "life_rhythm", "theme"] | None = None
+    user_focus_text: str | None = Field(default=None, max_length=1000)
+
+
+ReportSourceType = Literal[
+    "profile",
+    "finding",
+    "timeline",
+    "conversation",
+    "memory",
+    "fragment_light",
+    "letter",
+    "life_rhythm",
+]
+
+
+class ReportCompileInput(BaseModel):
+    """Report Compiler MVP：只整理后端已有素材，不生成新的占星判断。"""
+
+    report_type: Literal["chat_digest", "theme", "life_rhythm"] = "chat_digest"
+    source: Literal["chat", "observatory", "manual"] = "chat"
+    session_id: str | None = Field(default=None, max_length=128)
+    topic: str | None = Field(default=None, max_length=160)
+    report_intent: ReportIntentIn | None = None
+    months: int = Field(default=3, ge=1, le=6)
+
+
+class ReportSourceRefOut(BaseModel):
+    """报告段落的证据引用：只指向后端权威素材。"""
+
+    type: ReportSourceType
+    id: str
+    label: str = ""
+
+
+class ReportSectionOut(BaseModel):
+    key: str
+    title: str
+    body: str
+    source_refs: list[ReportSourceRefOut] = Field(min_length=1)
+
+
+class ReportOut(BaseModel):
+    """结构化报告草稿；每个 section 都必须带 source_refs。"""
+
+    id: str
+    type: Literal["report"] = "report"
+    status: Literal["draft"] = "draft"
+    report_type: str
+    person_id: str
+    title: str
+    summary: str
+    generated_at: str
+    sections: list[ReportSectionOut] = Field(min_length=1)
+    source_refs: list[ReportSourceRefOut] = Field(default_factory=list)
 
 
 class ChatIn(BaseModel):
@@ -313,6 +374,22 @@ class TimelineEventOut(BaseModel):
     # 咨询记录补意图/需求（喂记忆写回）：domain = 八大领域，need = 诉求类型
     domain: str = ""
     need: str = ""
+
+
+class LifeRhythmOut(BaseModel):
+    """Life Rhythm 报告地基：Domain 确定性输出，前端只渲染不推断。"""
+
+    type: str
+    person_id: str
+    chart_id: str
+    generated_at: str
+    months: int
+    timing_authority: str
+    source_layers: list[str]
+    natal_promise: list[dict] = Field(default_factory=list)
+    firdaria_chapter: dict
+    annual_activation: dict
+    transit_triggers: list[dict] = Field(default_factory=list)
 
 
 class JournalIn(BaseModel):
@@ -1301,6 +1378,41 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             pushed=pushed,
         )
 
+    @app.get("/person/{person_id}/life-rhythm", response_model=LifeRhythmOut)
+    def get_life_rhythm(
+        person_id: str,
+        months: int = Query(default=6, ge=1, le=6),
+    ) -> LifeRhythmOut:
+        """Life Rhythm 报告地基：本命承诺 + 法达章节 + 小限年度 + 行运触发。
+
+        这是报告型出口，不替代 /timeline 的成长事件列表。所有占星素材均由 Domain
+        确定性生成；前端只渲染，不自行判断宫位、行星、吉凶或时机权威。
+        """
+        person = _get_person(person_id)
+        chart = chart_cache.get_or_compute(person)
+        rhythm = build_life_rhythm(
+            person,
+            chart,
+            agent._calculator.kb,
+            months=months,
+        )
+        return LifeRhythmOut(**rhythm.to_dict())
+
+    @app.post("/person/{person_id}/reports/compile", response_model=ReportOut)
+    def compile_report(person_id: str, body: ReportCompileInput) -> ReportOut:
+        """Report Compiler MVP：把后端已有素材整理成草稿，不新造占星结论。"""
+        person = _get_person(person_id)
+        try:
+            return _compile_report_draft(
+                person=person,
+                body=body,
+                store=store,
+                chart_provider=chart_cache.get_or_compute,
+                kb=agent._calculator.kb,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/person/{person_id}/timeline", response_model=list[TimelineEventOut])
     def get_timeline(person_id: str) -> list[TimelineEventOut]:
         events = store.list_life_events(person_id)
@@ -1808,6 +1920,293 @@ def _get_or_init_profile(store: GardenStore, person_id: str) -> ChartProfile:
         now = utc_now_aware()
         profile = ChartProfile(person_id=person_id, created_at=now, updated_at=now)
     return profile
+
+
+def _compile_report_draft(
+    *,
+    person: Person,
+    body: ReportCompileInput,
+    store: GardenStore,
+    chart_provider,
+    kb,
+) -> ReportOut:
+    """Report Compiler MVP：聚合后端已有素材；无证据不成段。"""
+    sections: list[ReportSectionOut] = []
+    topic = _report_topic(body)
+
+    if body.report_type == "life_rhythm":
+        chart = chart_provider(person)
+        rhythm = build_life_rhythm(person, chart, kb, months=body.months).to_dict()
+        life_ref = _report_ref(
+            "life_rhythm",
+            f"{person.id}:{rhythm.get('chart_id', 'chart')}:{body.months}m",
+            "Life Rhythm 后端四层素材",
+        )
+        sections.extend(_life_rhythm_report_sections(rhythm, life_ref))
+    else:
+        profile = store.get_profile(person.id)
+        if profile is not None:
+            _append_profile_report_sections(sections, profile)
+
+        conversation = store.get_conversation(body.session_id) if body.session_id else None
+        if conversation is not None and conversation.person_id != person.id:
+            conversation = None
+        conversations = [conversation] if conversation is not None else store.list_conversations(person.id)[:3]
+        _append_conversation_report_section(sections, conversations, body.session_id)
+
+        memories = store.list_memory_items(
+            person_id=person.id,
+            session_id=body.session_id,
+            limit=8,
+        )
+        _append_memory_report_section(sections, memories)
+
+        events = store.list_life_events(person.id, limit=5)
+        _append_timeline_report_section(sections, events)
+
+        lights = store.list_fragment_lights(person.id, session_id=body.session_id, limit=8)
+        _append_fragment_light_report_section(sections, lights, body.session_id or person.id)
+
+        letters = store.list_letters(person.id, limit=3)
+        _append_letter_report_section(sections, letters)
+
+    if not sections:
+        raise ValueError("暂无足够素材生成报告草稿")
+
+    source_refs = _dedupe_report_refs(ref for s in sections for ref in s.source_refs)
+    return ReportOut(
+        id=new_id("report"),
+        report_type=body.report_type,
+        person_id=person.id,
+        title=_report_title(body.report_type, topic),
+        summary=f"已整理 {len(sections)} 个板块；每段都只引用后端已有素材，不新造占星结论。",
+        generated_at=utc_now_aware().isoformat(),
+        sections=sections,
+        source_refs=source_refs,
+    )
+
+
+def _report_topic(body: ReportCompileInput) -> str:
+    if body.topic and body.topic.strip():
+        return body.topic.strip()
+    if body.report_intent:
+        for candidate in (body.report_intent.primary_topic, body.report_intent.entry_topic_key):
+            if candidate and candidate.strip():
+                return candidate.strip()
+    return "这段对话"
+
+
+def _report_title(report_type: str, topic: str) -> str:
+    if report_type == "life_rhythm":
+        return "人生章节报告草稿"
+    if report_type == "theme":
+        return f"「{topic}」主题报告草稿"
+    return f"「{topic}」小报告草稿"
+
+
+def _report_ref(source_type: ReportSourceType, source_id: str, label: str = "") -> ReportSourceRefOut:
+    return ReportSourceRefOut(type=source_type, id=source_id, label=label)
+
+
+def _dedupe_report_refs(refs) -> list[ReportSourceRefOut]:
+    seen: set[tuple[str, str]] = set()
+    out: list[ReportSourceRefOut] = []
+    for ref in refs:
+        key = (ref.type, ref.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(ref)
+    return out
+
+
+def _clean_report_text(value: Any, limit: int = 180) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def _append_profile_report_sections(sections: list[ReportSectionOut], profile: ChartProfile) -> None:
+    summaries = [s for s in profile.domain_summaries.values() if _clean_report_text(s.summary)]
+    if summaries:
+        lines = [
+            f"- {s.domain or '未分类'}：{_clean_report_text(s.summary, 220)}"
+            for s in sorted(summaries, key=lambda item: item.confidence, reverse=True)[:4]
+        ]
+        sections.append(ReportSectionOut(
+            key="profile_summaries",
+            title="长期画像摘要",
+            body="\n".join(lines),
+            source_refs=[_report_ref("profile", profile.person_id, "长期画像")],
+        ))
+
+    findings = [f for f in profile.verified_findings if _clean_report_text(f.statement)]
+    if findings:
+        lines = [
+            f"- {_clean_report_text(f.statement, 220)}（把握 {f.confidence:.0%}）"
+            for f in sorted(findings, key=lambda item: item.confidence, reverse=True)[:5]
+        ]
+        sections.append(ReportSectionOut(
+            key="verified_findings",
+            title="已沉淀判断",
+            body="\n".join(lines),
+            source_refs=[_report_ref("finding", f.id, f.domain or "沉淀判断") for f in findings[:5]],
+        ))
+
+
+def _append_conversation_report_section(sections: list[ReportSectionOut], conversations, session_id: str | None) -> None:
+    lines: list[str] = []
+    refs: list[ReportSourceRefOut] = []
+    for conv in conversations:
+        if conv is None:
+            continue
+        refs.append(_report_ref("conversation", conv.id, "对话会话"))
+        for turn in conv.turns[-3:]:
+            user_text = _clean_report_text(turn.user_message, 140)
+            if user_text:
+                lines.append(f"- 用户提到：{user_text}")
+            assistant_text = _clean_report_text(turn.assistant_response, 140)
+            if assistant_text:
+                lines.append(f"  星灵回应：{assistant_text}")
+    if lines and refs:
+        title = "本次对话整理" if session_id else "近期对话整理"
+        sections.append(ReportSectionOut(
+            key="conversation_digest",
+            title=title,
+            body="\n".join(lines[:10]),
+            source_refs=_dedupe_report_refs(refs),
+        ))
+
+
+def _append_memory_report_section(sections: list[ReportSectionOut], memories) -> None:
+    lines: list[str] = []
+    refs: list[ReportSourceRefOut] = []
+    for item in memories[:8]:
+        text = _clean_report_text(item.content, 180)
+        if not text:
+            continue
+        lines.append(f"- {item.role.value}：{text}")
+        refs.append(_report_ref("memory", item.id, "记忆条目"))
+    if lines and refs:
+        sections.append(ReportSectionOut(
+            key="memory_clues",
+            title="记忆线索",
+            body="\n".join(lines),
+            source_refs=refs,
+        ))
+
+
+def _append_timeline_report_section(sections: list[ReportSectionOut], events) -> None:
+    lines: list[str] = []
+    refs: list[ReportSourceRefOut] = []
+    for event in events[:5]:
+        label = _clean_report_text(event.label, 120)
+        if not label:
+            continue
+        when = event.occurred_at.date().isoformat() if event.occurred_at else "未定日期"
+        detail = _clean_report_text(event.detail, 120)
+        tail = f"｜{detail}" if detail else ""
+        lines.append(f"- {when}｜{event.kind or 'life'}｜{label}{tail}")
+        refs.append(_report_ref("timeline", event.id, event.domain or event.kind or "时间线"))
+    if lines and refs:
+        sections.append(ReportSectionOut(
+            key="timeline_context",
+            title="时间线素材",
+            body="\n".join(lines),
+            source_refs=refs,
+        ))
+
+
+def _append_fragment_light_report_section(sections: list[ReportSectionOut], lights, fallback_id: str) -> None:
+    lines: list[str] = []
+    refs: list[ReportSourceRefOut] = []
+    for light in lights[:8]:
+        name = FragmentService.name_for(light.subtype_id) or light.subtype_id
+        when = light.lit_at.isoformat() if light.lit_at else ""
+        source = _clean_report_text(light.source, 100)
+        tail = f"｜摘录：{source}" if source else ""
+        lines.append(f"- {name} +{light.delta}（{light.kind}）{tail}")
+        refs.append(_report_ref(
+            "fragment_light",
+            f"{fallback_id}:{light.subtype_id}:{when}",
+            name,
+        ))
+    if lines and refs:
+        sections.append(ReportSectionOut(
+            key="fragment_lights",
+            title="被点亮的内在角落",
+            body="\n".join(lines),
+            source_refs=refs,
+        ))
+
+
+def _append_letter_report_section(sections: list[ReportSectionOut], letters) -> None:
+    lines: list[str] = []
+    refs: list[ReportSourceRefOut] = []
+    for letter in letters[:3]:
+        title = _clean_report_text(letter.title or "星灵来信", 100)
+        body = _clean_report_text(letter.body, 180)
+        if not body and not title:
+            continue
+        lines.append(f"- {letter.letter_date}｜{letter.kind}｜{title}：{body}")
+        refs.append(_report_ref("letter", letter.id, letter.kind or "来信"))
+    if lines and refs:
+        sections.append(ReportSectionOut(
+            key="letters",
+            title="信箱素材",
+            body="\n".join(lines),
+            source_refs=refs,
+        ))
+
+
+def _life_rhythm_report_sections(rhythm: dict[str, Any], life_ref: ReportSourceRefOut) -> list[ReportSectionOut]:
+    sections: list[ReportSectionOut] = []
+    chapter = rhythm.get("firdaria_chapter") or {}
+    period = chapter.get("period") or {}
+    annual = rhythm.get("annual_activation") or {}
+    triggers = rhythm.get("transit_triggers") or []
+    source_layers = ", ".join(rhythm.get("source_layers") or [])
+
+    sections.append(ReportSectionOut(
+        key="life_rhythm_authority",
+        title="报告权威边界",
+        body=(
+            f"本报告引用后端 Life Rhythm 四层素材：{source_layers or '本命承诺、法达章节、年度辅助、行运触发'}。"
+            "法达是主章节；annual_activation 只作年度辅助；行运只作触发窗口。"
+        ),
+        source_refs=[life_ref],
+    ))
+    sections.append(ReportSectionOut(
+        key="firdaria_chapter",
+        title="当前法达章节",
+        body=(
+            f"大限主星：{period.get('major_lord', '')}（{period.get('major_start', '')} → {period.get('major_end', '')}）；"
+            f"子限主星：{period.get('sub_lord', '')}（{period.get('sub_start', '')} → {period.get('sub_end', '')}）。"
+        ),
+        source_refs=[life_ref],
+    ))
+    sections.append(ReportSectionOut(
+        key="annual_activation",
+        title="年度辅助层",
+        body=(
+            f"{annual.get('age', '')} 岁年度点亮第 {annual.get('activation_house', '')} 宫；"
+            f"activation_lord={annual.get('activation_lord') or '未定'}。此层只辅助解释年度场景，不替代法达时机权威。"
+        ),
+        source_refs=[life_ref],
+    ))
+    if triggers:
+        lines = []
+        for item in triggers[:6]:
+            targets = ", ".join(item.get("target_planets") or []) or "目标点待定"
+            lines.append(f"- {item.get('month', '')}｜{item.get('tag', '')}｜触发对象：{targets}")
+        sections.append(ReportSectionOut(
+            key="transit_triggers",
+            title="未来触发窗口",
+            body="\n".join(lines),
+            source_refs=[life_ref],
+        ))
+    return sections
 
 
 def _resolve_persona(raw: str | None):

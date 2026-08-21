@@ -157,9 +157,14 @@ class CareerStrength(AnalysisModule):
             assessment = assess_planet(chart, self._kb, mc_ruler)
             essential_score = self._essential_theme_score(assessment)
             score += essential_score
+            if essential_score > 0:
+                status = "本质状态有承载"
+            elif essential_score < 0:
+                status = "本质状态承压"
+            else:
+                status = "本质状态平稳"
             details.append(
-                f"十宫主{self._kb.planet(mc_ruler).name_zh}"
-                f"本质分{essential_score:+.1f}"
+                f"十宫主{self._kb.planet(mc_ruler).name_zh}{status}"
             )
 
         if not details:
@@ -177,11 +182,17 @@ class CareerStrength(AnalysisModule):
             weight = 0.5
 
         confidence = 0.7
+        if score >= 3:
+            theme_status = "事业承载力较强"
+        elif score <= -3:
+            theme_status = "事业根基仍有压力"
+        else:
+            theme_status = "事业承载力呈现为支持与压力并存"
         return Fact(
             id=new_id("fact"),
             category=FactCategory.THEME,
             chart_id=chart.id,
-            description=f"职业强度综合评分 {score:.0f}（{'；'.join(details)}）",
+            description=f"{theme_status}（{'；'.join(details)}）",
             extracted_at=datetime.now(timezone.utc),
             payload={
                 "theme": "career_strength",

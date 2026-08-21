@@ -1,9 +1,9 @@
 """IntentParser —— 自然语言 → Intent（三层意图 prompt，对话模式感知）。
 
 架构（v2）：
-1. **宫位优先**：宫位是精确占星词汇——确定性抽取永远优先于 LLM
-   （"3宫"/"第十二宫"/"12宫财运"，语义场=唯一事实源）。有宫位 → 直接走规则路由，
-   LLM 只在非宫位消息上分类。
+1. **占星结构优先**：宫位/行星落宫是精确占星词汇——确定性抽取永远优先于 LLM。
+   完整材料（如“月亮在8宫”）只打结构槽进入常规分析链；裸宫位/宫位切片/
+   宫位+领域词才走宫位语义场路由（house_significations.yaml = 唯一事实源）。
 2. **FREE / 随聊**：LLM 只判断「是否在聊占星」。非占星 → Daily.Chat（陪伴管线）；
    占星 → 用 DEEP 模板继续分类。
 3. **QUICK / 快速**：DEEP 骨架 + 收敛规则（不深挖、高澄清门槛、不宫位反问）。
@@ -313,19 +313,23 @@ class IntentParser:
     ) -> Intent:
         """解析用户消息为 Intent（模式感知）。
 
-        1. 宫位引用（精确占星词汇）→ 确定性路由永远优先（硬线：语义场=唯一事实源）。
+        1. 占星结构引用（宫位/行星落宫等精确词汇）→ 确定性路由永远优先。
+           完整材料只打结构槽进入常规分析链；裸宫位/切片/领域词才走宫位语义场。
         2. FREE 模式 → LLM 判断是否聊占星（非占星 → 陪伴，占星 → DEEP 继续分类）。
         3. DEEP/QUICK → LLM 模式感知分类（领域受限枚举）+ 富输出解析。
         4. LLM 不可用/失败 → 规则路由（含 LLM 槽抽取降级）。
         """
-        # 1. 宫位优先：确定性抽取比 LLM 快且准，领域/切片/反问全由规则定（Domain 权威）
+        # 1. 占星结构优先：完整材料/宫位词先由规则层定结构与路由（Domain 权威）
         if self._router._house_from_text(message) is not None:
-            return self._router.route(message, None, context)
+            intent = self._router.route(message, None, context)
+            self._attach_report_intent(intent, context)
+            return intent
 
         # 2. FREE 模式：只判断"是否在聊占星"
         if self._is_mode(mode, ConsultMode.FREE):
             intent = self._free_classify(message, context)
             if intent is not None:
+                self._attach_report_intent(intent, context)
                 return intent
 
         # 3. 常规 LLM 分类（DEEP/QUICK 模式感知）
@@ -333,6 +337,7 @@ class IntentParser:
             classified = self._llm_classify(message, context, mode)
             intent = self._from_classification(message, classified, context)
             if intent is not None:
+                self._attach_report_intent(intent, context)
                 return intent
 
         # 4. 兜底：规则路由（可含 LLM 槽抽取，领域仍由规则定）。
@@ -355,6 +360,7 @@ class IntentParser:
             intent.confirmed = confirmed
             intent.requires_clarification = False
             intent.clarification_question = ""
+        self._attach_report_intent(intent, context)
         return intent
 
     def parse_deep(
@@ -417,6 +423,17 @@ class IntentParser:
         except Exception:  # noqa: BLE001
             return {}
 
+    def _free_system(self, context: dict | None) -> str:
+        """FREE 模式的 system prompt：只判是否聊占星，但也要看入口/上文。"""
+        return (
+            _FREE_INTENT_PROMPT
+            + "\n\n## 对话上下文\n"
+            + _build_context_block(context)
+            + "\n\n如果上下文显示用户是从主题观星台/报告入口进入，或上一轮仍有活跃占星话题，"
+            "本轮的省略表达（如『继续看这个』『这会影响收入吗』）也可能是在继续占星咨询；"
+            "但入口上下文不是占星结论，不能据此生成吉凶判断。"
+        )
+
     def _free_classify(self, message: str, context: dict | None) -> Intent | None:
         """FREE 模式：LLM 判断是否聊占星。
 
@@ -428,7 +445,7 @@ class IntentParser:
         try:
             if not hasattr(self._llm, "classify_intent"):
                 return None
-            free = self._llm.classify_intent(_FREE_INTENT_PROMPT, message)
+            free = self._llm.classify_intent(self._free_system(context), message)
             if not isinstance(free, dict):
                 return None
             if free.get("is_astrology_question") is False:
@@ -610,6 +627,33 @@ class IntentParser:
                 if needs_clarification else ""
             ),
         )
+
+    @staticmethod
+    def _attach_report_intent(intent: Intent, context: dict | None) -> None:
+        """把主题观星台入口元数据挂到 Intent；不参与占星结论合成。"""
+        report_intent = (context or {}).get("report_intent") or {}
+        if not isinstance(report_intent, dict):
+            return
+
+        def text(key: str) -> str | None:
+            value = report_intent.get(key)
+            if not isinstance(value, str):
+                return None
+            value = value.strip()
+            return value or None
+
+        intent.entry_source = text("entry_source")
+        intent.entry_topic_key = text("entry_topic_key")
+        intent.entry_primary_topic = text("primary_topic")
+        intent.entry_intent_shape = text("intent_shape")
+        intent.entry_report_type = text("report_type")
+        intent.entry_user_focus_text = text("user_focus_text")
+        secondary = report_intent.get("secondary_topics") or []
+        if isinstance(secondary, list):
+            intent.entry_secondary_topics = [
+                item.strip() for item in secondary
+                if isinstance(item, str) and item.strip()
+            ]
 
     # ------------------------------------------------------------------
     # 确定性确认检测（规则兜底，证据链闭环）

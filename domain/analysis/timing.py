@@ -43,12 +43,21 @@ class Timing(AnalysisModule):
         start_offset = int(params.get("start_offset_months", 0))
 
         now = datetime.now(timezone.utc)
+        from domain.timeline.annual_activation import compute_annual_activation  # noqa: PLC0415
         from domain.timeline.firdaria import compute_firdaria  # noqa: PLC0415
 
         period = compute_firdaria(chart.epoch_utc, chart.sect, now)
+        annual_activation = compute_annual_activation(
+            chart,
+            self._kb,
+            now,
+            firdaria_major_lord=period.major_lord,
+            firdaria_sub_lord=period.sub_lord,
+        )
         targets = self._timing_targets(chart, period.major_lord, period.sub_lord, params.get("_enrichment"))
         helper_targets = self._helper_targets(chart, targets)
-        scoring_targets = targets | helper_targets
+        annual_helper_targets = {annual_activation.activation_lord} if annual_activation.activation_lord in chart.planets else set()
+        scoring_targets = targets | helper_targets | annual_helper_targets
         if not scoring_targets:
             logger.warning("无法确定法达/问题目标星，Timing 模块跳过")
             return facts
@@ -68,6 +77,7 @@ class Timing(AnalysisModule):
             period.major_lord,
             period.sub_lord,
             chart,
+            annual_activation,
         )
         for window in windows:
             facts.append(self._window_fact(chart, window))
@@ -166,6 +176,7 @@ class Timing(AnalysisModule):
         major_lord: Planet,
         sub_lord: Planet,
         chart: Chart,
+        annual_activation=None,
     ) -> list[dict]:
         """把连续同向的月份聚合成窗口。"""
         windows: list[dict] = []
@@ -186,6 +197,9 @@ class Timing(AnalysisModule):
             windows.append(current)
 
         result = []
+        annual_target = set()
+        if annual_activation is not None and annual_activation.activation_lord in chart.planets:
+            annual_target.add(annual_activation.activation_lord)
         for w in windows:
             months, direction = w["months"], w["direction"]
             net = sum(s for _, s in months)
@@ -197,9 +211,11 @@ class Timing(AnalysisModule):
                     "net_score": net,
                     "targets": sorted(targets, key=lambda p: p.value),
                     "helper_targets": sorted(helper_targets, key=lambda p: p.value),
-                    "scoring_targets": sorted(targets | helper_targets, key=lambda p: p.value),
+                    "annual_targets": sorted(annual_target, key=lambda p: p.value),
+                    "scoring_targets": sorted(targets | helper_targets | annual_target, key=lambda p: p.value),
                     "firdaria_major_lord": major_lord,
                     "firdaria_sub_lord": sub_lord,
+                    "annual_activation": annual_activation.to_dict() if annual_activation is not None else None,
                 }
             )
         return result
@@ -221,7 +237,12 @@ class Timing(AnalysisModule):
         sub = self._kb.planet(window["firdaria_sub_lord"]).name_zh
         target_names = "、".join(self._kb.planet(p).name_zh for p in window["targets"])
         helper_names = "、".join(self._kb.planet(p).name_zh for p in window["helper_targets"])
+        annual_names = "、".join(self._kb.planet(p).name_zh for p in window["annual_targets"])
+        annual_activation = window.get("annual_activation")
         target_phrase = target_names if not helper_names else f"{target_names}（含帮手星：{helper_names}）"
+        annual_phrase = ""
+        if annual_names and annual_activation:
+            annual_phrase = f"；年度小限激活{annual_activation['activation_house']}宫/{annual_names}作辅助观察"
         label = f"{window['start'].strftime('%Y-%m')} 至 {window['end'].strftime('%Y-%m')}"
         quality = {
             "favorable": "有利",
@@ -235,7 +256,7 @@ class Timing(AnalysisModule):
             chart_id=chart.id,
             description=(
                 f"时间窗口 {label}：法达{major}大限/{sub}子限，"
-                f"行运对{target_phrase}总体{quality}"
+                f"行运对{target_phrase}总体{quality}{annual_phrase}"
             ),
             extracted_at=datetime.now(timezone.utc),
             payload={
@@ -252,6 +273,8 @@ class Timing(AnalysisModule):
                 "firdaria_sub_lord": window["firdaria_sub_lord"].value,
                 "target_planets": [p.value for p in window["targets"]],
                 "helper_target_planets": [p.value for p in window["helper_targets"]],
+                "annual_target_planets": [p.value for p in window["annual_targets"]],
                 "scoring_target_planets": [p.value for p in window["scoring_targets"]],
+                "annual_activation": annual_activation,
             },
         )

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from foundation.logger import get_logger
 from foundation.utils import new_id
-from shared.constants import ASPECT_ZH
+from shared.constants import ASPECT_ZH, DIGNITY_STATE_ZH
 from shared.enums import DignityState, EvidencePolarity, FactCategory, Planet
 from shared.models import Chart, Fact, Person
 
@@ -96,6 +96,8 @@ class Opportunity(AnalysisModule):
             jup_assessment = assess_planet(chart, self._kb, Planet.JUPITER)
             total = self._raw_essential_score(jup_assessment)
             if total >= 3 and jup_assessment.essential_neg == 0:
+                top_dignity = self._top_dignity(states)
+                dignity_label = DIGNITY_STATE_ZH.get(top_dignity.value, top_dignity.value)
                 score += total
                 facts.append(
                     Fact(
@@ -103,14 +105,14 @@ class Opportunity(AnalysisModule):
                         category=FactCategory.DIGNITY,
                         chart_id=chart.id,
                         description=(
-                            f"木星落在{jup.sign.sign.value}，尊贵分{total}，"
+                            f"木星落在{jup.sign.sign.value}，{dignity_label}，"
                             "扩张与机遇气场强"
                         ),
                         extracted_at=datetime.now(timezone.utc),
                         payload={
                             "planet": "jupiter",
                             "sign": jup.sign.sign.value,
-                            "dignity": self._top_dignity(states).value,
+                            "dignity": top_dignity.value,
                             "score": total,
                             "raw_score": total,
                             "essential_pos": jup_assessment.essential_pos,
@@ -147,9 +149,15 @@ class Opportunity(AnalysisModule):
         # 4. 2 宫主（收入机会）
         h2_lord = house_lord(chart, self._kb, 2)
         if h2_lord and h2_lord in chart.planets:
+            cp = chart.planets[h2_lord]
+            states, _ = self._dignity.compute(
+                h2_lord, cp.sign.sign, cp.sign.degree_in_sign, chart.sect
+            )
             h2_assessment = assess_planet(chart, self._kb, h2_lord)
             total = self._raw_essential_score(h2_assessment)
             if total >= 2 and h2_assessment.essential_pos > 0 and h2_assessment.essential_neg == 0:
+                top_dignity = self._top_dignity(states)
+                dignity_label = DIGNITY_STATE_ZH.get(top_dignity.value, top_dignity.value)
                 score += 1.5
                 facts.append(
                     Fact(
@@ -157,7 +165,7 @@ class Opportunity(AnalysisModule):
                         category=FactCategory.LORDSHIP,
                         chart_id=chart.id,
                         description=(
-                            f"二宫主{self._kb.planet(h2_lord).name_zh}尊贵良好，"
+                            f"二宫主{self._kb.planet(h2_lord).name_zh}{dignity_label}，"
                             "收入机会有支撑"
                         ),
                         extracted_at=datetime.now(timezone.utc),
@@ -184,7 +192,11 @@ class Opportunity(AnalysisModule):
                 theme_fact(
                     chart, self.name, "career_opportunity",
                     polarity, weight, 0.65,
-                    f"职业机会综合评分 {score:+.1f}（吉星助力与人脉位势）",
+                    (
+                        "职业机会侧有外部助力可以借用"
+                        if score > 1.0
+                        else "职业机会侧暂时以观察和铺垫为主"
+                    ) + "（吉星助力与人脉位势）",
                     {"score": score},
                 )
             )

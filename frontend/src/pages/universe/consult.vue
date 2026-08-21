@@ -72,6 +72,21 @@
           </view>
         </view>
 
+        <view class="section-block custom-ask">
+          <text class="section-title">也可以写下你的真实问题</text>
+          <view class="custom-row">
+            <input
+              v-model="customQuestion"
+              class="custom-input"
+              confirm-type="send"
+              placeholder="例如：母亲关系怎样影响我的事业？"
+              @confirm="startCustomChat"
+            />
+            <button class="custom-send" @tap="startCustomChat">提问</button>
+          </view>
+          <text class="custom-hint">入口主题只作上下文；如果问题跨到家庭、关系或财富，后端会重新识别。</text>
+        </view>
+
         <view class="section-block">
           <text class="section-title">证据链会看</text>
           <view class="evidence-list">
@@ -81,7 +96,7 @@
 
         <view class="action-row">
           <button class="primary-action" @tap="startChat(selectedTopic.chatSeed)">{{ selectedTopic.cta }}</button>
-          <button class="ghost-action" @tap="reportComingSoon">整理成报告</button>
+          <button class="ghost-action" @tap="openReportAction">{{ selectedTopic.reportType === 'life_rhythm' ? '查看人生章节' : '整理成报告' }}</button>
         </view>
       </view>
 
@@ -144,6 +159,7 @@ const trustLabel = ref("");
 const findings = ref<FindingOut[]>([]);
 const pid = ref("");
 const selectedKey = ref<string>(V8_OBSERVATORY_TOPICS[0].key);
+const customQuestion = ref("");
 const verifyingId = ref("");
 const { phaseClass, refreshPhase } = useTimePhase();
 
@@ -251,6 +267,24 @@ function startChat(seed: string) {
   uni.navigateTo({ url: `/pages/chat/chat?${query}` });
 }
 
+function startCustomChat() {
+  const text = customQuestion.value.trim();
+  if (!text) {
+    uni.showToast({ title: "先写下你想问的问题", icon: "none" });
+    return;
+  }
+  customQuestion.value = "";
+  startChat(text);
+}
+
+function openReportAction() {
+  if (selectedTopic.value.reportType === "life_rhythm") {
+    uni.navigateTo({ url: "/pages/universe/life-rhythm" });
+    return;
+  }
+  reportComingSoon();
+}
+
 function reportComingSoon() {
   uni.showToast({ title: "报告编译器后续接入，不会前端伪造结论", icon: "none" });
 }
@@ -328,6 +362,12 @@ function goBack() {
 .ask-list { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 14rpx; }
 .ask-chip { padding: 13rpx 18rpx; border-radius: 999rpx; background: rgba(255, 255, 255, 0.07); border: 1rpx solid rgba(255, 255, 255, 0.1); color: rgba(238, 241, 234, 0.78); font-size: 21rpx; }
 .ask-chip:active { background: rgba(240, 210, 139, 0.12); }
+.custom-ask { padding: 22rpx; border-radius: 28rpx; background: rgba(8, 22, 19, 0.24); border: 1rpx solid rgba(240, 210, 139, 0.12); }
+.custom-row { display: flex; align-items: center; gap: 12rpx; margin-top: 14rpx; }
+.custom-input { flex: 1; min-height: 72rpx; border-radius: 999rpx; padding: 0 24rpx; background: rgba(255, 255, 255, 0.08); color: #eef1ea; font-size: 23rpx; }
+.custom-send { margin: 0; min-width: 112rpx; height: 72rpx; line-height: 72rpx; border-radius: 999rpx; background: rgba(240, 210, 139, 0.18); color: #f8e2a7; font-size: 22rpx; padding: 0 20rpx; }
+.custom-send::after { border: 0; }
+.custom-hint { display: block; margin-top: 12rpx; color: rgba(238, 241, 234, 0.46); font-size: 20rpx; line-height: 1.55; }
 .evidence-list { display: grid; gap: 9rpx; margin-top: 14rpx; }
 .evidence-item { color: rgba(238, 241, 234, 0.58); font-size: 22rpx; line-height: 1.6; }
 .action-row { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 14rpx; margin-top: 28rpx; }

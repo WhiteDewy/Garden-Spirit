@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from domain.analysis import Timing
 from domain.astrology.knowledge.loader import KnowledgeBase
+from domain.timeline.annual_activation import AnnualActivation, compute_annual_activation
 from domain.timeline.firdaria import FirdariaReading, firdaria_reading
 from domain.timeline.lunar_return import LunarReturn, LunarReturnCalculator
 from domain.timeline.progressed import ProgressedMoon, ProgressedMoonCalculator
@@ -28,6 +29,7 @@ class TimingStack:
     """当前时期合成对象。"""
 
     firdaria: FirdariaReading
+    annual_activation: AnnualActivation
     solar_return: SolarReturn
     lunar_return: LunarReturn
     progressed_moon: ProgressedMoon          # 次限
@@ -45,6 +47,7 @@ class TimingStack:
             "helper_transit_targets": self.helper_transit_targets,
             "scoring_transit_targets": self.scoring_transit_targets,
             "firdaria": self.firdaria.to_dict(),
+            "annual_activation": self.annual_activation.to_dict(),
             "solar_return": self.solar_return.to_dict(),
             "lunar_return": self.lunar_return.to_dict(),
             "progressed_moon": self.progressed_moon.to_dict(),
@@ -72,6 +75,13 @@ def build_timing_stack(
     # 行运窗口（法达大限/子限 + 本轮问题征象星 + 接纳/互溶帮手星）
     timing = Timing(kb)
     firdaria = firdaria_reading(chart, kb, ref)
+    annual_activation = compute_annual_activation(
+        chart,
+        kb,
+        ref,
+        firdaria_major_lord=firdaria.period.major_lord,
+        firdaria_sub_lord=firdaria.period.sub_lord,
+    )
     targets = timing._timing_targets(
         chart,
         firdaria.period.major_lord,
@@ -79,7 +89,8 @@ def build_timing_stack(
         enrichment,
     )
     helper_targets = timing._helper_targets(chart, targets)
-    scoring_targets = targets | helper_targets
+    annual_helper_targets = {annual_activation.activation_lord} if annual_activation.activation_lord in chart.planets else set()
+    scoring_targets = targets | helper_targets | annual_helper_targets
     sorted_targets = [p.value for p in sorted(targets, key=lambda p: p.value)]
     sorted_helper_targets = [p.value for p in sorted(helper_targets, key=lambda p: p.value)]
     sorted_scoring_targets = [p.value for p in sorted(scoring_targets, key=lambda p: p.value)]
@@ -97,10 +108,12 @@ def build_timing_stack(
             "target_planets": sorted_targets,
             "helper_target_planets": sorted_helper_targets,
             "scoring_target_planets": sorted_scoring_targets,
+            "annual_activation": annual_activation.to_dict(),
         })
 
     stack = TimingStack(
         firdaria=firdaria,
+        annual_activation=annual_activation,
         solar_return=SolarReturnCalculator().compute(chart, loc, ref, house_system=house_system,
                                                      birth_location=person.birth.location),
         lunar_return=LunarReturnCalculator().compute(chart, loc, ref, house_system=house_system,

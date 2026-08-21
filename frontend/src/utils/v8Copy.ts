@@ -125,7 +125,7 @@ export const V8_OBSERVATORY_TOPICS: readonly V8ObservatoryTopic[] = [
     icon: "♄",
     name: "人生章节",
     shortName: "人生",
-    status: "report_later",
+    status: "available",
     sub: "长周期阶段 / 当前谁管事 / 人生规划",
     intro: "适合看长周期里的当前章节，不做机械切段，也不一次性摊开整个人生。",
     askSamples: ["我现在处在人生哪一章？", "这几年真正要学的课题是什么？", "为什么我最近总觉得在换阶段？"],

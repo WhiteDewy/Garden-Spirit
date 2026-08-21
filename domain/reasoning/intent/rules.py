@@ -98,6 +98,26 @@ _CN_NUM = {
     "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
     "十": 10, "十一": 11, "十二": 12,
 }
+_PLANET_LABELS: dict[str, str] = {
+    "太阳": "sun",
+    "月亮": "moon",
+    "水星": "mercury",
+    "金星": "venus",
+    "火星": "mars",
+    "木星": "jupiter",
+    "土星": "saturn",
+    "天王星": "uranus",
+    "海王星": "neptune",
+    "冥王星": "pluto",
+}
+_PLANET_PATTERN = "|".join(sorted(map(re.escape, _PLANET_LABELS), key=len, reverse=True))
+# 完整占星材料："月亮在8宫" / "金星落7宫" / "太阳第十宫"。
+# 这里只识别结构，不解释行星落宫含义；占星结论仍交给 Domain。
+_PLANET_IN_HOUSE_RE = re.compile(
+    rf"(?P<planet>{_PLANET_PATTERN})\s*(?:在|落在|落入|落|位于|入)?\s*"
+    rf"[第]?(?:(?P<num>\d{{1,2}})|(?P<cn>[一二三四五六七八九十]{{1,3}}))\s*宫"
+)
+_FRIEND_CHART_TERMS = ("朋友的星盘", "朋友盘", "朋友", "对方星盘", "对方的星盘", "ta的星盘", "TA的星盘", "他盘", "她盘")
 # 用户口语 → 宫位切片词（出行→短途/走动 等，避免切片词表之外的近义表达漏判）
 _SLICE_ALIASES: dict[str, str] = {
     "出行": "短途", "口才": "说话", "桃花": "恋爱",
@@ -138,6 +158,11 @@ class IntentRouter:
         """把用户文本映射为领域验证后的 Intent。"""
         slots = slots or {}
         best_rule, best_score = self._match_best_rule(raw_query)
+
+        # ---- 完整占星材料优先：行星落宫 ≠ 裸宫位反问 ----
+        material = self._planet_in_house_from_text(raw_query)
+        if material is not None:
+            return self._route_planet_in_house(raw_query, material, best_rule, best_score, slots)
 
         # ---- 宫位识别（优先）：用户直接问"第3宫" ----
         house = self._house_from_text(raw_query)
@@ -219,6 +244,74 @@ class IntentRouter:
     def _active_house(context: dict | None) -> int | None:
         h = (context or {}).get("active_house")
         return h if isinstance(h, int) and 1 <= h <= 12 else None
+
+    @staticmethod
+    def _planet_in_house_from_text(text: str) -> tuple[str, int] | None:
+        """抽取完整行星落宫材料：'月亮在8宫' → ('moon', 8)。"""
+        m = _PLANET_IN_HOUSE_RE.search(text)
+        if not m:
+            return None
+        planet = _PLANET_LABELS.get(m.group("planet"))
+        house = int(m.group("num")) if m.group("num") else _CN_NUM.get(m.group("cn"), 0)
+        if planet is None or house not in range(1, 13):
+            return None
+        return planet, house
+
+    @staticmethod
+    def _friend_chart_subject(text: str) -> str | None:
+        """识别朋友/对方星盘语境；只标 subject，不默认做合盘。"""
+        return "friend_chart" if any(term in text for term in _FRIEND_CHART_TERMS) else None
+
+    def _route_planet_in_house(
+        self,
+        raw_query: str,
+        material: tuple[str, int],
+        best_rule: IntentRule | None,
+        best_score: float,
+        slots: dict,
+    ) -> Intent:
+        """行星+落宫是完整占星材料：只打结构槽，不触发裸宫澄清。"""
+        planet, house = material
+        slots["astrology_material"] = IntentSlot(
+            name="astrology_material",
+            raw_value="行星落宫",
+            normalized_value="planet_in_house",
+            confidence=1.0,
+        )
+        slots["focus_planet"] = IntentSlot(
+            name="focus_planet",
+            raw_value=next(k for k, v in _PLANET_LABELS.items() if v == planet),
+            normalized_value=planet,
+            confidence=1.0,
+        )
+        slots["focus_house"] = IntentSlot(
+            name="focus_house",
+            raw_value=f"{house}宫",
+            normalized_value=str(house),
+            confidence=1.0,
+        )
+        subject = self._friend_chart_subject(raw_query)
+        if subject is not None:
+            slots["subject"] = IntentSlot(
+                name="subject",
+                raw_value="朋友/对方星盘",
+                normalized_value=subject,
+                confidence=0.9,
+            )
+
+        domain = best_rule.domain if (best_rule and best_score >= _MIN_CONFIDENCE) else IntentDomain.SELF
+        subdomain = best_rule.subdomain if (best_rule and best_score >= _MIN_CONFIDENCE) else "AstrologyMaterial"
+        return Intent(
+            id=new_id("intent"),
+            raw_query=raw_query,
+            domain=domain,
+            subdomain=subdomain,
+            slots=slots,
+            domain_confidence=max(best_score, 0.65),
+            parsed_at=datetime.now(timezone.utc),
+            requires_clarification=False,
+            clarification_question="",
+        )
 
     def _house_slices(self, house: int) -> list[dict]:
         """该宫语义场切片（house_significations.yaml = 唯一事实源）。"""
